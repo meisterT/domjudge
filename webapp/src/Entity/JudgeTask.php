@@ -34,7 +34,7 @@ class JudgeTask
     /**
      * @var string
      * @ORM\Column(type="judge_task_type", name="type",
-     *     options={"comment"="Type of the judge task.","default"="'judging_run'"},
+     *     options={"comment"="Type of the judge task.","default"="judging_run"},
      *     nullable=false)
      */
     private $type = JudgeTaskType::JUDGING_RUN;
@@ -124,7 +124,7 @@ class JudgeTask
 
     /**
      * @var string
-     * @ORM\Column(type="string", name="compile_config", length=65535,
+     * @ORM\Column(type="text", name="compile_config",
      *     options={"comment"="The compile config as JSON-blob.",
      *              "collation"="utf8mb4_bin", "default"="NULL"},
      *     nullable=true)
@@ -133,7 +133,7 @@ class JudgeTask
 
     /**
      * @var string
-     * @ORM\Column(type="string", name="run_config", length=65535,
+     * @ORM\Column(type="text", name="run_config",
      *     options={"comment"="The run config as JSON-blob.",
      *              "collation"="utf8mb4_bin", "default"="NULL"},
      *     nullable=true)
@@ -142,7 +142,7 @@ class JudgeTask
 
     /**
      * @var string
-     * @ORM\Column(type="string", name="compare_config", length=65535,
+     * @ORM\Column(type="text", name="compare_config",
      *     options={"comment"="The compare config as JSON-blob.",
      *              "collation"="utf8mb4_bin", "default"="NULL"},
      *     nullable=true)
