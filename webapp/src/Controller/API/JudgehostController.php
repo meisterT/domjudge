@@ -4,6 +4,8 @@ namespace App\Controller\API;
 
 use App\Entity\Contest;
 use App\Entity\Executable;
+use App\Entity\ExecutableFile;
+use App\Entity\ImmutableExecutable;
 use App\Entity\InternalError;
 use App\Entity\Judgehost;
 use App\Entity\Judging;
@@ -11,6 +13,7 @@ use App\Entity\JudgingRun;
 use App\Entity\JudgingRunOutput;
 use App\Entity\Rejudging;
 use App\Entity\Submission;
+use App\Entity\SubmissionFile;
 use App\Entity\Testcase;
 use App\Entity\User;
 use App\Service\BalloonService;
@@ -30,8 +33,12 @@ use Nelmio\ApiDocBundle\Annotation\Model;
 use Psr\Log\LoggerInterface;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use OpenApi\Annotations as OA;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
+use Swagger\Annotations as SWG;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\Intl\Exception\NotImplementedException;
 
 /**
  * @Rest\Route("/judgehosts")
@@ -1253,4 +1260,91 @@ class JudgehostController extends AbstractFOSRestController
         $submissions = $queryBuilder->getQuery()->getResult();
         return $submissions;
     }
+
+    /**
+     * Get files for a given type and id.
+     * @Rest\Get("/get_file/{type}/{id}")
+     * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST')")
+     * @param Request $request
+     * @param string  $type
+     * @param string  $id
+     * @return array
+     * @throws \Doctrine\ORM\NonUniqueResultException
+     * @SWG\Response(
+     *     response="200",
+     *     description="The files for the submission, testcase or script.",
+     *     @SWG\Schema(ref="#/definitions/SourceCodeList")
+     * )
+     * @SWG\Parameter(ref="#/parameters/id")
+     */
+    public function getFileAction(Request $request, string $type, string $id)
+    {
+        switch($type) {
+            case 'source':
+                return $this->getSourceFiles($id);
+            case 'testcase':
+                // TODO: decide whether testcase or input/output are the right granularity.
+                throw new BadRequestHttpException('Not yet implemented.');
+            case 'compile':
+            case 'run':
+            case 'compare':
+                return $this->getExecutableFiles($id);
+            default:
+                throw new BadRequestHttpException('Unknown type requested.');
+        }
+    }
+
+    private function getSourceFiles(string $id) {
+        $queryBuilder = $this->em->createQueryBuilder()
+            ->from(SubmissionFile::class, 'f')
+            ->join('f.submission', 's')
+            ->select('f, s')
+            ->andWhere('s.submitid = :submitid')
+            ->setParameter(':submitid', $id)
+            ->orderBy('f.rank');
+
+        /** @var SubmissionFile[] $files */
+        $files = $queryBuilder->getQuery()->getResult();
+
+        if (empty($files)) {
+            throw new NotFoundHttpException(sprintf('Source code for submission with ID \'%s\' not found', $id));
+        }
+
+        $result = [];
+        foreach ($files as $file) {
+            $result[]   = [
+                'filename' => $file->getFilename(),
+                'source' => base64_encode($file->getSourcecode()),
+            ];
+        }
+        return $result;
+    }
+
+    private function getExecutableFiles(string $id) {
+        $queryBuilder = $this->em->createQueryBuilder()
+            ->from(ExecutableFile::class, 'f')
+            ->join('f.immutableExecutable', 'e')
+            ->select('f, e')
+            ->andWhere('e.immutable_execid = :immutable_execid')
+            ->setParameter(':immutable_execid', $id)
+            ->orderBy('f.rank');
+
+        /** @var ExecutableFile[] $files */
+        $files = $queryBuilder->getQuery()->getResult();
+
+        if (empty($files)) {
+            throw new NotFoundHttpException(sprintf('Files for immutable executable with ID \'%s\' not found', $id));
+        }
+
+        $result = [];
+        foreach ($files as $file) {
+            $result[]   = [
+                'filename' => $file->getFilename(),
+                'source' => base64_encode($file->getFileContent()),
+                'is_executable' => $file->isExecutable(),
+            ];
+        }
+        return $result;
+    }
+
 }
