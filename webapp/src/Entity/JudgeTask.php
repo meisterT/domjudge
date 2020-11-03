@@ -149,300 +149,139 @@ class JudgeTask
      */
     protected $compare_config;
 
-    /**
-     * Get judgetaskid
-     *
-     * @return integer
-     */
-    public function getJudgetaskid()
+    public function getJudgetaskid(): int
     {
         return $this->judgetaskid;
     }
 
-    /**
-     * Set type
-     *
-     * @param string $type
-     *
-     * @return JudgeTask
-     */
-    public function setType($type)
+    public function setType(string $type): JudgeTask
     {
         $this->type = $type;
-
         return $this;
     }
 
-    /**
-     * Get type
-     *
-     * @return string
-     */
-    public function getType()
+    public function getType(): string
     {
         return $this->type;
     }
 
-    /**
-     * Set priority
-     *
-     * @param string $priority
-     *
-     * @return JudgeTask
-     */
-    public function setPriority(string $priority)
+    public function setPriority(string $priority): JudgeTask
     {
         $this->priority = $priority;
-
         return $this;
     }
 
-    /**
-     * Get priority
-     *
-     * @return string
-     */
-    public function getPriority()
+    public function getPriority(): int
     {
         return $this->priority;
     }
 
-    /**
-     * Set submitid
-     *
-     * @param integer $submitid
-     *
-     * @return JudgeTask
-     */
-    public function setSubmitid($submitid)
+    public function setSubmitid(int $submitid): JudgeTask
     {
         $this->submitid = $submitid;
-
         return $this;
     }
 
-    /**
-     * Get submitid
-     *
-     * @return integer
-     */
-    public function getSubmitid()
+    public function getSubmitid(): int
     {
         return $this->submitid;
     }
 
-    /**
-     * Set judgingrunid
-     *
-     * @param integer $judgingrunid
-     *
-     * @return JudgeTask
-     */
-    public function setJudgingRunId(int $judgingrunid)
+    public function setJudgingRunId(int $judgingrunid): JudgeTask
     {
         $this->judgingrunid = $judgingrunid;
-
         return $this;
     }
 
-    /**
-     * Get judgingrunid
-     *
-     * @return integer
-     */
-    public function getJudgingRunId()
+    public function getJudgingRunId(): int
     {
         return $this->judgingrunid;
     }
 
-    /**
-     * Set compile_script_id
-     *
-     * @param integer $compile_script_id
-     *
-     * @return JudgeTask
-     */
-    public function setCompileScriptId(int $compile_script_id)
+    public function setCompileScriptId(int $compile_script_id): JudgeTask
     {
         $this->compile_script_id = $compile_script_id;
-
         return $this;
     }
 
-    /**
-     * Get compile_script_id
-     *
-     * @return integer
-     */
-    public function getCompileScriptId()
+    public function getCompileScriptId(): int
     {
         return $this->compile_script_id;
     }
 
-    /**
-     * Set run_script_id
-     *
-     * @param integer $run_script_id
-     *
-     * @return JudgeTask
-     */
-    public function setRunScriptId(int $run_script_id)
+    public function setRunScriptId(int $run_script_id): JudgeTask
     {
         $this->run_script_id = $run_script_id;
-
         return $this;
     }
 
-    /**
-     * Get run_script_id
-     *
-     * @return integer
-     */
-    public function getRunScriptId()
+    public function getRunScriptId(): int
     {
         return $this->run_script_id;
     }
 
-    /**
-     * Set compare_script_id
-     *
-     * @param integer $compare_script_id
-     *
-     * @return JudgeTask
-     */
-    public function setCompareScriptId(int $compare_script_id)
+    public function setCompareScriptId(int $compare_script_id): JudgeTask
     {
         $this->compare_script_id = $compare_script_id;
-
         return $this;
     }
 
-    /**
-     * Get compare_script_id
-     *
-     * @return integer
-     */
-    public function getCompareScriptId()
+    public function getCompareScriptId(): int
     {
         return $this->compare_script_id;
     }
 
-    /**
-     * Set input_id
-     *
-     * @param integer $input_id
-     *
-     * @return JudgeTask
-     */
-    public function setInputId(int $input_id)
+    public function setInputId(int $input_id): JudgeTask
     {
         $this->input_id = $input_id;
-
         return $this;
     }
 
-    /**
-     * Get input_id
-     *
-     * @return integer
-     */
-    public function getInputId()
+    public function getInputId(): int
     {
         return $this->input_id;
     }
 
-    /**
-     * Set output_id
-     *
-     * @param integer $output_id
-     *
-     * @return JudgeTask
-     */
-    public function setOutputId(int $output_id)
+    public function setOutputId(int $output_id): JudgeTask
     {
         $this->output_id = $output_id;
-
         return $this;
     }
 
-    /**
-     * Get output_id
-     *
-     * @return integer
-     */
-    public function getOutputId()
+    public function getOutputId(): int
     {
         return $this->output_id;
     }
 
-    /**
-     * Set compile_config
-     *
-     * @param string $compile_config
-     *
-     * @return JudgeTask
-     */
-    public function setCompileConfig(string $compile_config)
+    public function setCompileConfig(string $compile_config): JudgeTask
     {
         $this->compile_config = $compile_config;
-
         return $this;
     }
 
-    /**
-     * Get compile_config
-     *
-     * @return string
-     */
-    public function getCompileConfig()
+    public function getCompileConfig(): string
     {
         return $this->compile_config;
     }
 
-    /**
-     * Set run_config
-     *
-     * @param string $run_config
-     *
-     * @return JudgeTask
-     */
-    public function setRunConfig(string $run_config)
+    public function setRunConfig(string $run_config): JudgeTask
     {
         $this->run_config = $run_config;
-
         return $this;
     }
 
-    /**
-     * Get run_config
-     *
-     * @return string
-     */
-    public function getRunConfig()
+    public function getRunConfig(): string
     {
         return $this->run_config;
     }
 
-    /**
-     * Set compare_config
-     *
-     * @param string $compare_config
-     *
-     * @return JudgeTask
-     */
-    public function setCompareConfig(string $compare_config)
+    public function setCompareConfig(string $compare_config): JudgeTask
     {
         $this->compare_config = $compare_config;
-
         return $this;
     }
 
-    /**
-     * Get compare_config
-     *
-     * @return string
-     */
-    public function getCompareConfig()
+    public function getCompareConfig(): string
     {
         return $this->compare_config;
     }
