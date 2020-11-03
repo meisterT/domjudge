@@ -30,14 +30,6 @@ class ExecutableFile
     private $execfileid;
 
     /**
-     * @var int
-     * @ORM\Column(type="integer", name="immutable_execid", length=4,
-     *     options={"comment"="Immutable executable this file belongs to","unsigned"=true},
-     *     nullable=false)
-     */
-    private $immutable_execid;
-
-    /**
      * @var string
      * @ORM\Column(type="string", name="filename", length=255, options={"comment"="Filename as uploaded"}, nullable=false)
      */
@@ -84,16 +76,6 @@ class ExecutableFile
         $this->execfileid = $execfileid;
 
         return $this;
-    }
-
-    public function getImmutableExecId(): int
-    {
-        return $this->immutable_execid;
-    }
-
-    public function setImmutableExecId(int $immutable_execid): ExecutableFile
-    {
-        $this->immutable_execid = $immutable_execid;
     }
 
     public function setFilename(string $filename): ExecutableFile

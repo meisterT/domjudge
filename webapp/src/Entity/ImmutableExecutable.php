@@ -28,18 +28,6 @@ class ImmutableExecutable
      */
     private $immutable_execid;
 
-    /**
-     * @var int
-     *
-     * @ORM\Column(type="integer", name="userid", length=4,
-     *     options={"comment"="User who created this", "unsigned"=true,
-     *              "default"="NULL"},
-     *     nullable=true)
-     * @Serializer\SerializedName("user_id")
-     * @Serializer\Type("string")
-     */
-    private $userid;
-
     // TODO: Add more metadata like a link to parent and timestamp
 
     /**
@@ -55,17 +43,6 @@ class ImmutableExecutable
      * @Serializer\Exclude()
      */
     private $files;
-
-    public function setUserId(string $userid): ImmutableExecutable
-    {
-        $this->userid = $userid;
-        return $this;
-    }
-
-    public function getUserId(): int
-    {
-        return $this->getUserId();
-    }
 
     public function setUser(User $user): ImmutableExecutable
     {
