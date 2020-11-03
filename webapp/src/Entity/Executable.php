@@ -63,6 +63,12 @@ class Executable
     private $type;
 
     /**
+     * @ORM\OneToOne(targetEntity="ImmutableExecutable")
+     * @ORM\JoinColumn(name="immutable_execid", referencedColumnName="immutable_execid")
+     */
+    private $immutableExecutable;
+
+    /**
      * @ORM\OneToMany(targetEntity="Language", mappedBy="compile_executable")
      */
     private $languages;
@@ -202,5 +208,16 @@ class Executable
     public function getProblemsRun(): Collection
     {
         return $this->problems_run;
+    }
+
+    public function setImmutableExecutable(ImmutableExecutable $immutableExecutable): Executable
+    {
+        $this->immutableExecutable = $immutableExecutable;
+        return $this;
+    }
+
+    public function getImmutableExecutable(): ImmutableExecutable
+    {
+        return $this->immutableExecutable;
     }
 }
