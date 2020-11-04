@@ -58,16 +58,6 @@ class JudgeTask
      */
     private $submitid;
 
-    /**
-     * @var int
-     *
-     * @ORM\Column(type="integer", name="judgingrunid", length=4,
-     *     options={"comment"="Corresponding judging run ID","unsigned"=true},
-     *     nullable=true)
-     * @Serializer\Type("string")
-     */
-    private $judgingrunid;
-
     // Note that we rely on the fact here that files with an ID are immutable,
     // so clients are allowed to cache them on disk.
     // TODO: Actually implement immutability :-)
@@ -185,17 +175,6 @@ class JudgeTask
     public function getSubmitid(): int
     {
         return $this->submitid;
-    }
-
-    public function setJudgingRunId(int $judgingrunid): JudgeTask
-    {
-        $this->judgingrunid = $judgingrunid;
-        return $this;
-    }
-
-    public function getJudgingRunId(): int
-    {
-        return $this->judgingrunid;
     }
 
     public function setCompileScriptId(int $compile_script_id): JudgeTask
