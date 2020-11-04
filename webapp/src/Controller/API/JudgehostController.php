@@ -1262,7 +1262,7 @@ class JudgehostController extends AbstractFOSRestController
 
     /**
      * Get files for a given type and id.
-     * @Rest\Get("/get_file/{type}/{id}")
+     * @Rest\Get("/get_files/{type}/{id}")
      * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST')")
      * @param Request $request
      * @param string  $type
@@ -1276,7 +1276,7 @@ class JudgehostController extends AbstractFOSRestController
      * )
      * @SWG\Parameter(ref="#/parameters/id")
      */
-    public function getFileAction(string $type, string $id)
+    public function getFilesAction(string $type, string $id)
     {
         switch($type) {
             case 'source':
