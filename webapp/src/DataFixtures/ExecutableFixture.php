@@ -45,7 +45,7 @@ class ExecutableFixture extends AbstractExampleDataFixture
             ->setExecid('boolfind_cmp')
             ->setDescription('boolfind comparator')
             ->setType('compare')
-            ->setImmutableExecutable($this->createImmutableExecutable($boolfindCompareFile));
+            ->setImmutableExecutable($this->createImmutableExecutable($boolfindCompareFile, $manager));
 
         $boolfindRunFile = sprintf(
             '%s/files/examples/boolfind_run.zip',
@@ -56,7 +56,7 @@ class ExecutableFixture extends AbstractExampleDataFixture
             ->setExecid('boolfind_run')
             ->setDescription('boolfind run script')
             ->setType('run')
-            ->setImmutableExecutable($this->createImmutableExecutable($boolfindRunFile));
+            ->setImmutableExecutable($this->createImmutableExecutable($boolfindRunFile, $manager));
 
         $manager->persist($boolfindCompare);
         $manager->persist($boolfindRun);
