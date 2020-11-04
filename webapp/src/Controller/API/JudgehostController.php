@@ -5,7 +5,6 @@ namespace App\Controller\API;
 use App\Entity\Contest;
 use App\Entity\Executable;
 use App\Entity\ExecutableFile;
-use App\Entity\ImmutableExecutable;
 use App\Entity\InternalError;
 use App\Entity\Judgehost;
 use App\Entity\Judging;
@@ -15,6 +14,7 @@ use App\Entity\Rejudging;
 use App\Entity\Submission;
 use App\Entity\SubmissionFile;
 use App\Entity\Testcase;
+use App\Entity\TestcaseContent;
 use App\Entity\User;
 use App\Service\BalloonService;
 use App\Service\ConfigurationService;
@@ -38,7 +38,6 @@ use Swagger\Annotations as SWG;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\Intl\Exception\NotImplementedException;
 
 /**
  * @Rest\Route("/judgehosts")
@@ -1277,14 +1276,13 @@ class JudgehostController extends AbstractFOSRestController
      * )
      * @SWG\Parameter(ref="#/parameters/id")
      */
-    public function getFileAction(Request $request, string $type, string $id)
+    public function getFileAction(string $type, string $id)
     {
         switch($type) {
             case 'source':
                 return $this->getSourceFiles($id);
             case 'testcase':
-                // TODO: decide whether testcase or input/output are the right granularity.
-                throw new BadRequestHttpException('Not yet implemented.');
+                return $this->getTestcaseFiles($id);
             case 'compile':
             case 'run':
             case 'compare':
@@ -1313,7 +1311,7 @@ class JudgehostController extends AbstractFOSRestController
         foreach ($files as $file) {
             $result[]   = [
                 'filename' => $file->getFilename(),
-                'source' => base64_encode($file->getSourcecode()),
+                'content' => base64_encode($file->getSourcecode()),
             ];
         }
         return $result;
@@ -1338,8 +1336,32 @@ class JudgehostController extends AbstractFOSRestController
         foreach ($files as $file) {
             $result[]   = [
                 'filename' => $file->getFilename(),
-                'source' => base64_encode($file->getFileContent()),
+                'content' => base64_encode($file->getFileContent()),
                 'is_executable' => $file->isExecutable(),
+            ];
+        }
+        return $result;
+    }
+
+    private function getTestcaseFiles(string $id) {
+        $queryBuilder = $this->em->createQueryBuilder()
+            ->from(TestcaseContent::class, 'f')
+            ->select('f.input, f.output')
+            ->andWhere('f.tc_contentid = :tc_contentid')
+            ->setParameter(':tc_contentid', $id);
+
+        /** @var string[] $inout */
+        $inout = $queryBuilder->getQuery()->getOneOrNullResult();
+
+        if (empty($inout)) {
+            throw new NotFoundHttpException(sprintf('Files for testcase_content with ID \'%s\' not found', $id));
+        }
+
+        $result = [];
+        foreach (['input', 'output'] as $k) {
+            $result[] = [
+                'filename' => $k,
+                'content' => base64_encode($inout[$k]),
             ];
         }
         return $result;
