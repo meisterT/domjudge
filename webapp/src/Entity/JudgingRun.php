@@ -86,7 +86,7 @@ class JudgingRun extends BaseApiEntity
      * @var double
      * @ORM\Column(type="decimal", precision=32, scale=9, name="endtime",
      *     options={"comment"="Time run judging ended", "unsigned"=true},
-     *     nullable=false)
+     *     nullable=true)
      * @Serializer\Exclude()
      */
     private $endtime;

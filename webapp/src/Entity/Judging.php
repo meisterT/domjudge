@@ -43,7 +43,7 @@ class Judging extends BaseApiEntity implements ExternalRelationshipEntityInterfa
      * @var double
      * @ORM\Column(type="decimal", precision=32, scale=9, name="starttime",
      *     options={"comment"="Time judging started", "unsigned"=true},
-     *     nullable=false)
+     *     nullable=true)
      * @Serializer\Exclude()
      */
     private $starttime;
