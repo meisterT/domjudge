@@ -60,7 +60,6 @@ class JudgeTask
 
     // Note that we rely on the fact here that files with an ID are immutable,
     // so clients are allowed to cache them on disk.
-    // TODO: Actually implement immutability :-)
 
     /**
      * @var int
@@ -95,22 +94,12 @@ class JudgeTask
     /**
      * @var int
      *
-     * @ORM\Column(type="integer", name="input_id", length=4,
-     *     options={"comment"="Input ID","unsigned"=true},
+     * @ORM\Column(type="integer", name="testcase_id", length=4,
+     *     options={"comment"="Testcase ID","unsigned"=true},
      *     nullable=true)
      * @Serializer\Type("string")
      */
-    private $input_id;
-
-    /**
-     * @var int
-     *
-     * @ORM\Column(type="integer", name="output_id", length=4,
-     *     options={"comment"="Expected output ID","unsigned"=true},
-     *     nullable=true)
-     * @Serializer\Type("string")
-     */
-    private $output_id;
+    private $testcase_id;
 
     /**
      * @var string
@@ -210,26 +199,15 @@ class JudgeTask
         return $this->compare_script_id;
     }
 
-    public function setInputId(int $input_id): JudgeTask
+    public function setTestcaseId(int $testcase_id): JudgeTask
     {
-        $this->input_id = $input_id;
+        $this->testcase_id = $testcase_id;
         return $this;
     }
 
-    public function getInputId(): int
+    public function getTestcaseId(): int
     {
-        return $this->input_id;
-    }
-
-    public function setOutputId(int $output_id): JudgeTask
-    {
-        $this->output_id = $output_id;
-        return $this;
-    }
-
-    public function getOutputId(): int
-    {
-        return $this->output_id;
+        return $this->testcase_id;
     }
 
     public function setCompileConfig(string $compile_config): JudgeTask
