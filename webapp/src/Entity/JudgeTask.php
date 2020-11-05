@@ -33,6 +33,14 @@ class JudgeTask
 
     /**
      * @var string
+     * @ORM\Column(type="string", name="hostname",
+     *     options={"comment"="hostname of the judge which executes the task"},
+     *     nullable=true)
+     */
+    private $hostname = null;
+
+    /**
+     * @var string
      * @ORM\Column(type="judge_task_type", name="type",
      *     options={"comment"="Type of the judge task.","default"="judging_run"},
      *     nullable=false)
@@ -131,6 +139,17 @@ class JudgeTask
     public function getJudgetaskid(): int
     {
         return $this->judgetaskid;
+    }
+
+    public function setHostname(string $hostname): JudgeTask
+    {
+        $this->hostname = $hostname;
+        return $this;
+    }
+
+    public function getHostname(): string
+    {
+        return $this->hostname;
     }
 
     public function setType(string $type): JudgeTask
