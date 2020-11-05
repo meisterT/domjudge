@@ -144,7 +144,7 @@ class JudgeTask
         return $this->type;
     }
 
-    public function setPriority(string $priority): JudgeTask
+    public function setPriority(int $priority): JudgeTask
     {
         $this->priority = $priority;
         return $this;

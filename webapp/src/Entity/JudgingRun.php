@@ -37,6 +37,34 @@ class JudgingRun extends BaseApiEntity
     protected $runid;
 
     /**
+     * @var int
+     * @ORM\Column(type="integer", name="judgingid", length=4,
+     *     options={"comment"="Judging ID","unsigned"=true},
+     *     nullable=false)
+     * @Serializer\SerializedName("judgement_id")
+     * @Serializer\Type("string")
+     */
+    private $judgingid;
+
+    /**
+     * @var int
+     * @ORM\Column(type="integer", name="testcaseid", length=4,
+     *     options={"comment"="Testcase ID","unsigned"=true},
+     *     nullable=false)
+     * @Serializer\Exclude()
+     */
+    private $testcaseid;
+
+    /**
+     * @var int
+     * @ORM\Column(type="integer", name="judgetaskid", length=4,
+     *     options={"comment"="JudgeTask ID","unsigned"=true},
+     *     nullable=false)
+     * @Serializer\Exclude()
+     */
+    private $judgetaskid;
+
+    /**
      * @var string
      * @ORM\Column(type="string", name="runresult", length=32,
      *     options={"comment"="Result of this run, NULL if not finished yet"},
@@ -88,6 +116,13 @@ class JudgingRun extends BaseApiEntity
      */
     private $output;
 
+    /**
+     * @ORM\ManyToOne(targetEntity="JudgeTask")
+     * @ORM\JoinColumn(name="judgetaskid", referencedColumnName="judgetaskid")
+     * @Serializer\Exclude()
+     */
+    private $judgetask;
+
     public function __construct()
     {
         $this->output = new ArrayCollection();
@@ -104,6 +139,74 @@ class JudgingRun extends BaseApiEntity
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Set judgingid
+     *
+     * @param integer $judgingid
+     *
+     * @return JudgingRun
+     */
+    public function setJudgingid($judgingid)
+    {
+        $this->judgingid = $judgingid;
+
+        return $this;
+    }
+
+    /**
+     * Get judgingid
+     *
+     * @return integer
+     */
+    public function getJudgingid()
+    {
+        return $this->judgingid;
+    }
+
+    /**
+     * Set testcaseid
+     *
+     * @param integer $testcaseid
+     *
+     * @return JudgingRun
+     */
+    public function setTestcaseid($testcaseid)
+    {
+        $this->testcaseid = $testcaseid;
+
+        return $this;
+    }
+
+    /**
+     * Get testcaseid
+     *
+     * @return integer
+     */
+    public function getTestcaseid()
+    {
+        return $this->testcaseid;
+    }
+
+    public function setJudgeTaskId(int $judgetaskid): JudgingRun
+    {
+        $this->judgetaskid = $judgetaskid;
+        return $this;
+    }
+
+    public function getJudgeTaskId(): int
+    {
+        return $this->judgetaskid;
+    }
+
+    public function setJudgeTask(JudgeTask $judgeTask): JudgingRun
+    {
+        $this->judgetask = $judgeTask;
+        return $this;
+    }
+
+    /**
+>>>>>>> 0886e7fc3... Add link from JudgingRun to JudgeTask.
      * Set runresult
      *
      * @param string $runresult

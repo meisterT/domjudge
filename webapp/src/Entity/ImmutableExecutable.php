@@ -44,6 +44,11 @@ class ImmutableExecutable
      */
     private $files;
 
+    public function getImmutableExecId(): int
+    {
+        return $this->immutable_execid;
+    }
+
     public function setUser(User $user): ImmutableExecutable
     {
         $this->user = $user;

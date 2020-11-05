@@ -203,7 +203,6 @@ class Judging extends BaseApiEntity implements ExternalRelationshipEntityInterfa
      */
     private $runs;
 
-
     /**
      * Get the max runtime for this judging
      * @return float
