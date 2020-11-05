@@ -129,6 +129,38 @@ class Judging extends BaseApiEntity implements ExternalRelationshipEntityInterfa
     private $seen = false;
 
     /**
+     * @var int
+     *
+     * @ORM\Column(type="integer", name="rejudgingid", length=4,
+     *     options={"comment"="Rejudging ID (if rejudge)","unsigned"=true,
+     *              "default"="NULL"},
+     *     nullable=true)
+     * @Serializer\Exclude()
+     */
+    private $rejudgingid;
+
+    /**
+     * @var int
+     *
+     * @ORM\Column(type="integer", name="prevjudgingid",
+     *     options={"comment"="Previous valid judging (if rejudge)",
+     *              "unsigned"=true,"default"="NULL"},
+     *     nullable=true)
+     * @Serializer\Exclude()
+     */
+    private $prevjudgingid;
+
+    /**
+     * @var string
+     * @ORM\Column(type="string", name="judgehost", length=64,
+     *     options={"comment"="Judgehost that performed the judging"},
+     *     nullable=true)
+     * @Serializer\Expose(if="context.getAttribute('domjudge_service').checkrole('jury')")
+     * @Serializer\SerializedName("judgehost")
+     */
+    private $judgehost_name;
+
+    /**
      * @ORM\ManyToOne(targetEntity="Contest")
      * @ORM\JoinColumn(name="cid", referencedColumnName="cid", onDelete="CASCADE")
      * @Serializer\Exclude()
@@ -148,6 +180,7 @@ class Judging extends BaseApiEntity implements ExternalRelationshipEntityInterfa
      * @Serializer\Exclude()
      */
     private $judgehost;
+
     /**
      * rejudgings have one parent judging
      * @ORM\ManyToOne(targetEntity="Rejudging", inversedBy="judgings")
