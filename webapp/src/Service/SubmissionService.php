@@ -618,7 +618,8 @@ class SubmissionService
                             'time_limit' => $problem->getProblem()->getTimelimit(),
                             'memory_limit' => $memoryLimit,
                             'output_limit' => $outputLimit,
-                            'process_limit' => $this->config->get('process_limit')
+                            'process_limit' => $this->config->get('process_limit'),
+                            'entry_point' => $submission->getEntryPoint(),
                         ]
                     )
                 )
