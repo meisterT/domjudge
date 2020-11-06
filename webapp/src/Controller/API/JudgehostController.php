@@ -1450,11 +1450,12 @@ class JudgehostController extends AbstractFOSRestController
             ->addOrderBy('jt.priority')
             ->setMaxResults(1)
             ->getQuery()
-            ->getSingleScalarResult();
+            ->getOneOrNullResult();
 
         if ($max_priority === null) {
             return [];
         }
+        $max_priority = $max_priority['priority'];
 
         // This is case 2.a) from above: continue what we have started (if same priority as the current most important
         // judgetask).
