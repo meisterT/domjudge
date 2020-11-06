@@ -49,7 +49,7 @@ class JudgeTask
 
     /**
      * @var int
-     * @ORM\Column(type="integer", name="rank", length=4,
+     * @ORM\Column(type="integer", name="priority", length=4,
      *     options={"comment"="Priority; negative means higher priority",
      *              "unsigned"=false},
      *     nullable=false)
