@@ -575,6 +575,14 @@ class SubmissionService
         $this->em->persist($judging);
 
         foreach ($problem->getProblem()->getTestcases() as $testcase) {
+            $memoryLimit = $problem->getProblem()->getMemlimit();
+            $outputLimit = $problem->getProblem()->getOutputlimit();
+            if (empty($memoryLimit)) {
+                $memoryLimit = $this->config->get('memory_limit');
+            }
+            if (empty($outputLimit)) {
+                $outputLimit = $this->config->get('output_limit');
+            }
             /** @var Testcase $testcase */
             $judgeTask = new JudgeTask();
             $judgeTask
@@ -608,8 +616,8 @@ class SubmissionService
                     json_encode(
                         [
                             'time_limit' => $problem->getProblem()->getTimelimit(),
-                            'memory_limit' => $problem->getProblem()->getMemlimit(),
-                            'output_limit' => $problem->getProblem()->getOutputlimit(),
+                            'memory_limit' => $memoryLimit,
+                            'output_limit' => $outputLimit,
                             'process_limit' => $this->config->get('process_limit')
                         ]
                     )
