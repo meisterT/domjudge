@@ -25,6 +25,7 @@ use App\Service\RejudgingService;
 use App\Service\ScoreboardService;
 use App\Service\SubmissionService;
 use App\Utils\Utils;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
 use Doctrine\ORM\Query\Expr\Join;
@@ -1382,7 +1383,7 @@ class JudgehostController extends AbstractFOSRestController
 
         // TODO: Determine a good max batch size here. We may want to do something more elaborate like looking at
         // previous judgements of the same testcase and use median runtime as an indicator.
-        $max_batchsize = 1;
+        $max_batchsize = 5;
         if ($request->request->has('max_batchsize')) {
             $max_batchsize = $request->request->get('max_batchsize');
         }
@@ -1409,23 +1410,38 @@ class JudgehostController extends AbstractFOSRestController
         // This is case 1) from above: continue what we have started (if still important).
         // TODO: We probably want to introduce a jobid instead of using submitid below in all queries. For judgings it
         // should default to the judgingid.
-        /** @var JudgeTask[] $judgetasks */
-        $judgetasks = $this->em
+        // TODO: These queries would be much easier and less heavy on the DB with an extra table.
+        $result = $this->em
             ->createQueryBuilder()
             ->from(JudgeTask::class, 'jt')
-            ->innerJoin('jt.judgetaskid', 'jt2', Expr\Join::ON, 'jt.submitid = jt2.submitid')
-            ->select('jt')
-            ->andWhere('jt.hostname IS NULL')
-            ->andWhere('jt2.hostname = :hostname')
+            ->select('jt.submitid')
+            ->andWhere('jt.hostname = :hostname')
             ->setParameter(':hostname', $hostname)
-            ->andWhere('jt.priority <= 0')
-            ->addOrderBy('jt.priority')
-            ->addOrderBy('jt.judgetaskid')
-            ->setMaxResults($max_batchsize)
+            ->groupBy('jt.submitid')
             ->getQuery()
-            ->getResult();
-        if (!empty($judgetasks)) {
-            return $this->serializeJudgeTasks($judgetasks);
+            ->getArrayResult();
+        // TODO: Is there no simpler way to get a column with doctrine?
+        $started_judgetaskids = [];
+        foreach ($result as $row) {
+            $started_judgetaskids[] = $row['submitid'];
+        }
+        if (!empty($started_judgetaskids)) {
+            $queryBuilder = $this->em->createQueryBuilder();
+            /** @var JudgeTask[] $judgetasks */
+            $judgetasks = $queryBuilder
+                ->from(JudgeTask::class, 'jt')
+                ->select('jt')
+                ->andWhere('jt.hostname IS NULL')
+                ->andWhere('jt.priority <= 0')
+                ->andWhere($queryBuilder->expr()->In('jt.submitid', $started_judgetaskids))
+                ->addOrderBy('jt.priority')
+                ->addOrderBy('jt.judgetaskid')
+                ->setMaxResults($max_batchsize)
+                ->getQuery()
+                ->getResult();
+            if (!empty($judgetasks)) {
+                return $this->serializeJudgeTasks($judgetasks, $hostname);
+            }
         }
 
         // Determine highest priority level of outstanding JudgeTasks.
@@ -1437,7 +1453,7 @@ class JudgehostController extends AbstractFOSRestController
             ->addOrderBy('jt.priority')
             ->setMaxResults(1)
             ->getQuery()
-            ->getOneOrNullResult();
+            ->getSingleScalarResult();
 
         if ($max_priority === null) {
             return [];
@@ -1446,56 +1462,62 @@ class JudgehostController extends AbstractFOSRestController
         // This is case 2.a) from above: continue what we have started (if same priority as the current most important
         // judgetask).
         // TODO: We should merge this with the query above to reduce code duplication.
-        /** @var JudgeTask[] $judgetasks */
-        $judgetasks = $this->em
-            ->createQueryBuilder()
-            ->from(JudgeTask::class, 'jt')
-            ->innerJoin('jt.judgetaskid', 'jt2', Join::ON, 'jt.submitid = jt2.submitid')
-            ->select('jt')
-            ->andWhere('jt.hostname IS NULL')
-            ->andWhere('jt2.hostname = :hostname')
-            ->setParameter(':hostname', $hostname)
-            ->andWhere('jt.priority = :max_priority')
-            ->setParameter(':max_priority', $max_priority)
-            ->addOrderBy('jt.judgetaskid')
-            ->setMaxResults($max_batchsize)
-            ->getQuery()
-            ->getResult();
-        if (!empty($judgetasks)) {
-            return $this->serializeJudgeTasks($judgetasks);
+        if ($started_judgetaskids) {
+            /** @var JudgeTask[] $judgetasks */
+            $judgetasks = $this->em
+                ->createQueryBuilder()
+                ->from(JudgeTask::class, 'jt')
+                ->select('jt')
+                ->andWhere('jt.hostname IS NULL')
+                ->andWhere('jt.priority = :max_priority')
+                ->setParameter(':max_priority', $max_priority)
+                ->andWhere($queryBuilder->expr()->In('jt.submitid', $started_judgetaskids))
+                ->addOrderBy('jt.judgetaskid')
+                ->setMaxResults($max_batchsize)
+                ->getQuery()
+                ->getResult();
+            if (!empty($judgetasks)) {
+                return $this->serializeJudgeTasks($judgetasks, $hostname);
+            }
         }
 
         // This is case 2.b) from above: start something new.
         // TODO: First, we have to filter for unfinished jobs. This would be easier with a separate table storing the
         // job state.
-        $started_judgetaskids = $this->em
+        $result = $this->em
             ->createQueryBuilder()
             ->from(JudgeTask::class, 'jt')
             ->select('jt.submitid')
-            ->andWhere('jt.hostname IS NULL')
-            ->groupBy('jt.judgetaskid')
+            ->andWhere('jt.hostname IS NOT NULL')
+            ->groupBy('jt.submitid')
             ->getQuery()
             ->getArrayResult();
-        if (empty($started_judgetaskids)) {
-            // Avoid empty array in notIn below
-            $started_judgetaskids[] = -1;
+        // TODO: Is there no simpler way to get a column with doctrine?
+        $started_judgetaskids = [];
+        foreach ($result as $row) {
+            $started_judgetaskids[] = $row['submitid'];
         }
         $queryBuilder = $this->em->createQueryBuilder();
-        // TODO: Add prioritization by team here.
-        /** @var JudgeTask[] $judgetasks */
-        $judgetasks = $queryBuilder
+        $queryBuilder
             ->from(JudgeTask::class, 'jt')
             ->select('jt')
             ->andWhere('jt.hostname IS NULL')
             ->andWhere('jt.priority = :max_priority')
-            ->andWhere($queryBuilder->expr()->notIn('jt.submitid', $started_judgetaskids))
-            ->setParameter(':max_priority', $max_priority)
+            ->setParameter(':max_priority', $max_priority);
+        // TODO: Add prioritization by team here.
+        if (!empty($started_judgetaskids)) {
+            $queryBuilder
+            ->andWhere($queryBuilder->expr()->notIn('jt.submitid', $started_judgetaskids));
+        }
+        /** @var JudgeTask[] $judgetasks */
+        $judgetasks =
+            $queryBuilder
             ->addOrderBy('jt.judgetaskid')
             ->setMaxResults($max_batchsize)
             ->getQuery()
             ->getResult();
         if (!empty($judgetasks)) {
-            return $this->serializeJudgeTasks($judgetasks);
+            return $this->serializeJudgeTasks($judgetasks, $hostname);
         }
 
         // This is case 2.c) from above: contribute to a job someone else has started but we have not contributed yet.
@@ -1512,14 +1534,69 @@ class JudgehostController extends AbstractFOSRestController
             ->getQuery()
             ->getResult();
         if (!empty($judgetasks)) {
-            return $this->serializeJudgeTasks($judgetasks);
+            return $this->serializeJudgeTasks($judgetasks, $hostname);
         }
     }
 
-    /** @param JudgeTask[] $judgetasks */
-    private function serializeJudgeTasks($judgetasks): array
+    /** @param JudgeTask[] $judgeTasks */
+    private function serializeJudgeTasks($judgeTasks, string $hostname): array
     {
-        // TODO: Actually serialize judgetasks, assign hostname and filter out single submissions.
-        return [];
+        if (empty($judgeTasks)) {
+            return [];
+        }
+
+        // Filter by submit_id.
+        // TODO: Replace this by job_id later and potentially make it smarter, e.g. looping over the rest.
+        $submit_id = $judgeTasks[0]->getSubmitid();
+        $judgetaskids = [];
+        foreach ($judgeTasks as $judgeTask) {
+           if ($judgeTask->getSubmitid() == $submit_id) {
+               $judgetaskids[] = $judgeTask->getJudgetaskid();
+           }
+        }
+
+        $numUpdated = $this->em->getConnection()->executeUpdate(
+            'UPDATE judgetask SET hostname = :hostname WHERE hostname IS NULL AND judgetaskid IN (:ids)',
+            [
+                ':hostname' => $hostname,
+                ':ids' => $judgetaskids,
+            ],
+            [
+                ':ids' => Connection::PARAM_INT_ARRAY,
+            ]
+        );
+
+        if ($numUpdated == 0) {
+            // Bad luck, some other judgehost beat us to it.
+            return [];
+        }
+        if ($numUpdated == sizeof($judgeTasks)) {
+            // We got everything, let's ship it!
+            return $judgeTasks;
+        }
+
+        // A bit unlucky, we only got partially the assigned work, so query what was assigned to us.
+        $queryBuilder = $this->em->createQueryBuilder();
+        $result = $queryBuilder
+            ->from(JudgeTask::class, 'jt')
+            ->select('jt.judgetaskid')
+            ->andWhere('jt.hostname = :hostname')
+            ->setParameter(':hostname', $hostname)
+            ->andWhere($queryBuilder->expr()->In('jt.judgetaskid', $judgetaskids))
+            ->getQuery()
+            ->getArrayResult();
+        // TODO: Is there no simpler way to get a column with doctrine?
+        $partialJudgeTaskIds = [];
+        foreach ($result as $row) {
+            $partialJudgeTaskIds[] = $row['judgetaskid'];
+        }
+
+        $partialJudgeTasks = [];
+        foreach ($judgeTasks as $judgeTask) {
+            if (in_array($judgeTask->getJudgetaskid(), $partialJudgeTaskIds)) {
+                $partialJudgeTasks[] = $judgeTask;
+            }
+        }
+        return $partialJudgeTasks;
     }
 }
