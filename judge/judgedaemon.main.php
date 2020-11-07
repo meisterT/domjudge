@@ -1207,7 +1207,8 @@ function judge(array $judgeTask)
     //    $last_sent = $now;
     //    $outstanding_data = 0;
     // }
-    logmsg(LOG_INFO, "     ...done in " . $runtime . "s, result: " . $result);
+    logmsg(LOG_INFO, '     ...done in ' . $runtime . 's, result: ' . $result
+        . ($result === 'correct' ? ' ✔' : ' ✗'));
 
     // TODO
     //if (!empty($unsent_judging_runs)) {
