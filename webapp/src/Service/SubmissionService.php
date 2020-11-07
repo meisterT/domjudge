@@ -569,15 +569,15 @@ class SubmissionService
             $this->em->persist($submissionFile);
         }
 
-        // TODO: This is so that we can use the submitid below. Is there another more elegant way to flush all data
-        // at once?
-        $this->em->flush();
-
         $judging = new Judging();
         $judging
             ->setContest($contest)
             ->setSubmission($submission);
         $this->em->persist($judging);
+
+        // TODO: This is so that we can use the submitid/judgingid below. Is there another more elegant way to flush all
+        // data at once?
+        $this->em->flush();
 
         foreach ($problem->getProblem()->getTestcases() as $testcase) {
             $memoryLimit = $problem->getProblem()->getMemlimit();
@@ -595,6 +595,7 @@ class SubmissionService
                 ->setSubmitid($submission->getSubmitid())
                 // TODO: Use constants for priorities.
                 ->setPriority(0)
+                ->setJobId($judging->getJudgingid())
                 ->setTestcaseId($testcase->getTestcaseid())
                 ->setCompileScriptId(
                     $submission

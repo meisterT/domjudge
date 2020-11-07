@@ -184,6 +184,17 @@ class JudgeTask
         return $this->priority;
     }
 
+    public function setJobId($jobid): JudgeTask
+    {
+        $this->jobid = $jobid;
+        return $this;
+    }
+
+    public function getJobId(): int
+    {
+        return $this->jobid;
+    }
+
     public function setSubmitid(int $submitid): JudgeTask
     {
         $this->submitid = $submitid;
