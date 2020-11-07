@@ -19,6 +19,7 @@ function judging_directory(string $workdirpath, array $judgeTask)
 {
     return $workdirpath . '/'
         . $judgeTask['submitid'] . '/'
+        . $judgeTask['jobid'] . '/'
         . $judgeTask['judgetaskid'];
 }
 
@@ -747,6 +748,157 @@ function cleanup_judging(string $workdir) : void
 
 }
 
+function compile(array $judgeTask, string $workdir, string $workdirpath, array $compile_config, string $cpuset_opt,
+    int $output_storage_limit): bool
+{
+    global $myhost, $EXITCODES;
+
+    // Get the source code from the DB and store in local file(s).
+    $url = sprintf('judgehosts/get_files/source/%s', $judgeTask['submitid']);
+    $sources = request($url, 'GET');
+    $sources = dj_json_decode($sources);
+    $files = array();
+    $hasFiltered = false;
+    foreach ($sources as $source) {
+        $srcfile = "$workdir/compile/$source[filename]";
+        $file = $source['filename'];
+        // TODO: Add this field and/or language_extensions to compile_config.
+        if (array_key_exists('filter_compiler_files', $compile_config) && $compile_config['filter_compiler_files']) {
+            $picked = false;
+            foreach ($compile_config['language_extensions'] as $extension) {
+                $extensionLength = strlen($extension);
+                if (substr($file, -$extensionLength) === $extension) {
+                    $files[] = "'$file'";
+                    $picked = true;
+                    break;
+                }
+            }
+            if (!$picked) {
+                $hasFiltered = true;
+            }
+        } else {
+            $files[] = "'$file'";
+        }
+        if (file_put_contents($srcfile, base64_decode($source['content'])) === false) {
+            error("Could not create $srcfile");
+        }
+    }
+
+    if (empty($files) && $hasFiltered) {
+        // TODO: Fix this code path
+        $message = 'No files with allowed extensions found to pass to compiler. Allowed extensions: ' . implode(', ', $row['language_extensions']);
+        $args = 'compile_success=0' .
+            '&output_compile=' . urlencode(base64_encode($message));
+
+        $url = sprintf('judgehosts/update-judging/%s/%s', urlencode($myhost), urlencode((string)$row['judgingid']));
+        request($url, 'PUT', $args);
+
+        // revoke readablity for domjudge-run user to this workdir
+        chmod($workdir, 0700);
+        logmsg(LOG_NOTICE, "Judging s$row[submitid]/j$row[judgingid]: compile error");
+        return false;
+    }
+
+    if (count($files)==0) {
+        error("No submission files could be downloaded.");
+    }
+
+    // if (empty($row['compile_script'])) {
+    //     error("No compile script specified for language " . $row['langid'] . ".");
+    // }
+
+    list($execrunpath, $error) = fetch_executable(
+        $workdirpath,
+        'compile',
+        $judgeTask['compile_script_id']
+    );
+    if (isset($error)) {
+        logmsg(LOG_ERR, "fetching executable failed for compile script '" . $judgeTask['compile_script_id'] . "': " . $error);
+        $description = $judgeTask['compile_script_id'] . ': fetch, compile, or deploy of compile script failed.';
+        // TODO: We need to change internal error to "disable the compile script" instead.
+        // disable('language', 'langid', $row['langid'], $description, $row['judgingid'], (string)$row['cid']);
+        return false;
+    }
+
+    // create chroot environment
+    logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." start'");
+    system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' start', $retval);
+    if ($retval!=0) {
+        error("chroot script exited with exitcode $retval");
+    }
+
+    // Compile the program.
+    system(LIBJUDGEDIR . "/compile.sh $cpuset_opt '$execrunpath' '$workdir' " .
+        implode(' ', $files), $retval);
+
+    if (is_readable($workdir . '/compile.out')) {
+        $compile_output = dj_file_get_contents($workdir . '/compile.out', 50000);
+    }
+    if (empty($compile_output) && is_readable($workdir . '/compile.tmp')) {
+        $compile_output = dj_file_get_contents($workdir . '/compile.tmp', 50000);
+    }
+
+    // Try to read metadata from file
+    $metadata = read_metadata($workdir . '/compile.meta');
+    if (isset($metadata['internal-error'])) {
+        alert('error');
+        $internalError = $metadata['internal-error'];
+        $compile_output .= "\n--------------------------------------------------------------------------------\n\n".
+            "Internal errors reported:\n".$internalError;
+
+        if (preg_match('/^compile script: /', $internalError)) {
+            $internalError = preg_replace('/^compile script: /', '', $internalError);
+            $description = "The compile script returned an error: $internalError";
+            // TODO: We need to change internal error to "disable the compile script" instead.
+            // disable('language', 'langid', $row['langid'], $description, $row['judgingid'], (string)$row['cid'], $compile_output);
+        } else {
+            $description = "Running compile.sh caused an error/crash: $internalError";
+            // TODO: We need to change internal error to "disable the compile script" instead.
+            // disable('judgehost', 'hostname', $myhost, $description, $row['judgingid'], (string)$row['cid'], $compile_output);
+        }
+        logmsg(LOG_ERR, $description);
+
+        cleanup_judging($workdir);
+        return false;
+    }
+    logmsg(LOG_INFO, "compile: '".$EXITCODES[$retval]."'");
+
+    // What does the exitcode mean?
+    if (! isset($EXITCODES[$retval])) {
+        alert('error');
+        logmsg(LOG_ERR, "Unknown exitcode from compile.sh for s$judgeTask[submitid]: $retval");
+        // $description = "compile script '" . $row['compile_script'] . "' returned exit code " . $retval;
+        // TODO: We need to change internal error to "disable the compile script" instead.
+        // disable('language', 'langid', $row['langid'], $description, $row['judgingid'], (string)$row['cid'], $compile_output);
+
+        cleanup_judging($workdir);
+        return false;
+    }
+    $compile_success = ($EXITCODES[$retval]==='correct');
+
+    // pop the compilation result back into the judging table
+    $args = 'compile_success=' . $compile_success .
+        '&output_compile=' . rest_encode_file($workdir . '/compile.out', $output_storage_limit);
+    if (isset($metadata['entry_point'])) {
+        $args .= '&entry_point=' . urlencode($metadata['entry_point']);
+    }
+
+
+    // TODO: actually report back compilation result
+    // $url = sprintf('judgehosts/update-judging/%s/%s', urlencode($myhost), urlencode((string)$row['judgingid']));
+    // request($url, 'PUT', $args);
+
+    // compile error: our job here is done
+    if (! $compile_success) {
+        cleanup_judging($workdir);
+        //logmsg(LOG_NOTICE, "Judging s$row[submitid]/j$row[judgingid]: compile error");
+        // TODO: Signal back so that we don't keep compiling!
+        return false;
+    }
+
+    return true;
+}
+
 function judge(array $judgeTask)
 {
     global $EXITCODES, $myhost, $options, $workdirpath, $exitsignalled, $gracefulexitsignalled;
@@ -798,7 +950,6 @@ function judge(array $judgeTask)
         warning("Found stale working directory; renamed to '$oldworkdir'");
     }
 
-    // TODO: Cache and re-use compilation.
     system("mkdir -p '$workdir/compile'", $retval);
     if ($retval != 0) {
         error("Could not create '$workdir/compile'");
@@ -812,146 +963,8 @@ function judge(array $judgeTask)
         error("Could not chdir to '$workdir'");
     }
 
-    // Get the source code from the DB and store in local file(s)
-    $url = sprintf('judgehosts/get_files/source/%s', $judgeTask['submitid']);
-    $sources = request($url, 'GET');
-    $sources = dj_json_decode($sources);
-    $files = array();
-    $hasFiltered = false;
-    foreach ($sources as $source) {
-        $srcfile = "$workdir/compile/$source[filename]";
-        $file = $source['filename'];
-        // TODO: Add this field and/or language_extensions to compile_config.
-        if (array_key_exists('filter_compiler_files', $compile_config) && $compile_config['filter_compiler_files']) {
-            $picked = false;
-            foreach ($compile_config['language_extensions'] as $extension) {
-                $extensionLength = strlen($extension);
-                if (substr($file, -$extensionLength) === $extension) {
-                    $files[] = "'$file'";
-                    $picked = true;
-                    break;
-                }
-            }
-            if (!$picked) {
-                $hasFiltered = true;
-            }
-        } else {
-            $files[] = "'$file'";
-        }
-        if (file_put_contents($srcfile, base64_decode($source['content'])) === false) {
-            error("Could not create $srcfile");
-        }
-    }
-
-    if (empty($files) && $hasFiltered) {
-        // TODO: Fix this code path
-        $message = 'No files with allowed extensions found to pass to compiler. Allowed extensions: ' . implode(', ', $row['language_extensions']);
-        $args = 'compile_success=0' .
-                '&output_compile=' . urlencode(base64_encode($message));
-
-        $url = sprintf('judgehosts/update-judging/%s/%s', urlencode($myhost), urlencode((string)$row['judgingid']));
-        request($url, 'PUT', $args);
-
-        // revoke readablity for domjudge-run user to this workdir
-        chmod($workdir, 0700);
-        logmsg(LOG_NOTICE, "Judging s$row[submitid]/j$row[judgingid]: compile error");
-        return;
-    }
-
-    if (count($files)==0) {
-        error("No submission files could be downloaded.");
-    }
-
-    // if (empty($row['compile_script'])) {
-    //     error("No compile script specified for language " . $row['langid'] . ".");
-    // }
-
-    list($execrunpath, $error) = fetch_executable(
-        $workdirpath,
-        'compile',
-        $judgeTask['compile_script_id']
-    );
-    if (isset($error)) {
-        logmsg(LOG_ERR, "fetching executable failed for compile script '" . $judgeTask['compile_script_id'] . "': " . $error);
-        $description = $judgeTask['compile_script_id'] . ': fetch, compile, or deploy of compile script failed.';
-        // TODO: We need to change internal error to "disable the compile script" instead.
-        // disable('language', 'langid', $row['langid'], $description, $row['judgingid'], (string)$row['cid']);
-        return;
-    }
-
-    // create chroot environment
-    logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." start'");
-    system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' start', $retval);
-    if ($retval!=0) {
-        error("chroot script exited with exitcode $retval");
-    }
-
-    // Compile the program.
-    system(LIBJUDGEDIR . "/compile.sh $cpuset_opt '$execrunpath' '$workdir' " .
-           implode(' ', $files), $retval);
-
-    if (is_readable($workdir . '/compile.out')) {
-        $compile_output = dj_file_get_contents($workdir . '/compile.out', 50000);
-    }
-    if (empty($compile_output) && is_readable($workdir . '/compile.tmp')) {
-        $compile_output = dj_file_get_contents($workdir . '/compile.tmp', 50000);
-    }
-
-    // Try to read metadata from file
-    $metadata = read_metadata($workdir . '/compile.meta');
-    if (isset($metadata['internal-error'])) {
-        alert('error');
-        $internalError = $metadata['internal-error'];
-        $compile_output .= "\n--------------------------------------------------------------------------------\n\n".
-            "Internal errors reported:\n".$internalError;
-
-        if (preg_match('/^compile script: /', $internalError)) {
-            $internalError = preg_replace('/^compile script: /', '', $internalError);
-            $description = "The compile script returned an error: $internalError";
-            // TODO: We need to change internal error to "disable the compile script" instead.
-            // disable('language', 'langid', $row['langid'], $description, $row['judgingid'], (string)$row['cid'], $compile_output);
-        } else {
-            $description = "Running compile.sh caused an error/crash: $internalError";
-            // TODO: We need to change internal error to "disable the compile script" instead.
-            // disable('judgehost', 'hostname', $myhost, $description, $row['judgingid'], (string)$row['cid'], $compile_output);
-        }
-        logmsg(LOG_ERR, $description);
-
-        cleanup_judging($workdir);
-        return;
-    }
-    logmsg(LOG_INFO, "compile: '".$EXITCODES[$retval]."'");
-
-    // What does the exitcode mean?
-    if (! isset($EXITCODES[$retval])) {
-        alert('error');
-        logmsg(LOG_ERR, "Unknown exitcode from compile.sh for s$judgeTask[submitid]: $retval");
-        // $description = "compile script '" . $row['compile_script'] . "' returned exit code " . $retval;
-        // TODO: We need to change internal error to "disable the compile script" instead.
-        // disable('language', 'langid', $row['langid'], $description, $row['judgingid'], (string)$row['cid'], $compile_output);
-
-        cleanup_judging($workdir);
-        return;
-    }
-    $compile_success = ($EXITCODES[$retval]==='correct');
-
-    // pop the compilation result back into the judging table
-    $args = 'compile_success=' . $compile_success .
-        '&output_compile=' . rest_encode_file($workdir . '/compile.out', $output_storage_limit);
-    if (isset($metadata['entry_point'])) {
-        $args .= '&entry_point=' . urlencode($metadata['entry_point']);
-    }
-
-
-    // TODO: actually report back compilation result
-    // $url = sprintf('judgehosts/update-judging/%s/%s', urlencode($myhost), urlencode((string)$row['judgingid']));
-    // request($url, 'PUT', $args);
-
-    // compile error: our job here is done
-    if (! $compile_success) {
-        cleanup_judging($workdir);
-        //logmsg(LOG_NOTICE, "Judging s$row[submitid]/j$row[judgingid]: compile error");
-        // TODO: Signal back so that we don't keep compiling!
+    $compile_success = compile($judgeTask, $workdir, $workdirpath, $compile_config, $cpuset_opt, $output_storage_limit);
+    if (!$compile_success) {
         return;
     }
 
