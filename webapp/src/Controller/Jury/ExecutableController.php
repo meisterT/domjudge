@@ -122,7 +122,7 @@ class ExecutableController extends BaseController
                     $type        = $ini_array['type'];
                 }
 
-                $immutableExecutable = $this->createImmutableExecutable($zip, $propertyFile);
+                $immutableExecutable = $this->dj->createImmutableExecutable($zip, $propertyFile);
                 $executable = new Executable();
                 $executable
                     ->setExecid($id)
@@ -360,7 +360,7 @@ class ExecutableController extends BaseController
             $archive = $data['archive'];
             $zip = $this->dj->openZipFile($archive->getRealPath());
             $executable->setImmutableExecutable(
-                $this->createImmutableExecutable($zip)
+                $this->dj->createImmutableExecutable($zip)
             );
             $this->saveEntity($this->em, $this->eventLogService, $this->dj, $executable,
                               $executable->getExecid(), false);
@@ -506,27 +506,5 @@ class ExecutableController extends BaseController
             'aceFilenames' => $aceFilenames,
             'files' => $file_contents,
         ];
-    }
-
-    private function createImmutableExecutable(ZipArchive $zip): ImmutableExecutable
-    {
-        $propertyFile = 'domjudge-executable.ini';
-        $immutableExecutable = new ImmutableExecutable();
-        $this->em->persist($immutableExecutable);
-        $rank = 0;
-        for ($idx = 0; $idx < $zip->numFiles; $idx++) {
-            if ($zip->getNameIndex($idx) === $propertyFile) {
-                continue;
-            }
-            $executableFile = new ExecutableFile();
-            $executableFile
-                ->setRank($rank)
-                ->setFilename($zip->getNameIndex($idx))
-                ->setFileContent($zip->getFromIndex($idx))
-                ->setImmutableExecutable($immutableExecutable);
-            $this->em->persist($executableFile);
-            $rank++;
-        }
-        return $immutableExecutable;
     }
 }

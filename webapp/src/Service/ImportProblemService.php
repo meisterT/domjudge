@@ -5,6 +5,7 @@ namespace App\Service;
 use App\Entity\Contest;
 use App\Entity\ContestProblem;
 use App\Entity\Executable;
+use App\Entity\ImmutableExecutable;
 use App\Entity\Language;
 use App\Entity\Problem;
 use App\Entity\Submission;
@@ -338,11 +339,18 @@ class ImportProblemService
                             }
 
                             $combinedRunCompare = $yamlData['validation'] == 'custom interactive';
+
+                            if (!($tempzipFile = tempnam($this->dj->getDomjudgeTmpDir(), "/executable-"))) {
+                                throw new ServiceUnavailableHttpException(null, 'Failed to create temporary file');
+                            }
+                            file_put_contents($tempzipFile, $outputValidatorZip);
+                            $zipArchive = new ZipArchive();
+                            $zipArchive->open($tempzipFile);
+
                             $executable         = new Executable();
                             $executable
                                 ->setExecid($outputValidatorName)
-                                ->setMd5sum(md5($outputValidatorZip))
-                                ->setZipfile($outputValidatorZip)
+                                ->setImmutableExecutable($this->dj->createImmutableExecutable($zipArchive))
                                 ->setDescription(sprintf('output validator for %s', $problem->getName()))
                                 ->setType($combinedRunCompare ? 'run' : 'compare');
                             $this->em->persist($executable);
