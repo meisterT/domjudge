@@ -860,6 +860,13 @@ class DOMJudgeService
                 ->setFilename($zip->getNameIndex($idx))
                 ->setFileContent($zip->getFromIndex($idx))
                 ->setImmutableExecutable($immutableExecutable);
+            // TOOD: Extract executable info from zip file.
+            if (
+                $zip->getNameIndex($idx) === 'build'
+                || $zip->getNameIndex($idx) === 'run'
+            ) {
+                $executableFile->setIsExecutable(true);
+            }
             $this->em->persist($executableFile);
             $rank++;
         }
