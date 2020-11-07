@@ -407,7 +407,7 @@ EOT;
     return [$execrunpath, null];
 }
 
-$options = getopt("dv:n:hV");
+$options = getopt("dv:n:hVe:j:t:");
 // FIXME: getopt doesn't return FALSE on parse failure as documented!
 if ($options===false) {
     echo "Error: parsing options failed.\n";
@@ -490,21 +490,40 @@ if (defined('SYSLOG') && SYSLOG) {
     putenv('DJ_SYSLOG=' . SYSLOG);
 }
 
-if (! posix_getpwnam($runuser)) {
-    error("runuser $runuser does not exist.");
-}
-$output = array();
-exec("ps -u '$runuser' -o pid= -o comm=", $output, $retval);
-if (count($output) != 0) {
-    error("found processes still running as '$runuser', check manually:\n" .
-          implode("\n", $output));
-}
+if (empty($options['e'])) {
+    if (!posix_getpwnam($runuser)) {
+        error("runuser $runuser does not exist.");
+    }
+    $output = array();
+    exec("ps -u '$runuser' -o pid= -o comm=", $output, $retval);
+    if (count($output) != 0) {
+        error("found processes still running as '$runuser', check manually:\n" .
+            implode("\n", $output));
+    }
 
-logmsg(LOG_NOTICE, "Judge started on $myhost [DOMjudge/".DOMJUDGE_VERSION."]");
+    logmsg(LOG_NOTICE, "Judge started on $myhost [DOMjudge/" . DOMJUDGE_VERSION . "]");
+}
 
 initsignals();
 
 read_credentials();
+
+if (!empty($options['e'])) {
+    $endpointID = $options['e'];
+    $endpoint = $endpoints[$endpointID];
+    $endpoints[$endpointID]['ch'] = setup_curl_handle($endpoint['user'], $endpoint['pass']);
+    $new_judging_run = (array) json_decode(base64_decode($options['j']));
+    $judgeTaskId = $options['t'];
+
+    request(
+        sprintf('judgehosts/add-judging-run/%s/%s', $new_judging_run['hostname'],
+            urlencode((string)$judgeTaskId)),
+        'POST',
+        $new_judging_run,
+        false
+    );
+    exit(0);
+}
 
 // Set umask to allow group,other access, as this is needed for the
 // unprivileged user.
@@ -959,7 +978,7 @@ function compile(array $judgeTask, string $workdir, string $workdirpath, array $
 
 function judge(array $judgeTask)
 {
-    global $EXITCODES, $myhost, $options, $workdirpath, $exitsignalled, $gracefulexitsignalled;
+    global $EXITCODES, $myhost, $options, $workdirpath, $exitsignalled, $gracefulexitsignalled, $endpointID;
 
     $compile_config = dj_json_decode($judgeTask['compile_config']);
     $run_config     = dj_json_decode($judgeTask['run_config']);
@@ -1146,7 +1165,6 @@ function judge(array $judgeTask)
 
     $lastcase_correct = $result === 'correct';
 
-    // TODO: Make this async!
     $new_judging_run = array(
         'runresult' => urlencode($result),
         'runtime' => urlencode((string)$runtime),
@@ -1154,16 +1172,24 @@ function judge(array $judgeTask)
         'output_error' => rest_encode_file($testcasedir . '/program.err', $output_storage_limit),
         'output_system' => rest_encode_file($testcasedir . '/system.out', $output_storage_limit),
         'metadata' => rest_encode_file($testcasedir . '/program.meta', $output_storage_limit),
-        'output_diff'  => rest_encode_file($testcasedir . '/feedback/judgemessage.txt', $output_storage_limit)
+        'output_diff'  => rest_encode_file($testcasedir . '/feedback/judgemessage.txt', $output_storage_limit),
+        'hostname' => $myhost,
     );
-    // TODO: Check whether this has worked.
-    request(
-        sprintf('judgehosts/add-judging-run/%s/%s', urlencode($myhost),
-            urlencode((string)$judgeTask['judgetaskid'])),
-        'POST',
-        $new_judging_run,
-        false
-    );
+
+    if ($result === 'correct') {
+        // Post result back asynchronously. PHP is lacking multi-threading, so we just call ourselves again.
+        $judgedaemon = preg_replace('/\.main\.php$/', '', __FILE__);
+        shell_exec($judgedaemon . ' -e ' . $endpointID . ' -t ' . $judgeTask['judgetaskid']
+            . ' -j ' . base64_encode(json_encode($new_judging_run)) . ' 2>&1 >> /dev/null &');
+    } else {
+        request(
+            sprintf('judgehosts/add-judging-run/%s/%s', urlencode($myhost),
+                urlencode((string)$judgeTask['judgetaskid'])),
+            'POST',
+            $new_judging_run,
+            false
+        );
+    }
 
     // TODO:
     // $unsent_judging_runs[] = $new_judging_run;
