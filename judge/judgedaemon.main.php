@@ -753,6 +753,20 @@ function compile(array $judgeTask, string $workdir, string $workdirpath, array $
 {
     global $myhost, $EXITCODES;
 
+    // Re-use compilation if it already exists.
+    if (is_dir("$workdir/../compile")) {
+        rmdir("$workdir/compile");
+        system("ln -s '$workdir/../compile' '$workdir/'");
+
+        // create chroot environment
+        logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." start'");
+        system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' start', $retval);
+        if ($retval!=0) {
+            error("chroot script exited with exitcode $retval");
+        }
+        return true;
+    }
+
     // Get the source code from the DB and store in local file(s).
     $url = sprintf('judgehosts/get_files/source/%s', $judgeTask['submitid']);
     $sources = request($url, 'GET');
@@ -895,6 +909,10 @@ function compile(array $judgeTask, string $workdir, string $workdirpath, array $
         // TODO: Signal back so that we don't keep compiling!
         return false;
     }
+
+    // Cache compilation by moving directory one up.
+    system("mv '$workdir/compile' '$workdir/../compile'");
+    system("ln -s '$workdir/../compile' '$workdir/'");
 
     return true;
 }
