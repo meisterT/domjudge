@@ -1010,13 +1010,6 @@ function judge(array $judgeTask): bool
     // TODO: How do we plan to handle these?
     $overshoot = djconfig_get_value('timelimit_overshoot');
 
-    $totalcases = 0;
-    $lastcase_correct = true;
-    $unsent_judging_runs = array();
-    $last_sent = now();
-    $outstanding_data = 0;
-    $update_every_X_seconds = djconfig_get_value('update_judging_seconds');
-
     // Check whether we have received an exit signal (but not a graceful exit signal).
     if (function_exists('pcntl_signal_dispatch')) {
         pcntl_signal_dispatch();
@@ -1033,41 +1026,9 @@ function judge(array $judgeTask): bool
         }
 
         // Break, not exit so we cleanup nicely.
-        // TODO: What to do here?
-        // break;
+        return false;
     }
 
-    // TODO: Remove this or move it to one loop further out.
-    // if (!$lastcase_correct) {
-    //     // get the next testcase
-    //     $url = sprintf('testcases/next-to-judge/%s', $row['judgingid']);
-    //     $testcase = request($url, 'GET', '');
-    //     $tc = dj_json_decode($testcase);
-    //     if ($tc === null) {
-    //         $disabled = dj_json_encode(array(
-    //             'kind' => 'problem',
-    //             'probid' => $row['probid']));
-    //         $judgehostlog = read_judgehostlog();
-    //         $error_id = request(
-    //             'judgehosts/internal-error',
-    //             'POST',
-    //             'judgingid=' . urlencode((string)$row['judgingid']) .
-    //             '&cid=' . urlencode((string)$row['cid']) .
-    //             '&description=' . urlencode("no test cases found") .
-    //             '&judgehostlog=' . urlencode(base64_encode($judgehostlog)) .
-    //             '&disabled=' . urlencode($disabled)
-    //         );
-    //         logmsg(LOG_ERR, "No testcases found for p$row[probid] => internal error " . $error_id);
-    //         break;
-    //     }
-
-    //     // empty means: no more testcases for this judging.
-    //     if (empty($tc)) {
-    //         break;
-    //     }
-    // }
-
-    $totalcases++;
     logmsg(LOG_INFO, "  🏃 Running testcase $judgeTask[testcase_id]...");
     $testcasedir = $workdir . "/testcase" . sprintf('%05d', $judgeTask['testcase_id']);
     $tcfile = fetchTestcase($workdirpath, $judgeTask['testcase_id']);
@@ -1181,38 +1142,8 @@ function judge(array $judgeTask): bool
         );
     }
 
-    // TODO:
-    // $unsent_judging_runs[] = $new_judging_run;
-    // $outstanding_data += strlen(var_export($new_judging_run, TRUE));
-
-    // $now = now();
-    // if (!$lastcase_correct
-    //     || ($now - $last_sent) >= $update_every_X_seconds
-    //     || $outstanding_data > $row['outputlimit'] * 1024) {
-    //    if (send_unsent_judging_runs($unsent_judging_runs, $row['judgingid']) === null) {
-    //        disable('problem', 'probid', $row['probid'], "uploading unsent judging runs failed", $row['judgingid'], (string)$row['cid']);
-    //        return;
-    //    }
-    //    $unsent_judging_runs = array();
-    //    $last_sent = $now;
-    //    $outstanding_data = 0;
-    // }
     logmsg(LOG_INFO, '  ' . ($result === 'correct' ? " \033[0;32m✔\033[0m" : " \033[1;31m✗\033[0m")
         . ' ...done in ' . $runtime . 's, result: ' . $result);
-
-    // TODO
-    //if (!empty($unsent_judging_runs)) {
-    //    if (send_unsent_judging_runs($unsent_judging_runs, $row['judgingid']) === null) {
-    //        // TODO
-    //        // disable('problem', 'probid', $row['probid'], "uploading unsent judging runs failed", $row['judgingid'], (string)$row['cid']);
-    //        return;
-    //    }
-    //}
-
-    // Sanity check: need to have had at least one testcase
-    // if ($totalcases == 0) {
-    //     logmsg(LOG_WARNING, "No testcases judged for s$row[submitid]/j$row[judgingid]!");
-    // }
 
     // done!
     return true;
