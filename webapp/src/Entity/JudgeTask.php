@@ -59,6 +59,16 @@ class JudgeTask
     /**
      * @var int
      *
+     * @ORM\Column(type="integer", name="jobid", length=4,
+     *     options={"comment"="All judgetasks with the same jobid belong together.","unsigned"=true},
+     *     nullable=false)
+     * @Serializer\Type("string")
+     */
+    private $jobid;
+
+    /**
+     * @var int
+     *
      * @ORM\Column(type="integer", name="submitid", length=4,
      *     options={"comment"="Submission ID being judged","unsigned"=true},
      *     nullable=true)
