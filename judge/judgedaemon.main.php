@@ -149,7 +149,7 @@ function request(string $url, string $verb = 'GET', $data = '', bool $failonerro
         } else {
             $errstr = "Error while executing curl $verb to url " . $url .
                 ": http status code: " . $status .
-                ", request size = " . strlen($data) .
+                ", request size = " . strlen(print_r($data, TRUE)) .
                 ", response: " . $response;
         }
         if ($failonerror) {
@@ -1017,7 +1017,7 @@ function judge(array $judgeTask)
 
     $totalcases++;
     logmsg(LOG_DEBUG, "Running testcase $judgeTask[testcase_id]...");
-    $testcasedir = $workdir . "/testcase" . sprintf('%03d', $judgeTask['testcase_id']);
+    $testcasedir = $workdir . "/testcase" . sprintf('%05d', $judgeTask['testcase_id']);
     $tcfile = fetchTestcase($workdirpath, $judgeTask['testcase_id']);
     if ($tcfile === NULL) {
         // error while fetching testcase
@@ -1103,17 +1103,26 @@ function judge(array $judgeTask)
 
     $lastcase_correct = $result === 'correct';
 
+    // TODO: Make this async!
+    $new_judging_run = array(
+        'runresult' => urlencode($result),
+        'runtime' => urlencode((string)$runtime),
+        'output_run'   => rest_encode_file($testcasedir . '/program.out', false),
+        'output_error' => rest_encode_file($testcasedir . '/program.err', $output_storage_limit),
+        'output_system' => rest_encode_file($testcasedir . '/system.out', $output_storage_limit),
+        'metadata' => rest_encode_file($testcasedir . '/program.meta', $output_storage_limit),
+        'output_diff'  => rest_encode_file($testcasedir . '/feedback/judgemessage.txt', $output_storage_limit)
+    );
+    // TODO: Check whether this has worked.
+    request(
+        sprintf('judgehosts/add-judging-run/%s/%s', urlencode($myhost),
+            urlencode((string)$judgeTask['judgetaskid'])),
+        'POST',
+        $new_judging_run,
+        false
+    );
+
     // TODO:
-    // $new_judging_run = array(
-    //     'testcaseid' => urlencode((string)$tc['testcaseid']),
-    //     'runresult' => urlencode($result),
-    //     'runtime' => urlencode((string)$runtime),
-    //     'output_run'   => rest_encode_file($testcasedir . '/program.out', false),
-    //     'output_error' => rest_encode_file($testcasedir . '/program.err', $output_storage_limit),
-    //     'output_system' => rest_encode_file($testcasedir . '/system.out', $output_storage_limit),
-    //     'metadata' => rest_encode_file($testcasedir . '/program.meta', $output_storage_limit),
-    //     'output_diff'  => rest_encode_file($testcasedir . '/feedback/judgemessage.txt', $output_storage_limit)
-    // );
     // $unsent_judging_runs[] = $new_judging_run;
     // $outstanding_data += strlen(var_export($new_judging_run, TRUE));
 
