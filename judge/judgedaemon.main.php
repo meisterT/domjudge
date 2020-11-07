@@ -262,7 +262,7 @@ function fetch_executable(
             error("Could not create directory '$execbuilddir'");
         }
 
-        logmsg(LOG_INFO, "Fetching new executable '$type/$execid'");
+        logmsg(LOG_INFO, "  🖫 Fetching new executable '$type/$execid'");
         $content = request(sprintf('judgehosts/get_files/%s/%s', $type, $execid), 'GET');
         $files = dj_json_decode($content);
         unset($content);
@@ -511,7 +511,7 @@ read_credentials();
 umask(0022);
 
 // Check basic prerequisites for chroot at judgehost startup
-logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." check'");
+logmsg(LOG_INFO, "√ Executing chroot script: '".CHROOT_SCRIPT." check'");
 system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' check', $retval);
 if ($retval!=0) {
     error("chroot sanity check exited with exitcode $retval");
@@ -615,25 +615,36 @@ while (true) {
 
     // we have gotten a submission for judging
     $endpoints[$endpointID]["waiting"] = false;
-
-    // logmsg(LOG_NOTICE, "Judging submission s$row[submitid] (endpoint $endpointID) ".
-    //        "(t$row[teamid]/p$row[probid]/$row[langid]), id j$row[judgingid]...");
-
+    logmsg(LOG_INFO,
+        "⇝ Received " . sizeof($row) . " '" . $row[0]['type'] . "' judge tasks (endpoint $endpointID)");
 
     // create workdir for judging
     $workdir = judging_directory($workdirpath, $row[0]);
 
-    logmsg(LOG_INFO, "Working directory: $workdir");
+    logmsg(LOG_INFO, "  Working directory: $workdir");
 
+    $success_file = "$workdir/success";
     // If a database gets reset without removing the judging
     // directories, we might hit an old directory: rename it.
     if (file_exists($workdir)) {
-        $oldworkdir = $workdir . '-old-' . getmypid() . '-' . strftime('%Y-%m-%d_%H:%M');
-        if (!rename($workdir, $oldworkdir)) {
-            error("Could not rename stale working directory to '$oldworkdir'");
+        $needs_cleanup = false;
+        if (file_exists($success_file)) {
+            if (file_get_contents($success_file) != getmypid()) {
+                $needs_cleanup = true;
+            }
+            unlink("$workdir/success");
+        } else {
+            $needs_cleanup = true;
         }
-        @chmod($oldworkdir, 0700);
-        warning("Found stale working directory; renamed to '$oldworkdir'");
+
+        if ($needs_cleanup) {
+            $oldworkdir = $workdir . '-old-' . getmypid() . '-' . strftime('%Y-%m-%d_%H:%M');
+            if (!rename($workdir, $oldworkdir)) {
+                error("Could not rename stale working directory to '$oldworkdir'");
+            }
+            @chmod($oldworkdir, 0700);
+            warning("Found stale working directory; renamed to '$oldworkdir'");
+        }
     }
 
     system("mkdir -p '$workdir/compile'", $retval);
@@ -648,7 +659,7 @@ while (true) {
     }
 
     // create chroot environment
-    logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." start'");
+    logmsg(LOG_INFO, "  √ Executing chroot script: '".CHROOT_SCRIPT." start'");
     system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' start', $retval);
     if ($retval!=0) {
         error("chroot script exited with exitcode $retval");
@@ -662,6 +673,7 @@ while (true) {
 
     // TODO: Perhaps wait until we are sure this was the last batch with the same jobid.
     cleanup_judging($workdir);
+    file_put_contents($success_file, getmypid());
 
     // Check if we were interrupted while judging, if so, exit (to avoid sleeping)
     if ($exitsignalled) {
@@ -773,7 +785,7 @@ function cleanup_judging(string $workdir) : void
     chmod($workdir, 0700);
 
     // destroy chroot environment
-    logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." stop'");
+    logmsg(LOG_INFO, "  √ Executing chroot script: '".CHROOT_SCRIPT." stop'");
     system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' stop', $retval);
     if ($retval!=0) {
         error("chroot script exited with exitcode $retval");
@@ -865,7 +877,7 @@ function compile(array $judgeTask, string $workdir, string $workdirpath, array $
     }
 
     // // create chroot environment
-    // logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." start'");
+    // logmsg(LOG_INFO, "Executing chroot script: '".CHROOT_SCRIPT." start'");
     // system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' start', $retval);
     // if ($retval!=0) {
     //     error("chroot script exited with exitcode $retval");
@@ -905,7 +917,7 @@ function compile(array $judgeTask, string $workdir, string $workdirpath, array $
         cleanup_judging($workdir);
         return false;
     }
-    logmsg(LOG_INFO, "compile: '".$EXITCODES[$retval]."'");
+    logmsg(LOG_INFO, "  💻 Compilation: '".$EXITCODES[$retval]."'");
 
     // What does the exitcode mean?
     if (! isset($EXITCODES[$retval])) {
@@ -1047,7 +1059,7 @@ function judge(array $judgeTask)
     // }
 
     $totalcases++;
-    logmsg(LOG_DEBUG, "Running testcase $judgeTask[testcase_id]...");
+    logmsg(LOG_INFO, "  🏃 Running testcase $judgeTask[testcase_id]...");
     $testcasedir = $workdir . "/testcase" . sprintf('%05d', $judgeTask['testcase_id']);
     $tcfile = fetchTestcase($workdirpath, $judgeTask['testcase_id']);
     if ($tcfile === NULL) {
@@ -1169,7 +1181,7 @@ function judge(array $judgeTask)
     //    $last_sent = $now;
     //    $outstanding_data = 0;
     // }
-    logmsg(LOG_INFO, "Testcase $judgeTask[testcase_id] done, result: " . $result);
+    logmsg(LOG_INFO, "     ...done in " . $runtime . "s, result: " . $result);
 
     // TODO
     //if (!empty($unsent_judging_runs)) {
@@ -1186,7 +1198,6 @@ function judge(array $judgeTask)
     // }
 
     // done!
-    logmsg(LOG_NOTICE, "Judging s$judgeTask[submitid]/t$judgeTask[testcase_id] finished");
 }
 
 function fetchTestcase($workdirpath, $testcase_id): array
@@ -1223,6 +1234,6 @@ function fetchTestcase($workdirpath, $testcase_id): array
     }
     unset($files);
 
-    logmsg(LOG_INFO, "Fetched new testcase $testcase_id.");
+    logmsg(LOG_INFO, "  🖫 Fetched new testcase $testcase_id.");
     return $tcfile;
 }
