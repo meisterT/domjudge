@@ -294,6 +294,7 @@ class SubmissionService
         return [$submissions, $counts];
     }
 
+    // TODO: Check if this works with missing judgements in the middle.
     /**
      * Determines final result for a judging given an ordered array of
      * judging runs. Runs can be NULL if not run yet. A return value of
@@ -315,7 +316,11 @@ class SubmissionService
         foreach ($runs as $testCase => $run) {
             if ($run === null) {
                 $haveNullResult = true;
-            } else {
+            } else if ($run->getRunresult() === null) {
+                $haveNullResult = true;
+                break;
+            }
+            else {
                 $priority = $resultsPrio[$run->getRunresult()];
                 if (empty($priority)) {
                     throw new \InvalidArgumentException(
