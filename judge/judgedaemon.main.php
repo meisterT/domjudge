@@ -19,8 +19,7 @@ function judging_directory(string $workdirpath, array $judgeTask)
 {
     return $workdirpath . '/'
         . $judgeTask['submitid'] . '/'
-        . $judgeTask['jobid'] . '/'
-        . $judgeTask['judgetaskid'];
+        . $judgeTask['jobid'];
 }
 
 function read_credentials()
@@ -620,9 +619,49 @@ while (true) {
     // logmsg(LOG_NOTICE, "Judging submission s$row[submitid] (endpoint $endpointID) ".
     //        "(t$row[teamid]/p$row[probid]/$row[langid]), id j$row[judgingid]...");
 
+
+    // create workdir for judging
+    $workdir = judging_directory($workdirpath, $row[0]);
+
+    logmsg(LOG_INFO, "Working directory: $workdir");
+
+    // If a database gets reset without removing the judging
+    // directories, we might hit an old directory: rename it.
+    if (file_exists($workdir)) {
+        $oldworkdir = $workdir . '-old-' . getmypid() . '-' . strftime('%Y-%m-%d_%H:%M');
+        if (!rename($workdir, $oldworkdir)) {
+            error("Could not rename stale working directory to '$oldworkdir'");
+        }
+        @chmod($oldworkdir, 0700);
+        warning("Found stale working directory; renamed to '$oldworkdir'");
+    }
+
+    system("mkdir -p '$workdir/compile'", $retval);
+    if ($retval != 0) {
+        error("Could not create '$workdir/compile'");
+    }
+
+    chmod($workdir, 0755);
+
+    if (!chdir($workdir)) {
+        error("Could not chdir to '$workdir'");
+    }
+
+    // create chroot environment
+    logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." start'");
+    system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' start', $retval);
+    if ($retval!=0) {
+        error("chroot script exited with exitcode $retval");
+    }
+
+    // Make sure the workdir is accessible for the domjudge-run user.
+    // Will be revoked again after this run finished.
     foreach ($row as $judgetask) {
         judge($judgetask);
     }
+
+    // TODO: Perhaps wait until we are sure this was the last batch with the same jobid.
+    cleanup_judging($workdir);
 
     // Check if we were interrupted while judging, if so, exit (to avoid sleeping)
     if ($exitsignalled) {
@@ -754,16 +793,7 @@ function compile(array $judgeTask, string $workdir, string $workdirpath, array $
     global $myhost, $EXITCODES;
 
     // Re-use compilation if it already exists.
-    if (is_dir("$workdir/../compile")) {
-        rmdir("$workdir/compile");
-        system("ln -s '$workdir/../compile' '$workdir/'");
-
-        // create chroot environment
-        logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." start'");
-        system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' start', $retval);
-        if ($retval!=0) {
-            error("chroot script exited with exitcode $retval");
-        }
+    if (file_exists("$workdir/compile.success")) {
         return true;
     }
 
@@ -834,12 +864,12 @@ function compile(array $judgeTask, string $workdir, string $workdirpath, array $
         return false;
     }
 
-    // create chroot environment
-    logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." start'");
-    system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' start', $retval);
-    if ($retval!=0) {
-        error("chroot script exited with exitcode $retval");
-    }
+    // // create chroot environment
+    // logmsg(LOG_INFO, "executing chroot script: '".CHROOT_SCRIPT." start'");
+    // system(LIBJUDGEDIR.'/'.CHROOT_SCRIPT.' start', $retval);
+    // if ($retval!=0) {
+    //     error("chroot script exited with exitcode $retval");
+    // }
 
     // Compile the program.
     system(LIBJUDGEDIR . "/compile.sh $cpuset_opt '$execrunpath' '$workdir' " .
@@ -910,9 +940,7 @@ function compile(array $judgeTask, string $workdir, string $workdirpath, array $
         return false;
     }
 
-    // Cache compilation by moving directory one up.
-    system("mv '$workdir/compile' '$workdir/../compile'");
-    system("ln -s '$workdir/../compile' '$workdir/'");
+    touch("$workdir/compile.success");
 
     return true;
 }
@@ -952,35 +980,7 @@ function judge(array $judgeTask)
         $cpuset_opt = "-n ${options['daemonid']}";
     }
 
-    // create workdir for judging
     $workdir = judging_directory($workdirpath, $judgeTask);
-
-    logmsg(LOG_INFO, "Working directory: $workdir");
-
-    // If a database gets reset without removing the judging
-    // directories, we might hit an old directory: rename it.
-    if (file_exists($workdir)) {
-        $oldworkdir = $workdir . '-old-' . getmypid() . '-' . strftime('%Y-%m-%d_%H:%M');
-        if (!rename($workdir, $oldworkdir)) {
-            error("Could not rename stale working directory to '$oldworkdir'");
-        }
-        @chmod($oldworkdir, 0700);
-        warning("Found stale working directory; renamed to '$oldworkdir'");
-    }
-
-    system("mkdir -p '$workdir/compile'", $retval);
-    if ($retval != 0) {
-        error("Could not create '$workdir/compile'");
-    }
-
-    // Make sure the workdir is accessible for the domjudge-run user.
-    // Will be revoked again after this run finished.
-    chmod($workdir, 0755);
-
-    if (!chdir($workdir)) {
-        error("Could not chdir to '$workdir'");
-    }
-
     $compile_success = compile($judgeTask, $workdir, $workdirpath, $compile_config, $cpuset_opt, $output_storage_limit);
     if (!$compile_success) {
         return;
@@ -1184,9 +1184,6 @@ function judge(array $judgeTask)
     // if ($totalcases == 0) {
     //     logmsg(LOG_WARNING, "No testcases judged for s$row[submitid]/j$row[judgingid]!");
     // }
-
-    // TODO
-    cleanup_judging($workdir);
 
     // done!
     logmsg(LOG_NOTICE, "Judging s$judgeTask[submitid]/t$judgeTask[testcase_id] finished");
