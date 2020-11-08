@@ -1124,7 +1124,8 @@ function judge(array $judgeTask): bool
         'hostname' => $myhost,
     );
 
-    if ($result === 'correct') {
+    // FIXME
+    if ($result === 'correct' && false) {
         // Post result back asynchronously. PHP is lacking multi-threading, so we just call ourselves again.
         $judgedaemon = preg_replace('/\.main\.php$/', '', __FILE__);
         shell_exec($judgedaemon . ' -e ' . $endpointID . ' -t ' . $judgeTask['judgetaskid']
