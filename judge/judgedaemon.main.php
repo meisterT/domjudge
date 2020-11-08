@@ -1116,6 +1116,12 @@ function judge(array $judgeTask): bool
 
     $lastcase_correct = $result === 'correct';
 
+    if (empty($runtime)) {
+        echo "DEBUG DEBUG DEBUG\n";
+        print_r($metadata);
+        passthru("ls -al $workdir/compile");
+    }
+
     $new_judging_run = array(
         'runresult' => urlencode($result),
         'runtime' => urlencode((string)$runtime),
