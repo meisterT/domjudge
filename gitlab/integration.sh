@@ -209,6 +209,8 @@ if [ $NUMNOTVERIFIED -ne 2 ] || [ $NUMNOMAGIC -ne 0 ] || [ $NUMSUBS -gt $((NUMVE
 	exit -1;
 fi
 
+mysqldump domjudge > "$artifactdb/db.sql"
+
 section_start api_check "Performing API checks"
 # Start logging again
 set -x
