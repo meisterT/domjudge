@@ -532,9 +532,8 @@ class ImportProblemService
             $contestProblem->setProblem($problem);
             $contestProblem->setContest($contest);
             $this->em->persist($contestProblem);
+            $this->em->flush();
         }
-
-        $this->em->flush();
 
         $cid = $contest ? $contest->getCid() : null;
         $probid = $problem->getProbid();
@@ -552,22 +551,10 @@ class ImportProblemService
         } elseif ($contestProblem->getAllowSubmit()) {
             // As EventLogService::log() will clear the entity manager, the problem and the contest became detached. We
             // need to reload them.
-            /** @var Problem $problem */
-            $problem = $this->em->createQueryBuilder()
-                ->from(Problem::class, 'p')
-                ->select('p')
-                ->andWhere('p.probid = :probid')
-                ->setParameter(':probid', $probid)
-                ->getQuery()
-                ->getOneOrNullResult();
-            /** @var Contest $contest */
-            $contest = $this->em->createQueryBuilder()
-                ->from(Contest::class, 'c')
-                ->select('c')
-                ->andWhere('c.cid = :cid')
-                ->setParameter(':cid', $cid)
-                ->getQuery()
-                ->getOneOrNullResult();
+            // We seem to need to explicitly clear the EntityManager, otherwise we will receive inconsistent data.
+            $this->em->clear();
+            $problem = $this->em->getRepository(Problem::class)->find($probid);
+            $contest = $this->em->getRepository(Contest::class)->find($cid);
 
             // First find all submittable languages:
             /** @var Language[] $allowedLanguages */
