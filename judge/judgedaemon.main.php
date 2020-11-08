@@ -839,8 +839,7 @@ function compile(array $judgeTask, string $workdir, string $workdirpath, array $
     foreach ($sources as $source) {
         $srcfile = "$workdir/compile/$source[filename]";
         $file = $source['filename'];
-        // TODO: Add this field and/or language_extensions to compile_config.
-        if (array_key_exists('filter_compiler_files', $compile_config) && $compile_config['filter_compiler_files']) {
+        if ($compile_config['filter_compiler_files']) {
             $picked = false;
             foreach ($compile_config['language_extensions'] as $extension) {
                 $extensionLength = strlen($extension);
@@ -1112,14 +1111,6 @@ function judge(array $judgeTask): bool
         // logmsg(LOG_ERR, "comparing failed for compare script '" . $row['compare'] . "'");
         // disable('problem', 'probid', $row['probid'], "compare script '" . $row['compare'] . "' crashed", $row['judgingid'], (string)$row['cid']);
         return false;
-    }
-
-    $lastcase_correct = $result === 'correct';
-
-    if (empty($runtime)) {
-        echo "DEBUG DEBUG DEBUG\n";
-        print_r($metadata);
-        passthru("ls -al $workdir/compile");
     }
 
     $new_judging_run = array(

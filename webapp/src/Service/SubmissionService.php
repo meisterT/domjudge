@@ -615,6 +615,7 @@ class SubmissionService
                             'script_memory_limit' => $this->config->get('script_memory_limit'),
                             'script_filesize_limit' => $this->config->get('script_filesize_limit'),
                             'language_extensions' => $submission->getLanguage()->getExtensions(),
+                            'filter_compiler_files' => $submission->getLanguage()->getFilterCompilerFiles(),
                         ]
                     )
                 )
