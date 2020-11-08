@@ -189,6 +189,10 @@ if [ $NUMNOTVERIFIED -ne 2 ] || [ $NUMNOMAGIC -ne 0 ] || [ $NUMSUBS -gt $((NUMVE
 	curl $CURLOPTS "http://localhost/domjudge/jury/judging-verifier?verify_multiple=1" | w3m -dump -T text/html
 	section_end error
 
+	mysqldump domjudge > "$artifactdb/db.sql"
+	cp /tmp/judgedaemon.log "$artifactdb/"
+	cp /var/log/nginx/domjudge.log "$artifactdb/"
+
 	section_start logfiles "All the more or less useful logfiles"
 	for i in /opt/domjudge/judgehost/judgings/*/*/*/*/*/compile.out; do
 		echo $i;
