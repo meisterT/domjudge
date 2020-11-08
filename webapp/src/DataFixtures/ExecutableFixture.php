@@ -85,6 +85,8 @@ class ExecutableFixture extends AbstractExampleDataFixture
                 ->setRank($rank)
                 ->setFilename($zip->getNameIndex($idx))
                 ->setFileContent($zip->getFromIndex($idx))
+                // TODO: Don't do this all the time.
+                ->setIsExecutable(true)
                 ->setImmutableExecutable($immutableExecutable);
             $manager->persist($executableFile);
             $rank++;
