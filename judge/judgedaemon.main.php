@@ -147,6 +147,10 @@ function request(string $url, string $verb = 'GET', $data = '', bool $failonerro
             $errstr = "Authentication failed (error $status) while contacting $url. " .
                 "Check credentials in restapi.secret.";
         } else {
+            $json = json_decode($response, TRUE);
+            if ($json !== NULL) {
+                $response = var_export($json, TRUE);
+            }
             $errstr = "Error while executing curl $verb to url " . $url .
                 ": http status code: " . $status .
                 ", request size = " . strlen(print_r($data, TRUE)) .

@@ -36,7 +36,6 @@ use Psr\Log\LoggerInterface;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use OpenApi\Annotations as OA;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
-use Swagger\Annotations as SWG;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -511,19 +510,11 @@ class JudgehostController extends AbstractFOSRestController
      *     description="The hostname of the judgehost that wants to update the judging",
      *     @OA\Schema(type="string")
      * )
-<<<<<<< HEAD
      * @OA\Parameter(
-     *     name="judgingId",
-     *     in="path",
-     *     description="The ID of the judging to update",
-     *     @OA\Schema(type="integer")
-=======
-     * @SWG\Parameter(
      *     name="judgetaskid",
      *     in="path",
-     *     type="integer",
-     *     description="The ID of the judgetask to update"
->>>>>>> d3e3fa88d... Report compilation result back and handle compile errors correctly.
+     *     description="The ID of the judgetask to update",
+     *     @OA\Schema(type="integer")
      * )
      * @throws \Doctrine\ORM\NonUniqueResultException
      */
@@ -536,13 +527,14 @@ class JudgehostController extends AbstractFOSRestController
             return;
         }
 
-        $judgingId = $this->em->createQueryBuilder()
+        /** @var JudgingRun $judgingRun */
+        $judgingRun = $this->em->createQueryBuilder()
             ->from(JudgingRun::class, 'jr')
-            ->select('jr.judgingid')
+            ->select('jr')
             ->andWhere('jr.judgetaskid = :judgetaskid')
             ->setParameter(':judgetaskid', $judgetaskid)
             ->getQuery()
-            ->getSingleScalarResult();
+            ->getSingleResult();
 
         $query = $this->em->createQueryBuilder()
             ->from(Judging::class, 'j')
@@ -551,15 +543,15 @@ class JudgehostController extends AbstractFOSRestController
             ->join('s.team', 't')
             ->join('s.problem', 'p')
             ->select('j, s, c, t, p')
-            ->andWhere('j.judgingid = :judgingId')
-            ->setParameter(':judgingId', $judgingId)
+            ->andWhere('j.judgingid = :judgingid')
+            ->setParameter(':judgingid', $judgingRun->getJudgingId())
             ->setMaxResults(1)
             ->getQuery();
 
         /** @var Judging $judging */
         $judging = $query->getOneOrNullResult();
         if (!$judging) {
-            throw new BadRequestHttpException("We don't know this judging with ID $judgingId.");
+            throw new BadRequestHttpException("We don't know this judging with judgetaskid ID $judgetaskid.");
             return;
         }
 
@@ -586,7 +578,7 @@ class JudgehostController extends AbstractFOSRestController
                 if ($judging->getOutputCompile() === null) {
                     $judging
                         ->setOutputCompile(base64_decode($request->request->get('output_compile')))
-                        ->setJudgehostName($hostname);
+                        ->setJudgehost($judgehost);
                     $this->em->flush();
 
                     $this->eventLogService->log('judging', $judging->getJudgingid(),
@@ -597,7 +589,7 @@ class JudgehostController extends AbstractFOSRestController
                 // TODO: Invalidate already created judgetasks.
                 $this->em->transactional(function () use (
                     $request,
-                    $hostname,
+                    $judgehost,
                     $judging,
                     $query
                 ) {
@@ -605,7 +597,7 @@ class JudgehostController extends AbstractFOSRestController
                         $judging
                             ->setOutputCompile(base64_decode($request->request->get('output_compile')))
                             ->setResult(Judging::RESULT_COMPILER_ERROR)
-                            ->setJudgehostName($hostname)
+                            ->setJudgehost($judgehost)
                             ->setEndtime(Utils::now());
                         $this->em->flush();
 
@@ -622,7 +614,7 @@ class JudgehostController extends AbstractFOSRestController
                     $judgingId = $judging->getJudgingid();
                     $contestId = $judging->getSubmission()->getContest()->getCid();
                     $this->dj->auditlog('judging', $judgingId, 'judged',
-                                        'compiler-error', $hostname, $contestId);
+                                        'compiler-error', $judgehost->getHostname(), $contestId);
 
                     $this->maybeUpdateActiveJudging($judging);
                     $this->em->flush();
@@ -663,36 +655,35 @@ class JudgehostController extends AbstractFOSRestController
      *     description="The hostname of the judgehost that wants to add the judging run",
      *     @OA\Schema(type="string")
      * )
-     * @SWG\Parameter(
+     * @OA\Parameter(
      *     name="testcaseid",
      *     in="formData",
-     *     type="integer",
-     *     description="The ID of the testcase of the run to add"
+     *     description="The ID of the testcase of the run to add",
+     *     @OA\Schema(type="integer")
      * )
-     * @SWG\Parameter(
+     * @OA\Parameter(
      *     name="runresult",
      *     in="formData",
-     *     type="string",
-     *     description="The result of the run"
+     *     description="The result of the run",
+     *     @OA\Schema(type="string")
      * )
-     * @SWG\Parameter(
+     * @OA\Parameter(
      *     name="runtime",
      *     in="formData",
-     *     type="number",
-     *     format="float",
-     *     description="The runtime of the run"
+     *     description="The runtime of the run",
+     *     @OA\Schema(type="number", format="float")
      * )
-     * @SWG\Parameter(
+     * @OA\Parameter(
      *     name="output_run",
      *     in="formData",
-     *     type="string",
-     *     description="The (base64-encoded) output of the run"
+     *     description="The (base64-encoded) output of the run",
+     *     @OA\Schema(type="string")
      * )
-     * @SWG\Parameter(
+     * @OA\Parameter(
      *     name="output_diff",
      *     in="formData",
-     *     type="string",
-     *     description="The (base64-encoded) output diff of the run"
+     *     description="The (base64-encoded) output diff of the run",
+     *     @OA\Schema(type="string")
      * )
      * @OA\RequestBody(
      *     required=true,
@@ -1081,7 +1072,7 @@ class JudgehostController extends AbstractFOSRestController
             ->from(JudgingRun::class, 'r')
             ->join('r.testcase', 't')
             ->select('r')
-            ->andWhere('r.judgingid = :judgingid')
+            ->andWhere('r.judging = :judgingid')
             ->orderBy('t.ranknumber')
             ->setParameter(':judgingid', $judging->getJudgingid())
             ->getQuery()
@@ -1306,12 +1297,12 @@ class JudgehostController extends AbstractFOSRestController
      * @param string  $id
      * @return array
      * @throws \Doctrine\ORM\NonUniqueResultException
-     * @SWG\Response(
+     * @OA\Response(
      *     response="200",
      *     description="The files for the submission, testcase or script.",
-     *     @SWG\Schema(ref="#/definitions/SourceCodeList")
+     *     @OA\Schema(ref="#/definitions/SourceCodeList")
      * )
-     * @SWG\Parameter(ref="#/parameters/id")
+     * @OA\Parameter(ref="#/parameters/id")
      */
     public function getFilesAction(string $type, string $id)
     {
@@ -1335,7 +1326,7 @@ class JudgehostController extends AbstractFOSRestController
             ->select('f')
             ->andWhere('f.submission = :submitid')
             ->setParameter(':submitid', $id)
-            ->orderBy('f.rank');
+            ->orderBy('f.ranknumber');
 
         /** @var SubmissionFile[] $files */
         $files = $queryBuilder->getQuery()->getResult();
