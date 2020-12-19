@@ -38,25 +38,6 @@ class JudgingRun extends BaseApiEntity
 
     /**
      * @var int
-     * @ORM\Column(type="integer", name="judgingid", length=4,
-     *     options={"comment"="Judging ID","unsigned"=true},
-     *     nullable=false)
-     * @Serializer\SerializedName("judgement_id")
-     * @Serializer\Type("string")
-     */
-    private $judgingid;
-
-    /**
-     * @var int
-     * @ORM\Column(type="integer", name="testcaseid", length=4,
-     *     options={"comment"="Testcase ID","unsigned"=true},
-     *     nullable=false)
-     * @Serializer\Exclude()
-     */
-    private $testcaseid;
-
-    /**
-     * @var int
      * @ORM\Column(type="integer", name="judgetaskid", length=4,
      *     options={"comment"="JudgeTask ID","unsigned"=true},
      *     nullable=false)
@@ -138,56 +119,6 @@ class JudgingRun extends BaseApiEntity
         return $this->runid;
     }
 
-    /**
-<<<<<<< HEAD
-=======
-     * Set judgingid
-     *
-     * @param integer $judgingid
-     *
-     * @return JudgingRun
-     */
-    public function setJudgingid($judgingid)
-    {
-        $this->judgingid = $judgingid;
-
-        return $this;
-    }
-
-    /**
-     * Get judgingid
-     *
-     * @return integer
-     */
-    public function getJudgingid()
-    {
-        return $this->judgingid;
-    }
-
-    /**
-     * Set testcaseid
-     *
-     * @param integer $testcaseid
-     *
-     * @return JudgingRun
-     */
-    public function setTestcaseid($testcaseid)
-    {
-        $this->testcaseid = $testcaseid;
-
-        return $this;
-    }
-
-    /**
-     * Get testcaseid
-     *
-     * @return integer
-     */
-    public function getTestcaseid()
-    {
-        return $this->testcaseid;
-    }
-
     public function setJudgeTaskId(int $judgetaskid): JudgingRun
     {
         $this->judgetaskid = $judgetaskid;
@@ -206,7 +137,6 @@ class JudgingRun extends BaseApiEntity
     }
 
     /**
->>>>>>> 0886e7fc3... Add link from JudgingRun to JudgeTask.
      * Set runresult
      *
      * @param string $runresult
