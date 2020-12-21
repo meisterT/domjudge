@@ -1131,6 +1131,9 @@ function judge(array $judgeTask): bool
         // Post result back asynchronously. PHP is lacking multi-threading, so
         // we just call ourselves again.
         $judgedaemon = preg_replace('/\.main\.php$/', '', __FILE__);
+        logmsg(LOG_INFO, 'GITLABDEBUG: ', shell_exec('ls -al $judgedaemon'));
+        logmsg(LOG_INFO, 'GITLABDEBUG: ', shell_exec('ls -al ' . preg_replace('/\/[^/]*$/', '', $judgedaemon)));
+        exit;
         $cmd = $judgedaemon
             . ' -e ' . $endpointID
             . ' -t ' . $judgeTask['judgetaskid']
