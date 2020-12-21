@@ -688,6 +688,9 @@ while (true) {
         error("chroot script exited with exitcode $retval");
     }
 
+    // Refresh config at start of each batch.
+    djconfig_refresh();
+
     // Make sure the workdir is accessible for the domjudge-run user.
     // Will be revoked again after this run finished.
     foreach ($row as $judgetask) {
@@ -976,10 +979,6 @@ function judge(array $judgeTask): bool
     $compile_config = dj_json_decode($judgeTask['compile_config']);
     $run_config     = dj_json_decode($judgeTask['run_config']);
     $compare_config = dj_json_decode($judgeTask['compare_config']);
-
-    // TODO: We probably can remove this.
-    // refresh config at start of judge run
-    djconfig_refresh();
 
     // Set configuration variables for called programs
     putenv('CREATE_WRITABLE_TEMP_DIR=' . (CREATE_WRITABLE_TEMP_DIR ? '1' : ''));
