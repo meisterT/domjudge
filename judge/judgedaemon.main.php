@@ -1130,17 +1130,13 @@ function judge(array $judgeTask): bool
     if ($result === 'correct') {
         // Post result back asynchronously. PHP is lacking multi-threading, so
         // we just call ourselves again.
-        $judgedaemon = preg_replace('/\.main\.php$/', '', __FILE__);
-        logmsg(LOG_INFO, 'GITLABDEBUG: ' . $judgedaemon);
-        logmsg(LOG_INFO, 'GITLABDEBUG: ' .  shell_exec('ls -al ' . $judgedaemon));
-        logmsg(LOG_INFO, 'GITLABDEBUG: ' .  shell_exec('ls -al ' . preg_replace('/\/[^\/]*$/', '', $judgedaemon)));
-        exit;
+        $judgedaemon = BINDIR . '/judgedaemon';
         $cmd = $judgedaemon
             . ' -e ' . $endpointID
             . ' -t ' . $judgeTask['judgetaskid']
             . ' -j ' . base64_encode(json_encode($new_judging_run))
             . ' >> /dev/null & ';
-        $pid = shell_exec($cmd);
+        shell_exec($cmd);
     } else {
         request(
             sprintf('judgehosts/add-judging-run/%s/%s', urlencode($myhost),
