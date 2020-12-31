@@ -98,6 +98,8 @@ cd $DIR
 STORAGEDIR=screenshots$1
 mkdir -p $STORAGEDIR
 
+Xvfb :0 -screen 0  1920x1080x24 &
+export DISPLAY=:0
 cp $COOKIEJAR cookies.txt
 sed -i 's/#HttpOnly_//g' cookies.txt
 sed -i 's/\t0\t/\t1999999999\t/g' cookies.txt
@@ -118,6 +120,6 @@ do
         urlpath=$(sed "s/$prefix//g"<<<$file)
         # Small risk of collision
         storepath=$(sed "s/\//_s_/g"<<<$urlpath)
-        firefox -screenshot $STORAGEDIR/$storepath-ff.png http://localhost/$url/$urlpath
+	cutycapt --delay=2000 --min-width=1920 --min-height=1080 --url=http://localhost/$url/$urlpath --out=$STORAGEDIR/$storepath-ff.png
     done
 done
