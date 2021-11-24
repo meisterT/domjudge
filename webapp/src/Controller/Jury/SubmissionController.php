@@ -219,6 +219,345 @@ class SubmissionController extends BaseController
     }
 
     /**
+     * @Route("/judging_results/{submitId<\d+>}", name="judging_results")
+     * @throws NonUniqueResultException
+     * @throws Exception
+     */
+    public function judgingResults(Request $request, int $submitId)
+    {
+        $judgingId   = $request->query->get('jid');
+        $rejudgingId = $request->query->get('rejudgingid');
+
+        if (isset($judgingId) && isset($rejudgingId)) {
+            throw new BadRequestHttpException("You cannot specify jid and rejudgingid at the same time.");
+        }
+
+        // If judging ID is not set but rejudging ID is, try to deduce the judging ID from the database.
+        if (!isset($judgingId) && isset($rejudgingId)) {
+            $judging = $this->em->getRepository(Judging::class)
+                ->findOneBy([
+                    'submission' => $submitId,
+                    'rejudging' => $rejudgingId
+                ]);
+            if ($judging) {
+                $judgingId = $judging->getJudgingid();
+            }
+        }
+
+        /** @var Submission|null $submission */
+        $submission = $this->em->createQueryBuilder()
+            ->from(Submission::class, 's')
+            ->join('s.team', 't')
+            ->join('s.problem', 'p')
+            ->join('s.language', 'l')
+            ->join('s.contest', 'c')
+            ->join('s.files', 'f')
+            ->leftJoin('s.external_judgements', 'ej', Join::WITH, 'ej.valid = 1')
+            ->leftJoin('s.contest_problem', 'cp')
+            ->select('s', 't', 'p', 'l', 'c', 'partial f.{submitfileid, filename}', 'cp', 'ej')
+            ->andWhere('s.submitid = :submitid')
+            ->setParameter(':submitid', $submitId)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        if (!$submission) {
+            throw new NotFoundHttpException(sprintf('No submission found with ID %d', $submitId));
+        }
+
+        $judgingData = $this->em->createQueryBuilder()
+            ->from(Judging::class, 'j', 'j.judgingid')
+            ->leftJoin('j.runs', 'jr')
+            ->leftJoin('j.rejudging', 'r')
+            ->select('j', 'r', 'MAX(jr.runtime) AS max_runtime')
+            ->andWhere('j.contest = :contest')
+            ->andWhere('j.submission = :submission')
+            ->setParameter(':contest', $submission->getContest())
+            ->setParameter(':submission', $submission)
+            ->groupBy('j.judgingid')
+            ->orderBy('j.starttime')
+            ->addOrderBy('j.judgingid')
+            ->getQuery()
+            ->getResult();
+
+        /** @var Judging[] $judgings */
+        $judgings    = array_map(function ($data) {
+            return $data[0];
+        }, $judgingData);
+        $maxRunTimes = array_map(function ($data) {
+            return $data['max_runtime'];
+        }, $judgingData);
+
+        $selectedJudging = null;
+        // Find the selected judging
+        if ($judgingId !== null) {
+            $selectedJudging = $judgings[$judgingId] ?? null;
+        } else {
+            foreach ($judgings as $judging) {
+                if ($judging->getValid()) {
+                    $selectedJudging = $judging;
+                }
+            }
+        }
+
+        $claimWarning = null;
+
+        if ($request->get('claim') || $request->get('unclaim')) {
+            if ($response = $this->processClaim($selectedJudging, $request, $claimWarning)) {
+                return $response;
+            }
+        }
+
+        if ($request->get('claimdiff') || $request->get('unclaimdiff')) {
+            $externalJudgement = $submission->getExternalJudgements()->first();
+            if ($response = $this->processClaim($externalJudgement, $request, $claimWarning)) {
+                return $response;
+            }
+        }
+
+        $outputDisplayLimit    = (int)$this->config->get('output_display_limit');
+        $outputTruncateMessage = sprintf("\n[output display truncated after %d B]\n", $outputDisplayLimit);
+
+        $externalRuns = [];
+        if ($externalJudgement = $submission->getExternalJudgements()->first()) {
+            $queryBuilder = $this->em->createQueryBuilder()
+                ->from(Testcase::class, 't')
+                ->leftJoin('t.external_runs', 'er', Join::WITH, 'er.external_judgement = :judging')
+                ->select('t', 'er')
+                ->andWhere('t.problem = :problem')
+                ->setParameter(':judging', $externalJudgement)
+                ->setParameter(':problem', $submission->getProblem())
+                ->orderBy('t.ranknumber');
+
+            $externalRunResults = $queryBuilder
+                ->getQuery()
+                ->getResult();
+
+            foreach ($externalRunResults as $externalRunResult) {
+                $externalRuns[] = $externalRunResult;
+            }
+        }
+
+        $judgehosts = $this->em->createQueryBuilder()
+            ->from(JudgeTask::class, 'jt')
+            ->join('jt.judgehost', 'jh')
+            ->select('jh.judgehostid', 'jh.hostname')
+            ->andWhere('jt.judgehost IS NOT NULL')
+            ->andWhere('jt.jobid = :judging')
+            ->setParameter(':judging', $selectedJudging)
+            ->groupBy('jh.hostname')
+            ->orderBy('jh.hostname')
+            ->getQuery()
+            ->getScalarResult();
+        $judgehosts = array_combine(
+            array_column($judgehosts, 'judgehostid'),
+            array_column($judgehosts, 'hostname')
+        );
+
+        $runsOutstanding = false;
+        $runs       = [];
+        $runsOutput = [];
+        $sameTestcaseIds = true;
+        if ($selectedJudging || $externalJudgement) {
+            $queryBuilder = $this->em->createQueryBuilder()
+                ->from(Testcase::class, 't')
+                ->join('t.content', 'tc')
+                ->leftJoin('t.judging_runs', 'jr', Join::WITH, 'jr.judging = :judging')
+                ->leftJoin('jr.output', 'jro')
+                ->select('t', 'jr', 'tc.image_thumb AS image_thumb', 'jro.metadata')
+                ->andWhere('t.problem = :problem')
+                ->setParameter(':judging', $selectedJudging)
+                ->setParameter(':problem', $submission->getProblem())
+                ->orderBy('t.ranknumber');
+            if ($outputDisplayLimit < 0) {
+                $queryBuilder
+                    ->addSelect('tc.output AS output_reference')
+                    ->addSelect('jro.output_run AS output_run')
+                    ->addSelect('jro.output_diff AS output_diff')
+                    ->addSelect('jro.output_error AS output_error')
+                    ->addSelect('jro.output_system AS output_system');
+            } else {
+                $queryBuilder
+                    ->addSelect('TRUNCATE(tc.output, :outputDisplayLimit, :outputTruncateMessage) AS output_reference')
+                    ->addSelect('TRUNCATE(jro.output_run, :outputDisplayLimit, :outputTruncateMessage) AS output_run')
+                    ->addSelect('RIGHT(jro.output_run, 50) AS output_run_last_bytes')
+                    ->addSelect('TRUNCATE(jro.output_diff, :outputDisplayLimit, :outputTruncateMessage) AS output_diff')
+                    ->addSelect('TRUNCATE(jro.output_error, :outputDisplayLimit, :outputTruncateMessage) AS output_error')
+                    ->addSelect('TRUNCATE(jro.output_system, :outputDisplayLimit, :outputTruncateMessage) AS output_system')
+                    ->setParameter(':outputDisplayLimit', $outputDisplayLimit)
+                    ->setParameter(':outputTruncateMessage', $outputTruncateMessage);
+            }
+
+            $runResults = $queryBuilder
+                ->getQuery()
+                ->getResult();
+
+            $judgingRunTestcaseIdsInOrder = $this->em->createQueryBuilder()
+                ->from(JudgeTask::class, 'jt')
+                ->select('jt.testcase_id')
+                ->andWhere('jt.jobid = :judging')
+                ->setParameter(':judging', $selectedJudging)
+                ->orderBy('jt.judgetaskid')
+                ->getQuery()
+                ->getScalarResult();
+
+            $cnt = 0;
+            foreach ($runResults as $runResult) {
+                /** @var Testcase $testcase */
+                $testcase = $runResult[0];
+                if (isset($judgingRunTestcaseIdsInOrder[$cnt])) {
+                    if ($testcase->getTestcaseid() != $judgingRunTestcaseIdsInOrder[$cnt]['testcase_id']) {
+                        $sameTestcaseIds = false;
+                    }
+                }
+                $cnt++;
+                /** @var JudgingRun $firstJudgingRun */
+                $firstJudgingRun = $runResult[0]->getFirstJudgingRun();
+                if ($firstJudgingRun !== null && $firstJudgingRun->getRunresult() === null) {
+                    $runsOutstanding = true;
+                }
+                $runs[] = $runResult[0];
+                unset($runResult[0]);
+                if (empty($runResult['metadata'])) {
+                    $runResult['cpu_time'] = $firstJudgingRun === null ? 'n/a' : $firstJudgingRun->getRuntime();
+                } else {
+                    $metadata = $this->dj->parseMetadata($runResult['metadata']);
+                    $runResult['cpu_time'] = $metadata['cpu-time'];
+                    $runResult['wall_time'] = $metadata['wall-time'];
+                    $runResult['memory'] = Utils::printsize((int)$metadata['memory-bytes'], 2);
+                    $runResult['exitcode'] = $metadata['exitcode'];
+                    $runResult['signal'] = $metadata['signal'] ?? -1;
+                    $runResult['output_limit'] = $metadata['output-truncated'];
+                }
+                $runResult['terminated'] = preg_match('/timelimit exceeded.*hard (wall|cpu) time/',
+                    (string)$runResult['output_system']);
+                $runResult['hostname'] = null;
+                $runResult['judgehostid'] = null;
+                if ($firstJudgingRun && $firstJudgingRun->getJudgeTask() && $firstJudgingRun->getJudgeTask()->getJudgehost()) {
+                    $runResult['hostname'] = $firstJudgingRun->getJudgeTask()->getJudgehost()->getHostname();
+                    $runResult['judgehostid'] = $firstJudgingRun->getJudgeTask()->getJudgehost()->getJudgehostid();
+                }
+                $runResult['is_output_run_truncated'] = preg_match(
+                    '/\[output storage truncated after \d* B\]/',
+                    (string)$runResult['output_run_last_bytes']
+                );
+                $runsOutput[] = $runResult;
+            }
+        }
+
+        if ($submission->getOriginalSubmission()) {
+            $lastSubmission = $submission->getOriginalSubmission();
+        } else {
+            /** @var Submission|null $lastSubmission */
+            $lastSubmission = $this->em->createQueryBuilder()
+                ->from(Submission::class, 's')
+                ->select('s')
+                ->andWhere('s.team = :team')
+                ->andWhere('s.problem = :problem')
+                ->andWhere('s.submittime < :submittime')
+                ->setParameter(':team', $submission->getTeam())
+                ->setParameter(':problem', $submission->getProblem())
+                ->setParameter(':submittime', $submission->getSubmittime())
+                ->orderBy('s.submittime', 'DESC')
+                ->setMaxResults(1)
+                ->getQuery()
+                ->getOneOrNullResult();
+        }
+
+        /** @var Judging|null $lastJudging */
+        $lastJudging = null;
+        /** @var Testcase[] $lastRuns */
+        $lastRuns = [];
+        if ($lastSubmission !== null) {
+            $lastJudging = $this->em->createQueryBuilder()
+                ->from(Judging::class, 'j')
+                ->select('j')
+                ->andWhere('j.submission = :submission')
+                ->andWhere('j.valid = 1')
+                ->setParameter(':submission', $lastSubmission)
+                ->orderBy('j.judgingid', 'DESC')
+                ->setMaxResults(1)
+                ->getQuery()
+                ->getOneOrNullResult();
+
+            if ($lastJudging !== null) {
+                // Clear the testcases, otherwise Doctrine will use the previous data
+                $this->em->clear();
+                $lastRuns = $this->em->createQueryBuilder()
+                    ->from(Testcase::class, 't')
+                    ->leftJoin('t.judging_runs', 'jr', Join::WITH, 'jr.judging = :judging')
+                    ->select('t', 'jr')
+                    ->andWhere('t.problem = :problem')
+                    ->setParameter(':judging', $lastJudging)
+                    ->setParameter(':problem', $submission->getProblem())
+                    ->orderBy('t.ranknumber')
+                    ->getQuery()
+                    ->getResult();
+            }
+        }
+
+        $unjudgableReasons = [];
+        if ($runsOutstanding) {
+            // Determine if this submission is unjudgable.
+
+            $numActiveJudgehosts = (int)$this->em->createQueryBuilder()
+                ->from(Judgehost::class, 'j')
+                ->select('count(j.judgehostid)')
+                ->andWhere('j.active = 1')
+                ->getQuery()
+                ->getSingleScalarResult();
+            if ($numActiveJudgehosts == 0) {
+                $unjudgableReasons[] = 'No active judgehost. Add or enable judgehosts!';
+            }
+
+            if (!$submission->getLanguage()->getAllowJudge()) {
+                $unjudgableReasons[] = 'Submission language is currently not allowed to be judged!';
+            }
+
+            if (!$submission->getContestProblem()->getAllowJudge()) {
+                $unjudgableReasons[] = 'Problem is currently not allowed to be judged!';
+            }
+        }
+
+        if (!isset($judging)) {
+            $requestedOutputCount = 0;
+        } else {
+            $requestedOutputCount = (int)$this->em->createQueryBuilder()
+                ->from(JudgeTask::class, 'jt')
+                ->select('count(jt.judgetaskid)')
+                ->andWhere('jt.type = :type')
+                ->andWhere('jt.jobid = :judgingid')
+                ->andWhere('jt.starttime IS NULL')
+                ->setParameter(':type', JudgeTaskType::DEBUG_INFO)
+                ->setParameter(':judgingid', $judging->getJudgingid())
+                ->getQuery()
+                ->getSingleScalarResult();
+        }
+
+        $twigData = [
+            'submission' => $submission,
+            'lastSubmission' => $lastSubmission,
+            'judgings' => $judgings,
+            'maxRunTimes' => $maxRunTimes,
+            'selectedJudging' => $selectedJudging,
+            'lastJudging' => $lastJudging,
+            'runs' => $runs,
+            'runsOutstanding' => $runsOutstanding,
+            'judgehosts' => $judgehosts,
+            'sameTestcaseIds' => $sameTestcaseIds,
+            'externalRuns' => $externalRuns,
+            'runsOutput' => $runsOutput,
+            'lastRuns' => $lastRuns,
+            'unjudgableReasons' => $unjudgableReasons,
+            'verificationRequired' => (bool)$this->config->get('verification_required'),
+            'claimWarning' => $claimWarning,
+            'combinedRunCompare' => $submission->getProblem()->getCombinedRunCompare(),
+            'requestedOutputCount' => $requestedOutputCount,
+        ];
+
+        return $this->render('jury/partials/judging_results.html.twig', $twigData);
+    }
+
+    /**
      * @Route("/{submitId<\d+>}", name="jury_submission")
      * @throws NonUniqueResultException
      * @throws Exception
@@ -560,6 +899,12 @@ class SubmissionController extends BaseController
                 'after' => 15,
                 'url' => $this->generateUrl('jury_submission', ['submitId' => $submission->getSubmitid()]),
             ];
+        } else {
+            $twigData['refresh'] =[ [
+                'after' => 1,
+                'url' => $this->generateUrl('judging_results', ['submitId' => $submission->getSubmitid()]),
+                'target' => 'results',
+            ]];
         }
 
         return $this->render('jury/submission.html.twig', $twigData);

@@ -8,7 +8,7 @@
     </h2>
 {% else %}
 
-    <div id="teamscoresummary">
+    <div id="teamscoresummary" data-ajax-refresh-target="teamscoresummary">
         {% set displayRank = not contest.freezeData.showFrozen %}
         {% include 'partials/scoreboard_table.html.twig' with {displayRank: displayRank, jury: false, public: false} %}
     </div>

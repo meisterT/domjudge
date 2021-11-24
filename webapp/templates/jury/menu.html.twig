@@ -94,7 +94,7 @@
                             <i class="fas fa-bell fa-fw"></i> Enable Notifications
                         </a>
 
-                        {% if refresh is defined and refresh %}
+                        {% if refresh is defined and refresh.url is defined %}
                             <a class="dropdown-item" href="#" id="refresh-navitem">
                                 <i class="fas fa-sync-alt fa-fw"></i> <span id="refresh-toggle">
                   {% if refresh_flag %}

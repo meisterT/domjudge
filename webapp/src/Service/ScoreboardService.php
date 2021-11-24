@@ -940,11 +940,11 @@ class ScoreboardService
         Scoreboard $scoreboard = null
     ) {
         $data = [
-            'refresh' => [
-                'after' => 30,
-                'url' => $refreshUrl,
-                'ajax' => true,
-             ],
+        //    'refresh' => [
+        //        'after' => 30,
+        //        'url' => $refreshUrl,
+        //        'ajax' => true,
+        //     ],
              'static' => $static,
         ];
 

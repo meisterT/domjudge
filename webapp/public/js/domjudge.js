@@ -421,11 +421,21 @@ function confirmLogout() {
     return confirm("Really log out?");
 }
 
-function processAjaxResponse(jqXHR, data) {
+function processAjaxResponse(jqXHR, data, target) {
     if (jqXHR.getResponseHeader('X-Login-Page')) {
         window.location = jqXHR.getResponseHeader('X-Login-Page');
     } else {
-        var $refreshTarget = $('[data-ajax-refresh-target]');
+        var $refreshTarget;
+        console.log(target);
+        if (target == undefined) {
+            $refreshTarget = $('[data-ajax-refresh-target]');
+        } else {
+            console.log(' hallo');
+            var foo = '[data-ajax-refresh-target=' + target + ']';
+            console.log(foo);
+            $refreshTarget = $('[data-ajax-refresh-target=' + target + ']');
+        }
+        console.log($refreshTarget);
         var $data = $(data);
         // When using the static scoreboard, we need to find the children of the [data-ajax-refresh-target]
         var $dataRefreshTarget = $data.find('[data-ajax-refresh-target]');
@@ -444,7 +454,7 @@ function processAjaxResponse(jqXHR, data) {
 
 var refreshHandler = null;
 var refreshEnabled = false;
-function enableRefresh($url, $after, usingAjax) {
+function enableRefresh($url, $after, usingAjax, target) {
     if (refreshEnabled) {
         return;
     }
@@ -455,7 +465,7 @@ function enableRefresh($url, $after, usingAjax) {
                 url: $url,
                 cache: false
             }).done(function(data, status, jqXHR) {
-                processAjaxResponse(jqXHR, data);
+                processAjaxResponse(jqXHR, data, target);
                 $('.loading-indicator').removeClass('ajax-loader');
                 refreshHandler = setTimeout(refresh, $after * 1000);
             });

@@ -78,6 +78,55 @@ class MiscController extends BaseController
     }
 
     /**
+     * @Route("foo", name="team_scoresummary")
+     * @throws NoResultException
+     * @throws NonUniqueResultException
+     * @throws Exception
+     */
+    public function scoreSummaryAction(Request $request) : Response
+    {
+        $user    = $this->dj->getUser();
+        $team    = $user->getTeam();
+        $teamId  = $team->getTeamid();
+        $contest = $this->dj->getCurrentContest($teamId);
+
+        $data = [
+            'team' => $team,
+            'contest' => $contest,
+            'refresh' => [
+                [
+                    'after' => 1,
+                    'url' => $this->generateUrl('team_scoresummary'),
+                    'target' => 'teamcoresummary',
+                ]
+            ],
+            'maxWidth' => $this->config->get('team_column_width'),
+        ];
+        if ($contest) {
+            $scoreboard = $this->scoreboardService
+                ->getTeamScoreboard($contest, $teamId, false);
+            $data = array_merge(
+                $data,
+                $this->scoreboardService->getScoreboardTwigData(
+                    $request, null, '', true, false, false,
+                    $contest, $scoreboard
+                )
+            );
+            $data['limitToTeams'] = [$team];
+            $data['verificationRequired'] = $this->config->get('verification_required');
+            // We need to clear the entity manager, because loading the team scoreboard seems to break getting submission
+            // contestproblems for the contest we get the scoreboard for
+            $this->em->clear();
+        }
+
+        $data['ajax'] = true;
+        $data['jury'] = false;
+        $data['public'] = false;
+        $data['displayRank'] = !$contest->getFreezeData()->showFrozen();
+        return $this->render('partials/scoreboard_table.html.twig', $data);
+    }
+
+    /**
      * @Route("", name="team_index")
      * @throws NoResultException
      * @throws NonUniqueResultException
@@ -94,9 +143,11 @@ class MiscController extends BaseController
             'team' => $team,
             'contest' => $contest,
             'refresh' => [
-                'after' => 30,
-                'url' => $this->generateUrl('team_index'),
-                'ajax' => true,
+                [
+                    'after' => 1,
+                    'url' => $this->generateUrl('team_scoresummary'),
+                    'target' => 'teamscoresummary',
+                ]
             ],
             'maxWidth' => $this->config->get('team_column_width'),
         ];
