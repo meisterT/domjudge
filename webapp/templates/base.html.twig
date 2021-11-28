@@ -57,7 +57,7 @@
         });
 
         /* toggle refresh if set */
-        {% if refresh is defined and refresh %}
+        {% if refresh is defined and refresh and refresh.url is defined %}
         $('#refresh-navitem').on('click', function () {
             toggleRefresh('{{ refresh.url | raw }}', {{ refresh.after }}, {{ refresh.ajax | default(0) }});
         });
