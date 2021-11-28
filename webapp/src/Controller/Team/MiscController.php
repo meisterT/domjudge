@@ -78,6 +78,51 @@ class MiscController extends BaseController
     }
 
     /**
+     * @Route("scoresummary", name="team_scoresummary")
+     * @throws NoResultException
+     * @throws NonUniqueResultException
+     * @throws Exception
+     */
+    public function scoreSummaryAction(Request $request) : Response
+    {
+        $user    = $this->dj->getUser();
+        $team    = $user->getTeam();
+        $teamId  = $team->getTeamid();
+        $contest = $this->dj->getCurrentContest($teamId);
+
+        $data = [
+            'team' => $team,
+            'contest' => $contest,
+            'refresh' => [
+                [
+                    // TODO: This should be made dependant on whether there is a pending submission or not.
+                    'after' => 1,
+                    'url' => $this->generateUrl('team_scoresummary'),
+                    'target' => 'teamcoresummary',
+                ]
+            ],
+            'maxWidth' => $this->config->get('team_column_width'),
+        ];
+        if ($contest) {
+            $data = $this->mergeInScoreboardData($contest, $teamId, $data, $request, $team);
+        }
+        $data['refresh'] = [
+            [
+                // TODO: This should be made dependant on whether there is a pending submission or not.
+                'after' => 1,
+                'url' => $this->generateUrl('team_scoresummary'),
+                'target' => 'teamcoresummary',
+            ]
+        ];
+
+        $data['ajax'] = true;
+        $data['jury'] = false;
+        $data['public'] = false;
+        $data['displayRank'] = !$contest->getFreezeData()->showFrozen();
+        return $this->render('partials/scoreboard_table.html.twig', $data);
+    }
+
+    /**
      * @Route("", name="team_index")
      * @throws NoResultException
      * @throws NonUniqueResultException
@@ -93,28 +138,10 @@ class MiscController extends BaseController
         $data = [
             'team' => $team,
             'contest' => $contest,
-            'refresh' => [
-                'after' => 30,
-                'url' => $this->generateUrl('team_index'),
-                'ajax' => true,
-            ],
             'maxWidth' => $this->config->get('team_column_width'),
         ];
         if ($contest) {
-            $scoreboard = $this->scoreboardService
-                ->getTeamScoreboard($contest, $teamId, false);
-            $data = array_merge(
-                $data,
-                $this->scoreboardService->getScoreboardTwigData(
-                    $request, null, '', true, false, false,
-                    $contest, $scoreboard
-                )
-            );
-            $data['limitToTeams'] = [$team];
-            $data['verificationRequired'] = $this->config->get('verification_required');
-            // We need to clear the entity manager, because loading the team scoreboard seems to break getting submission
-            // contestproblems for the contest we get the scoreboard for
-            $this->em->clear();
+            $data = $this->mergeInScoreboardData($contest, $teamId, $data, $request, $team);
             $data['submissions'] = $this->submissionService->getSubmissionList(
                 [$contest->getCid() => $contest],
                 ['teamid' => $teamId],
@@ -159,6 +186,15 @@ class MiscController extends BaseController
             $data['categories']            = $this->config->get('clar_categories');
             $data['allowDownload']         = (bool)$this->config->get('allow_team_submission_download');
         }
+        // TODO: add other parts to refresh
+        $data['refresh'] = [
+            [
+                // TODO: this should not always be one second
+                'after' => 1,
+                'url' => $this->generateUrl('team_scoresummary'),
+                'target' => 'teamscoresummary',
+            ],
+        ];
 
         if ($request->isXmlHttpRequest()) {
             $data['ajax'] = true;
@@ -236,5 +272,33 @@ class MiscController extends BaseController
     public function docsAction(): Response
     {
         return $this->render('team/docs.html.twig');
+    }
+
+    /**
+     * @param \App\Entity\Contest $contest
+     * @param int|null $teamId
+     * @param array $data
+     * @param Request $request
+     * @param \App\Entity\Team|null $team
+     * @return array
+     * @throws Exception
+     */
+    private function mergeInScoreboardData(\App\Entity\Contest $contest, ?int $teamId, array $data, Request $request, ?\App\Entity\Team $team): array
+    {
+        $scoreboard = $this->scoreboardService
+            ->getTeamScoreboard($contest, $teamId, false);
+        $data = array_merge(
+            $data,
+            $this->scoreboardService->getScoreboardTwigData(
+                $request, null, '', true, false, false,
+                $contest, $scoreboard
+            )
+        );
+        $data['limitToTeams'] = [$team];
+        $data['verificationRequired'] = $this->config->get('verification_required');
+        // We need to clear the entity manager, because loading the team scoreboard seems to break getting submission
+        // contestproblems for the contest we get the scoreboard for
+        $this->em->clear();
+        return $data;
     }
 }
