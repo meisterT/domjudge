@@ -188,8 +188,7 @@ COMPILER-ERROR
   disabled).
   Note that when compilation takes more than |COMPILETIME| seconds,
   it is aborted and this counts as a compilation error.
-  *Compilation errors do not incur penalty time. The administrator of
-  the contest can change this scoring.*
+  Compilation errors do not incur penalty time.
 
 TIMELIMIT
   Your program took longer than the maximum allowed time for this
@@ -204,14 +203,6 @@ RUN-ERROR
   use more memory than the limit, reading or writing to files, etc.
   Also check that your program exits with exit code 0!
 
-NO-OUTPUT
-  Your program did not generate any output. Check that you write to
-  standard out.
-
-OUTPUT-LIMIT
-  Your program generated more output than the allowed limit. The solution
-  is considered incorrect.
-
 WRONG-ANSWER
   The output of your program was incorrect. This can happen simply
   because your solution is not correct, but remember that your output
@@ -224,7 +215,6 @@ TOO-LATE
 
 The judges may have prepared multiple test files for each problem.
 DOMjudge will report back the first highest priority non-correct result as verdict.
-*Your administrator can decide on different priorities for non-correct results.*
 
 Clarifications
 --------------
@@ -371,17 +361,6 @@ follow.
 What follows is a number of possible solutions to this problem
 for different programming languages.
 
-.. literalinclude:: ../examples/example.c
-   :language: c
-   :caption: *A solution in C*
-
-.. literalinclude:: ../examples/example.cc
-   :language: cpp
-   :caption: *A solution in C++*
-
-.. raw:: pdf
-
-   PageBreak
 
 .. literalinclude:: ../examples/example.java
    :language: java
@@ -391,18 +370,18 @@ for different programming languages.
    :language: python
    :caption: *A solution in Python*
 
-.. literalinclude:: ../examples/example.cs
-   :language: csharp
-   :caption: *A solution in C#*
-
-.. literalinclude:: ../examples/example.pas
-   :language: pas
-   :caption: *A solution in Pascal*
-
 .. raw:: pdf
 
    PageBreak
 
-.. literalinclude:: ../examples/example.hs
-   :language: hs
-   :caption: *A solution in Haskell*
+.. literalinclude:: ../examples/example.kt
+   :language: kotlin
+   :caption: *A solution in Kotlin*
+
+.. literalinclude:: ../examples/example.c
+   :language: c
+   :caption: *A solution in C*
+
+.. literalinclude:: ../examples/example.cc
+   :language: cpp
+   :caption: *A solution in C++*
