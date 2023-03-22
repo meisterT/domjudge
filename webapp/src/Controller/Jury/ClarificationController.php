@@ -22,10 +22,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Routing\Annotation\Route;
 
-/**
- * @Route("/jury/clarifications")
- * @IsGranted("ROLE_CLARIFICATION_RW")
- */
+#[Route(path: '/jury/clarifications')]
+#[IsGranted('ROLE_CLARIFICATION_RW')]
 class ClarificationController extends AbstractController
 {
     public function __construct(
@@ -36,9 +34,7 @@ class ClarificationController extends AbstractController
     ) {
     }
 
-    /**
-     * @Route("", name="jury_clarifications")
-     */
+    #[Route(path: '', name: 'jury_clarifications')]
     public function indexAction(Request $request): Response
     {
         $categories = $this->config->get('clar_categories');
@@ -120,9 +116,7 @@ class ClarificationController extends AbstractController
         ]);
     }
 
-    /**
-     * @Route("/{id<\d+>}", name="jury_clarification")
-     */
+    #[Route(path: '/{id<\d+>}', name: 'jury_clarification')]
     public function viewAction(int $id): Response
     {
         /** @var Clarification $clarification */
@@ -265,9 +259,7 @@ class ClarificationController extends AbstractController
         return $data;
     }
 
-    /**
-     * @Route("/send", methods={"GET"}, name="jury_clarification_new")
-     */
+    #[Route(path: '/send', methods: ['GET'], name: 'jury_clarification_new')]
     public function composeClarificationAction(Request $request): Response
     {
         // TODO: Use a proper Symfony form for this.
@@ -281,9 +273,7 @@ class ClarificationController extends AbstractController
         return $this->render('jury/clarification_new.html.twig', ['clarform' => $data]);
     }
 
-    /**
-     * @Route("/{clarId<\d+>}/claim", name="jury_clarification_claim")
-     */
+    #[Route(path: '/{clarId<\d+>}/claim', name: 'jury_clarification_claim')]
     public function toggleClaimAction(Request $request, int $clarId): Response
     {
         /** @var Clarification $clarification */
@@ -303,9 +293,7 @@ class ClarificationController extends AbstractController
         }
     }
 
-    /**
-     * @Route("/{clarId<\d+>}/set-answered", name="jury_clarification_set_answered")
-     */
+    #[Route(path: '/{clarId<\d+>}/set-answered', name: 'jury_clarification_set_answered')]
     public function toggleAnsweredAction(Request $request, int $clarId): Response
     {
         /** @var Clarification $clarification */
@@ -325,9 +313,7 @@ class ClarificationController extends AbstractController
         }
     }
 
-    /**
-     * @Route("/{clarId<\d+>}/change-subject", name="jury_clarification_change_subject")
-     */
+    #[Route(path: '/{clarId<\d+>}/change-subject', name: 'jury_clarification_change_subject')]
     public function changeSubjectAction(Request $request, int $clarId): Response
     {
         /** @var Clarification $clarification */
@@ -356,9 +342,7 @@ class ClarificationController extends AbstractController
         return $this->redirectToRoute('jury_clarification', ['id' => $clarId]);
     }
 
-    /**
-     * @Route("/{clarId<\d+>}/change-queue", name="jury_clarification_change_queue")
-     */
+    #[Route(path: '/{clarId<\d+>}/change-queue', name: 'jury_clarification_change_queue')]
     public function changeQueueAction(Request $request, int $clarId): Response
     {
         /** @var Clarification $clarification */
@@ -380,9 +364,7 @@ class ClarificationController extends AbstractController
         return $this->redirectToRoute('jury_clarification', ['id' => $clarId]);
     }
 
-    /**
-     * @Route("/send", methods={"POST"}, name="jury_clarification_send")
-     */
+    #[Route(path: '/send', methods: ['POST'], name: 'jury_clarification_send')]
     public function sendAction(Request $request): Response
     {
         $clarification = new Clarification();

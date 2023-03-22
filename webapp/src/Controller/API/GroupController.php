@@ -71,7 +71,6 @@ class GroupController extends AbstractRestController
      * Add a new group
      *
      * @Rest\Post()
-     * @IsGranted("ROLE_API_WRITER")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -89,6 +88,7 @@ class GroupController extends AbstractRestController
      *     @Model(type=TeamCategory::class)
      * )
      */
+    #[IsGranted('ROLE_API_WRITER')]
     public function addAction(Request $request, ImportExportService $importExport): Response
     {
         $saved = [];

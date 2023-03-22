@@ -22,10 +22,8 @@ use Symfony\Component\HttpKernel\Profiler\Profiler;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Routing\Annotation\Route;
 
-/**
- * @Route("/jury/internal-errors")
- * @IsGranted("ROLE_JURY")
- */
+#[Route(path: '/jury/internal-errors')]
+#[IsGranted('ROLE_JURY')]
 class InternalErrorController extends BaseController
 {
     public function __construct(
@@ -35,9 +33,7 @@ class InternalErrorController extends BaseController
     ) {
     }
 
-    /**
-     * @Route("", name="jury_internal_errors")
-     */
+    #[Route(path: '', name: 'jury_internal_errors')]
     public function indexAction(): Response
     {
         /** @var InternalError[] $internalErrors */
@@ -91,9 +87,7 @@ class InternalErrorController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/{errorId<\d+>}", methods={"GET"}, name="jury_internal_error")
-     */
+    #[Route(path: '/{errorId<\d+>}', methods: ['GET'], name: 'jury_internal_error')]
     public function viewAction(int $errorId): Response
     {
         /** @var InternalError $internalError */
@@ -137,13 +131,7 @@ class InternalErrorController extends BaseController
         ]);
     }
 
-    /**
-     * @Route(
-     *     "/{errorId<\d+>}/{action<ignore|resolve>}",
-     *     name="jury_internal_error_handle",
-     *     methods={"POST"}
-     * )
-     */
+    #[Route(path: '/{errorId<\d+>}/{action<ignore|resolve>}', name: 'jury_internal_error_handle', methods: ['POST'])]
     public function handleAction(Request $request, ?Profiler $profiler, int $errorId, string $action): Response
     {
         /** @var InternalError $internalError */

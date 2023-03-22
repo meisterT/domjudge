@@ -19,10 +19,8 @@ use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Routing\Annotation\Route;
 
-/**
- * @Route("/jury/affiliations")
- * @IsGranted("ROLE_JURY")
- */
+#[Route(path: '/jury/affiliations')]
+#[IsGranted('ROLE_JURY')]
 class TeamAffiliationController extends BaseController
 {
     public function __construct(
@@ -35,9 +33,7 @@ class TeamAffiliationController extends BaseController
     ) {
     }
 
-    /**
-     * @Route("", name="jury_team_affiliations")
-     */
+    #[Route(path: '', name: 'jury_team_affiliations')]
     public function indexAction(string $projectDir): Response
     {
         $em               = $this->em;
@@ -134,9 +130,7 @@ class TeamAffiliationController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/{affilId<\d+>}", name="jury_team_affiliation")
-     */
+    #[Route(path: '/{affilId<\d+>}', name: 'jury_team_affiliation')]
     public function viewAction(Request $request, ScoreboardService $scoreboardService, int $affilId): Response
     {
         /** @var TeamAffiliation $teamAffiliation */
@@ -175,10 +169,8 @@ class TeamAffiliationController extends BaseController
         return $this->render('jury/team_affiliation.html.twig', $data);
     }
 
-    /**
-     * @Route("/{affilId<\d+>}/edit", name="jury_team_affiliation_edit")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{affilId<\d+>}/edit', name: 'jury_team_affiliation_edit')]
+    #[IsGranted('ROLE_ADMIN')]
     public function editAction(Request $request, int $affilId): Response
     {
         /** @var TeamAffiliation $teamAffiliation */
@@ -207,10 +199,8 @@ class TeamAffiliationController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/{affilId<\d+>}/delete", name="jury_team_affiliation_delete")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{affilId<\d+>}/delete', name: 'jury_team_affiliation_delete')]
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteAction(Request $request, int $affilId): Response
     {
         /** @var TeamAffiliation $teamAffiliation */
@@ -223,10 +213,8 @@ class TeamAffiliationController extends BaseController
                                      [$teamAffiliation], $this->generateUrl('jury_team_affiliations'));
     }
 
-    /**
-     * @Route("/add", name="jury_team_affiliation_add")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/add', name: 'jury_team_affiliation_add')]
+    #[IsGranted('ROLE_ADMIN')]
     public function addAction(Request $request): Response
     {
         $teamAffiliation = new TeamAffiliation();

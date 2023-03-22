@@ -29,10 +29,8 @@ use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Routing\Annotation\Route;
 
-/**
- * @Route("/jury/executables")
- * @IsGranted("ROLE_JURY")
- */
+#[Route(path: '/jury/executables')]
+#[IsGranted('ROLE_JURY')]
 class ExecutableController extends BaseController
 {
     public function __construct(
@@ -44,9 +42,7 @@ class ExecutableController extends BaseController
     ) {
     }
 
-    /**
-     * @Route("", name="jury_executables")
-     */
+    #[Route(path: '', name: 'jury_executables')]
     public function indexAction(Request $request): Response
     {
         $data = [];
@@ -110,10 +106,8 @@ class ExecutableController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/add", name="jury_executable_add")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/add', name: 'jury_executable_add')]
+    #[IsGranted('ROLE_ADMIN')]
     public function addAction(Request $request): Response
     {
         $data = [];
@@ -176,9 +170,7 @@ class ExecutableController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/{execId}", name="jury_executable")
-     */
+    #[Route(path: '/{execId}', name: 'jury_executable')]
     public function viewAction(Request $request, string $execId): Response
     {
         /** @var Executable $executable */
@@ -278,9 +270,7 @@ class ExecutableController extends BaseController
         ]));
     }
 
-    /**
-     * @Route("/{execId}/download", name="jury_executable_download")
-     */
+    #[Route(path: '/{execId}/download', name: 'jury_executable_download')]
     public function downloadAction(string $execId): Response
     {
         /** @var Executable $executable */
@@ -295,10 +285,8 @@ class ExecutableController extends BaseController
         return Utils::streamAsBinaryFile($zipFileContent, $filename, 'zip');
     }
 
-    /**
-     * @Route("/{execId}/delete/{rankToDelete}", name="jury_executable_delete_single")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{execId}/delete/{rankToDelete}', name: 'jury_executable_delete_single')]
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteSingleAction(Request $request, string $execId, int $rankToDelete): Response
     {
         /** @var Executable $executable */
@@ -365,9 +353,7 @@ class ExecutableController extends BaseController
         }
     }
 
-    /**
-     * @Route("/{execId}/download/{rank}", name="jury_executable_download_single")
-     */
+    #[Route(path: '/{execId}/download/{rank}', name: 'jury_executable_download_single')]
     public function downloadSingleAction(string $execId, int $rank): Response
     {
         /** @var Executable $executable */
@@ -387,10 +373,8 @@ class ExecutableController extends BaseController
         throw new NotFoundHttpException(sprintf('No file with rank %d found.', $rank));
     }
 
-    /**
-     * @Route("/{execId}/delete", name="jury_executable_delete")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{execId}/delete', name: 'jury_executable_delete')]
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteAction(Request $request, string $execId): Response
     {
         /** @var Executable $executable */

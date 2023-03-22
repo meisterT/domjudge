@@ -8,17 +8,12 @@ use JMS\Serializer\Annotation as Serializer;
 
 /**
  * Stores testcases per problem.
- *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="testcase",
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Stores testcases per problem"},
- *     indexes={
- *         @ORM\Index(name="probid", columns={"probid"}),
- *         @ORM\Index(name="sample", columns={"sample"})
- *     },
- *     uniqueConstraints={@ORM\UniqueConstraint(name="rankindex", columns={"probid","ranknumber"})})
  */
+#[ORM\Table(name: 'testcase', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'Stores testcases per problem'])]
+#[ORM\Index(name: 'probid', columns: ['probid'])]
+#[ORM\Index(name: 'sample', columns: ['sample'])]
+#[ORM\UniqueConstraint(name: 'rankindex', columns: ['probid', 'ranknumber'])]
+#[ORM\Entity]
 class Testcase
 {
     // Mapping from type to extension
@@ -27,92 +22,63 @@ class Testcase
         'output' => 'ans',
     ];
 
-    /**
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     * @ORM\Column(type="integer", name="testcaseid", length=4,
-     *     options={"comment"="Testcase ID","unsigned"=true},
-     *     nullable=false)
-     */
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
+    #[ORM\Column(type: 'integer', name: 'testcaseid', length: 4, options: ['comment' => 'Testcase ID', 'unsigned' => true], nullable: false)]
     private int $testcaseid;
 
-    /**
-     * @ORM\Column(type="string", name="md5sum_input", length=32,
-     *     options={"comment"="Checksum of input data","fixed"=true},
-     *     nullable=true)
-     */
+    #[ORM\Column(type: 'string', name: 'md5sum_input', length: 32, options: ['comment' => 'Checksum of input data', 'fixed' => true], nullable: true)]
     private ?string $md5sum_input = null;
 
-    /**
-     * @ORM\Column(type="string", name="md5sum_output", length=32,
-     *     options={"comment"="Checksum of output data","fixed"=true},
-     *     nullable=true)
-     */
+    #[ORM\Column(type: 'string', name: 'md5sum_output', length: 32, options: ['comment' => 'Checksum of output data', 'fixed' => true], nullable: true)]
     private ?string $md5sum_output = null;
 
-    /**
-     * @ORM\Column(type="integer", name="`ranknumber`", length=4,
-     *     options={"comment"="Determines order of the testcases in judging",
-     *              "unsigned"=true},
-     *     nullable=false)
-     */
+    #[ORM\Column(type: 'integer', name: '`ranknumber`', length: 4, options: ['comment' => 'Determines order of the testcases in judging', 'unsigned' => true], nullable: false)]
     private int $ranknumber;
 
     /**
      * @var resource|null
-     * @ORM\Column(type="blob", length=4294967295, name="description",
-     *     options={"comment"="Description of this testcase"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'blob', length: 4294967295, name: 'description', options: ['comment' => 'Description of this testcase'], nullable: true)]
     private $description;
 
     private ?string $description_as_string = null;
 
     /**
-     * @ORM\Column(type="string", name="orig_input_filename", length=255,
-     *     options={"comment"="Original basename of the input file.","default"=NULL},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'orig_input_filename', length: 255, options: ['comment' => 'Original basename of the input file.', 'default' => null], nullable: true)]
     private ?string $orig_input_filename = null;
 
     /**
-     * @ORM\Column(type="string", name="image_type", length=4,
-     *     options={"comment"="File type of the image and thumbnail"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'image_type', length: 4, options: ['comment' => 'File type of the image and thumbnail'], nullable: true)]
     private ?string $image_type = null;
 
     /**
-     * @ORM\Column(type="boolean", name="sample",
-     *     options={"comment"="Sample testcases that can be shared with teams",
-     *              "default"="0"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'sample', options: ['comment' => 'Sample testcases that can be shared with teams', 'default' => 0], nullable: false)]
     private bool $sample = false;
 
     /**
-     * @ORM\Column(type="boolean", name="deleted",
-     *     options={"comment"="Deleted testcases are kept for referential integrity.",
-     *              "default"="0"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'deleted', options: ['comment' => 'Deleted testcases are kept for referential integrity.', 'default' => 0], nullable: false)]
     private bool $deleted = false;
 
     /**
-     * @ORM\OneToMany(targetEntity="JudgingRun", mappedBy="testcase")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'JudgingRun', mappedBy: 'testcase')]
     private Collection $judging_runs;
 
     /**
-     * @ORM\OneToMany(targetEntity="ExternalRun", mappedBy="testcase")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'ExternalRun', mappedBy: 'testcase')]
     private Collection $external_runs;
 
     /**
@@ -120,16 +86,16 @@ class Testcase
      * relation will always be loaded. See the commit message of commit
      * 9e421f96691ec67ed62767fe465a6d8751edd884 for a more elaborate explanation.
      *
-     * @ORM\OneToMany(targetEntity="TestcaseContent", mappedBy="testcase", cascade={"persist"}, orphanRemoval=true)
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'TestcaseContent', mappedBy: 'testcase', cascade: ['persist'], orphanRemoval: true)]
     private Collection $content;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Problem", inversedBy="testcases")
-     * @ORM\JoinColumn(name="probid", referencedColumnName="probid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Problem', inversedBy: 'testcases')]
+    #[ORM\JoinColumn(name: 'probid', referencedColumnName: 'probid', onDelete: 'CASCADE')]
     private ?Problem $problem = null;
 
     public function __construct()

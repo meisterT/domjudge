@@ -36,10 +36,8 @@ use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Routing\RouterInterface;
 
-/**
- * @Route("/jury/rejudgings")
- * @IsGranted("ROLE_JURY")
- */
+#[Route(path: '/jury/rejudgings')]
+#[IsGranted('ROLE_JURY')]
 class RejudgingController extends BaseController
 {
     public function __construct(
@@ -53,10 +51,10 @@ class RejudgingController extends BaseController
     }
 
     /**
-     * @Route("", name="jury_rejudgings")
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
+    #[Route(path: '', name: 'jury_rejudgings')]
     public function indexAction(): Response
     {
         $curContest = $this->dj->getCurrentContest();
@@ -185,10 +183,10 @@ class RejudgingController extends BaseController
     }
 
     /**
-     * @Route("/{rejudgingId<\d+>}", name="jury_rejudging")
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
+    #[Route(path: '/{rejudgingId<\d+>}', name: 'jury_rejudging')]
     public function viewAction(
         Request $request,
         SubmissionService $submissionService,
@@ -397,12 +395,9 @@ class RejudgingController extends BaseController
     }
 
     /**
-     * @Route(
-     *     "/{rejudgingId<\d+>}/{action<cancel|apply>}",
-     *     name="jury_rejudging_finish"
-     * )
      * @throws NonUniqueResultException
      */
+    #[Route(path: '/{rejudgingId<\d+>}/{action<cancel|apply>}', name: 'jury_rejudging_finish')]
     public function finishAction(
         Request $request,
         RejudgingService $rejudgingService,
@@ -453,9 +448,7 @@ class RejudgingController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/add", name="jury_rejudging_add")
-     */
+    #[Route(path: '/add', name: 'jury_rejudging_add')]
     public function addAction(Request $request, FormFactoryInterface $formFactory): Response
     {
         $isContestUpdateAjax   = $request->isXmlHttpRequest() && $request->request->getBoolean('refresh_form');
@@ -643,9 +636,7 @@ class RejudgingController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/create", methods={"POST"}, name="jury_create_rejudge")
-     */
+    #[Route(path: '/create', methods: ['POST'], name: 'jury_create_rejudge')]
     public function createAction(Request $request): Response
     {
         $table      = $request->request->get('table');

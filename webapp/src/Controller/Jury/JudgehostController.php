@@ -26,10 +26,8 @@ use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Routing\RouterInterface;
 
-/**
- * @Route("/jury/judgehosts")
- * @IsGranted("ROLE_JURY")
- */
+#[Route(path: '/jury/judgehosts')]
+#[IsGranted('ROLE_JURY')]
 class JudgehostController extends BaseController
 {
     // Note: when adding or modifying routes, make sure they do not clash with the /judgehosts/{hostname} route.
@@ -43,9 +41,7 @@ class JudgehostController extends BaseController
     ) {
     }
 
-    /**
-     * @Route("", name="jury_judgehosts")
-     */
+    #[Route(path: '', name: 'jury_judgehosts')]
     public function indexAction(Request $request): Response
     {
         /** @var Judgehost[] $judgehosts */
@@ -192,9 +188,9 @@ class JudgehostController extends BaseController
     }
 
     /**
-     * @Route("/{judgehostid}", methods={"GET"}, name="jury_judgehost")
      * @throws NonUniqueResultException
      */
+    #[Route(path: '/{judgehostid}', methods: ['GET'], name: 'jury_judgehost')]
     public function viewAction(Request $request, int $judgehostid): Response
     {
         /** @var Judgehost $judgehost */
@@ -261,12 +257,12 @@ class JudgehostController extends BaseController
     }
 
     /**
-     * @Route("/{judgehostid}/delete", name="jury_judgehost_delete")
-     * @IsGranted("ROLE_ADMIN")
      * @throws DBALException
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
+    #[Route(path: '/{judgehostid}/delete', name: 'jury_judgehost_delete')]
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteAction(Request $request, int $judgehostid): Response
     {
         /** @var Judgehost $judgehost */
@@ -282,10 +278,8 @@ class JudgehostController extends BaseController
                                      [$judgehost], $this->generateUrl('jury_judgehosts'));
     }
 
-    /**
-     * @Route("/{judgehostid}/enable", name="jury_judgehost_enable")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{judgehostid}/enable', name: 'jury_judgehost_enable')]
+    #[IsGranted('ROLE_ADMIN')]
     public function enableAction(RouterInterface $router, Request $request, int $judgehostid): RedirectResponse
     {
         /** @var Judgehost $judgehost */
@@ -296,10 +290,8 @@ class JudgehostController extends BaseController
         return $this->redirectToLocalReferrer($router, $request, $this->generateUrl('jury_judgehosts'));
     }
 
-    /**
-     * @Route("/{judgehostid}/disable", name="jury_judgehost_disable")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{judgehostid}/disable', name: 'jury_judgehost_disable')]
+    #[IsGranted('ROLE_ADMIN')]
     public function disableAction(RouterInterface $router, Request $request, int $judgehostid): RedirectResponse
     {
         /** @var Judgehost $judgehost */
@@ -310,10 +302,8 @@ class JudgehostController extends BaseController
         return $this->redirectToLocalReferrer($router, $request, $this->generateUrl('jury_judgehosts'));
     }
 
-    /**
-     * @Route("/enable-all", methods={"POST"}, name="jury_judgehost_enable_all")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/enable-all', methods: ['POST'], name: 'jury_judgehost_enable_all')]
+    #[IsGranted('ROLE_ADMIN')]
     public function enableAllAction(): RedirectResponse
     {
         $this->em->createQuery('UPDATE App\Entity\Judgehost j set j.enabled = true')->execute();
@@ -321,10 +311,8 @@ class JudgehostController extends BaseController
         return $this->redirectToRoute('jury_judgehosts');
     }
 
-    /**
-     * @Route("/disable-all", methods={"POST"}, name="jury_judgehost_disable_all")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/disable-all', methods: ['POST'], name: 'jury_judgehost_disable_all')]
+    #[IsGranted('ROLE_ADMIN')]
     public function disableAllAction(): RedirectResponse
     {
         $this->em->createQuery('UPDATE App\Entity\Judgehost j set j.enabled = false')->execute();
@@ -332,10 +320,8 @@ class JudgehostController extends BaseController
         return $this->redirectToRoute('jury_judgehosts');
     }
 
-    /**
-     * @Route("/autohide", methods={"POST"}, name="jury_judgehost_autohide")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/autohide', methods: ['POST'], name: 'jury_judgehost_autohide')]
+    #[IsGranted('ROLE_ADMIN')]
     public function autohideInactive(): RedirectResponse
     {
         $now = Utils::now();
@@ -350,10 +336,8 @@ class JudgehostController extends BaseController
         return $this->redirectToRoute('jury_judgehosts');
     }
 
-    /**
-     * @Route("/edit/multiple", name="jury_judgehost_edit")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/edit/multiple', name: 'jury_judgehost_edit')]
+    #[IsGranted('ROLE_ADMIN')]
     public function editMultipleAction(Request $request): Response
     {
         $querybuilder = $this->em->createQueryBuilder()

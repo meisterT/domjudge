@@ -82,7 +82,6 @@ class ClarificationController extends AbstractRestController
      * Add a clarification to this contest
      * @Rest\Post("")
      * @Rest\Put("/{id}")
-     * @Security("is_granted('ROLE_TEAM') or is_granted('ROLE_API_WRITER')", message="You need to have the Team Member role to add a clarification")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -101,6 +100,7 @@ class ClarificationController extends AbstractRestController
      * )
      * @throws NonUniqueResultException
      */
+    #[Security("is_granted('ROLE_TEAM') or is_granted('ROLE_API_WRITER')", message: 'You need to have the Team Member role to add a clarification')]
     public function addAction(Request $request, ?string $id): Response
     {
         $required = ['text'];

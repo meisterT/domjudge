@@ -9,76 +9,59 @@ use JMS\Serializer\Annotation as Serializer;
 
 /**
  * Result of a testcase run.
- *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="judging_run",
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Result of a testcase run within a judging"},
- *     uniqueConstraints={
- *         @ORM\UniqueConstraint(name="testcaseid", columns={"judgingid", "testcaseid"})
- *     },
- *     indexes={
- *         @ORM\Index(name="judgingid", columns={"judgingid"}),
- *         @ORM\Index(name="testcaseid_2", columns={"testcaseid"})
- *     })
  */
+#[ORM\Table(name: 'judging_run', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'Result of a testcase run within a judging'])]
+#[ORM\Index(name: 'judgingid', columns: ['judgingid'])]
+#[ORM\Index(name: 'testcaseid_2', columns: ['testcaseid'])]
+#[ORM\UniqueConstraint(name: 'testcaseid', columns: ['judgingid', 'testcaseid'])]
+#[ORM\Entity]
 class JudgingRun extends BaseApiEntity
 {
     /**
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     * @ORM\Column(type="integer", name="runid", length=4,
-     *     options={"comment"="Run ID","unsigned"=true},
-     *     nullable=false)
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
+    #[ORM\Column(type: 'integer', name: 'runid', length: 4, options: ['comment' => 'Run ID', 'unsigned' => true], nullable: false)]
     protected int $runid;
 
     /**
-     * @ORM\Column(type="integer", name="judgetaskid", length=4,
-     *     options={"comment"="JudgeTask ID","unsigned"=true,"default"=NULL},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'integer', name: 'judgetaskid', length: 4, options: ['comment' => 'JudgeTask ID', 'unsigned' => true, 'default' => null], nullable: true)]
     private ?int $judgetaskid = null;
 
     /**
-     * @ORM\Column(type="string", name="runresult", length=32,
-     *     options={"comment"="Result of this run, NULL if not finished yet"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'runresult', length: 32, options: ['comment' => 'Result of this run, NULL if not finished yet'], nullable: true)]
     private ?string $runresult = null;
 
     /**
-     * @ORM\Column(type="float", name="runtime",
-     *     options={"comment"="Submission running time on this testcase"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'float', name: 'runtime', options: ['comment' => 'Submission running time on this testcase'], nullable: true)]
     private ?float $runtime = null;
 
     /**
-     * @ORM\Column(type="decimal", precision=32, scale=9, name="endtime",
-     *     options={"comment"="Time run judging ended", "unsigned"=true},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'decimal', precision: 32, scale: 9, name: 'endtime', options: ['comment' => 'Time run judging ended', 'unsigned' => true], nullable: true)]
     private string|float|null $endtime = null;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Judging", inversedBy="runs")
-     * @ORM\JoinColumn(name="judgingid", referencedColumnName="judgingid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Judging', inversedBy: 'runs')]
+    #[ORM\JoinColumn(name: 'judgingid', referencedColumnName: 'judgingid', onDelete: 'CASCADE')]
     private Judging $judging;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Testcase", inversedBy="judging_runs")
-     * @ORM\JoinColumn(name="testcaseid", referencedColumnName="testcaseid")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Testcase', inversedBy: 'judging_runs')]
+    #[ORM\JoinColumn(name: 'testcaseid', referencedColumnName: 'testcaseid')]
     private Testcase $testcase;
 
     /**
@@ -87,16 +70,16 @@ class JudgingRun extends BaseApiEntity
      * 9e421f96691ec67ed62767fe465a6d8751edd884 for a more elaborate explanation
      *
      * @var JudgingRunOutput[]|ArrayCollection
-     * @ORM\OneToMany(targetEntity="JudgingRunOutput", mappedBy="run", cascade={"persist"}, orphanRemoval=true)
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'JudgingRunOutput', mappedBy: 'run', cascade: ['persist'], orphanRemoval: true)]
     private Collection $output;
 
     /**
-     * @ORM\ManyToOne(targetEntity="JudgeTask", inversedBy="judging_runs")
-     * @ORM\JoinColumn(name="judgetaskid", referencedColumnName="judgetaskid")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'JudgeTask', inversedBy: 'judging_runs')]
+    #[ORM\JoinColumn(name: 'judgetaskid', referencedColumnName: 'judgetaskid')]
     private ?JudgeTask $judgetask = null;
 
     public function __construct()

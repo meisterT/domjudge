@@ -27,7 +27,6 @@ class AccessController extends AbstractRestController
     /**
      * Get access information
      * @Rest\Get("")
-     * @IsGranted("ROLE_API_READER")
      * @OA\Response(
      *     response="200",
      *     description="Access information for the given contest",
@@ -49,6 +48,7 @@ class AccessController extends AbstractRestController
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
+    #[IsGranted('ROLE_API_READER')]
     public function getStatusAction(Request $request): array
     {
         // Get the contest ID to make sure the contest exists

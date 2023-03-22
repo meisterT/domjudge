@@ -110,7 +110,6 @@ class SubmissionController extends AbstractRestController
      * Add a submission to this contest.
      * @Rest\Post("contests/{cid}/submissions")
      * @Rest\Put("contests/{cid}/submissions/{id}")
-     * @Security("is_granted('ROLE_TEAM') or is_granted('ROLE_API_WRITER')", message="You need to have the Team Member role to add a submission")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -202,6 +201,7 @@ class SubmissionController extends AbstractRestController
      * )
      * @throws NonUniqueResultException
      */
+    #[Security("is_granted('ROLE_TEAM') or is_granted('ROLE_API_WRITER')", message: 'You need to have the Team Member role to add a submission')]
     public function addSubmissionAction(Request $request, ?string $id): Response
     {
         $required = [
@@ -448,7 +448,6 @@ class SubmissionController extends AbstractRestController
      * Get the files for the given submission as a ZIP archive.
      * @Rest\Get("contests/{cid}/submissions/{id}/files", name="submission_files")
      * @Rest\Get("submissions/{id}/files", name="submission_files_root")
-     * @IsGranted("ROLE_API_SOURCE_READER")
      * @throws NonUniqueResultException
      * @OA\Response(
      *     response="200",
@@ -461,6 +460,7 @@ class SubmissionController extends AbstractRestController
      * )
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[IsGranted('ROLE_API_SOURCE_READER')]
     public function getSubmissionFilesAction(Request $request, string $id): Response
     {
         $queryBuilder = $this->getQueryBuilder($request)
@@ -490,7 +490,6 @@ class SubmissionController extends AbstractRestController
     /**
      * Get the source code of all the files for the given submission.
      * @Rest\Get("contests/{cid}/submissions/{id}/source-code")
-     * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST')")
      * @throws NonUniqueResultException
      * @OA\Response(
      *     response="200",
@@ -499,6 +498,7 @@ class SubmissionController extends AbstractRestController
      * )
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST')")]
     public function getSubmissionSourceCodeAction(Request $request, string $id): array
     {
         $queryBuilder = $this->em->createQueryBuilder()

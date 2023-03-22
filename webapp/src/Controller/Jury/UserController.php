@@ -27,10 +27,8 @@ use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 
-/**
- * @Route("/jury/users")
- * @IsGranted("ROLE_JURY")
- */
+#[Route(path: '/jury/users')]
+#[IsGranted('ROLE_JURY')]
 class UserController extends BaseController
 {
     protected const MIN_PASSWORD_LENGTH = 10;
@@ -45,9 +43,7 @@ class UserController extends BaseController
     ) {
     }
 
-    /**
-     * @Route("", name="jury_users")
-     */
+    #[Route(path: '', name: 'jury_users')]
     public function indexAction(): Response
     {
         /** @var User[] $users */
@@ -175,9 +171,7 @@ class UserController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/{userId<\d+>}", name="jury_user")
-     */
+    #[Route(path: '/{userId<\d+>}', name: 'jury_user')]
     public function viewAction(int $userId, SubmissionService $submissionService): Response
     {
         /** @var User $user */
@@ -222,10 +216,8 @@ class UserController extends BaseController
         return null;
     }
 
-    /**
-     * @Route("/{userId<\d+>}/edit", name="jury_user_edit")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{userId<\d+>}/edit', name: 'jury_user_edit')]
+    #[IsGranted('ROLE_ADMIN')]
     public function editAction(Request $request, int $userId): Response
     {
         /** @var User $user */
@@ -270,10 +262,8 @@ class UserController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/{userId<\d+>}/delete", name="jury_user_delete")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{userId<\d+>}/delete', name: 'jury_user_delete')]
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteAction(Request $request, int $userId): Response
     {
         /** @var User $user */
@@ -286,10 +276,8 @@ class UserController extends BaseController
                                      [$user], $this->generateUrl('jury_users'));
     }
 
-    /**
-     * @Route("/add", name="jury_user_add")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/add', name: 'jury_user_add')]
+    #[IsGranted('ROLE_ADMIN')]
     public function addAction(Request $request): Response
     {
         $user = new User();
@@ -320,10 +308,8 @@ class UserController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/generate-passwords", name="jury_generate_passwords")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/generate-passwords', name: 'jury_generate_passwords')]
+    #[IsGranted('ROLE_ADMIN')]
     public function generatePasswordsAction(Request $request): Response
     {
         $form = $this->createForm(GeneratePasswordsType::class);
@@ -386,10 +372,8 @@ class UserController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/reset_login_status", name="jury_reset_login_status")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/reset_login_status', name: 'jury_reset_login_status')]
+    #[IsGranted('ROLE_ADMIN')]
     public function resetTeamLoginStatus(Request $request): Response
     {
         /** @var Role $teamRole */

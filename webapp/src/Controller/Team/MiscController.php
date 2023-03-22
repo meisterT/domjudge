@@ -26,12 +26,11 @@ use Symfony\Component\Routing\RouterInterface;
 /**
  * Class MiscController
  *
- * @Route("/team")
- * @IsGranted("ROLE_TEAM")
- * @Security("user.getTeam() !== null", message="You do not have a team associated with your account. ")
- *
  * @package App\Controller\Team
  */
+#[Route(path: '/team')]
+#[IsGranted('ROLE_TEAM')]
+#[Security('user.getTeam() !== null', message: 'You do not have a team associated with your account. ')]
 class MiscController extends BaseController
 {
     /**
@@ -47,10 +46,10 @@ class MiscController extends BaseController
     }
 
     /**
-     * @Route("", name="team_index")
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
+    #[Route(path: '', name: 'team_index')]
     public function homeAction(Request $request): Response
     {
         $user    = $this->dj->getUser();
@@ -136,9 +135,7 @@ class MiscController extends BaseController
         return $this->render('team/index.html.twig', $data);
     }
 
-    /**
-     * @Route("/change-contest/{contestId<-?\d+>}", name="team_change_contest")
-     */
+    #[Route(path: '/change-contest/{contestId<-?\d+>}', name: 'team_change_contest')]
     public function changeContestAction(Request $request, RouterInterface $router, int $contestId): Response
     {
         if ($this->isLocalReferer($router, $request)) {
@@ -150,9 +147,7 @@ class MiscController extends BaseController
                                                  $response);
     }
 
-    /**
-     * @Route("/print", name="team_print")
-     */
+    #[Route(path: '/print', name: 'team_print')]
     public function printAction(Request $request): Response
     {
         if (!$this->config->get('print_command')) {
@@ -197,9 +192,7 @@ class MiscController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/docs", name="team_docs")
-     */
+    #[Route(path: '/docs', name: 'team_docs')]
     public function docsAction(): Response
     {
         return $this->render('team/docs.html.twig');

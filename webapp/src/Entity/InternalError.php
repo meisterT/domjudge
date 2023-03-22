@@ -9,78 +9,45 @@ use JMS\Serializer\Annotation as Serializer;
 
 /**
  * Log of judgehost internal errors.
- *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="internal_error",
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Log of judgehost internal errors"},
- *     indexes={
- *         @ORM\Index(name="judgingid", columns={"judgingid"}),
- *         @ORM\Index(name="cid", columns={"cid"})
- *     })
  */
+#[ORM\Table(name: 'internal_error', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'Log of judgehost internal errors'])]
+#[ORM\Index(name: 'judgingid', columns: ['judgingid'])]
+#[ORM\Index(name: 'cid', columns: ['cid'])]
+#[ORM\Entity]
 class InternalError
 {
-    /**
-     * @ORM\Id
-     * @ORM\Column(type="integer", name="errorid", length=4,
-     *     options={"comment"="Internal error ID","unsigned"=true},
-     *     nullable=false)
-     * @ORM\GeneratedValue(strategy="IDENTITY")
-     */
+    #[ORM\Id]
+    #[ORM\Column(type: 'integer', name: 'errorid', length: 4, options: ['comment' => 'Internal error ID', 'unsigned' => true], nullable: false)]
+    #[ORM\GeneratedValue(strategy: 'IDENTITY')]
     private int $errorid;
 
-    /**
-     * @ORM\Column(type="string", length=255, name="description",
-     *     options={"comment"="Description of the error"},
-     *     nullable=false)
-     */
+    #[ORM\Column(type: 'string', length: 255, name: 'description', options: ['comment' => 'Description of the error'], nullable: false)]
     private string $description;
 
-    /**
-     * @ORM\Column(type="text", length=65535, name="judgehostlog",
-     *     options={"comment"="Last N lines of the judgehost log"},
-     *     nullable=false)
-     */
+    #[ORM\Column(type: 'text', length: 65535, name: 'judgehostlog', options: ['comment' => 'Last N lines of the judgehost log'], nullable: false)]
     private string $judgehostlog;
 
-    /**
-     * @ORM\Column(type="decimal", precision=32, scale=9, name="time",
-     *     options={"comment"="Timestamp of the internal error", "unsigned"=true},
-     *     nullable=false)
-     */
+    #[ORM\Column(type: 'decimal', precision: 32, scale: 9, name: 'time', options: ['comment' => 'Timestamp of the internal error', 'unsigned' => true], nullable: false)]
     private string|float $time;
 
-    /**
-     * @ORM\Column(type="json", length=65535, name="disabled",
-     *     options={"comment"="Disabled stuff, JSON-encoded"},
-     *     nullable=false)
-     */
+    #[ORM\Column(type: 'json', length: 65535, name: 'disabled', options: ['comment' => 'Disabled stuff, JSON-encoded'], nullable: false)]
     private array $disabled;
 
-    /**
-     * @ORM\Column(type="internal_error_status", name="status",
-     *     options={"comment"="Status of internal error","default"="open"},
-     *     nullable=false)
-     */
+    #[ORM\Column(type: 'internal_error_status', name: 'status', options: ['comment' => 'Status of internal error', 'default' => 'open'], nullable: false)]
     private string $status = InternalErrorStatusType::STATUS_OPEN;
 
-    /**
-     * @ORM\ManyToOne(targetEntity="Contest", inversedBy="internal_errors")
-     * @ORM\JoinColumn(name="cid", referencedColumnName="cid", onDelete="SET NULL")
-     */
+    #[ORM\ManyToOne(targetEntity: 'Contest', inversedBy: 'internal_errors')]
+    #[ORM\JoinColumn(name: 'cid', referencedColumnName: 'cid', onDelete: 'SET NULL')]
     private ?Contest $contest = null;
 
-    /**
-     * @ORM\ManyToOne(targetEntity="Judging")
-     * @ORM\JoinColumn(name="judgingid", referencedColumnName="judgingid", onDelete="SET NULL")
-     */
+    #[ORM\ManyToOne(targetEntity: 'Judging')]
+    #[ORM\JoinColumn(name: 'judgingid', referencedColumnName: 'judgingid', onDelete: 'SET NULL')]
     private ?Judging $judging = null;
 
     /**
-     * @ORM\OneToMany(targetEntity="Judging", mappedBy="internalError")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'Judging', mappedBy: 'internalError')]
     private Collection $affectedJudgings;
 
     public function __construct()

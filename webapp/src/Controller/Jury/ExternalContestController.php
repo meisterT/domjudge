@@ -20,10 +20,8 @@ use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Routing\Annotation\Route;
 
-/**
- * @Route("/jury/external-contest")
- * @IsGranted("ROLE_ADMIN")
- */
+#[Route(path: '/jury/external-contest')]
+#[IsGranted('ROLE_ADMIN')]
 class ExternalContestController extends BaseController
 {
     public function __construct(
@@ -36,9 +34,7 @@ class ExternalContestController extends BaseController
     ) {
     }
 
-    /**
-     * @Route("/", name="jury_external_contest")
-     */
+    #[Route(path: '/', name: 'jury_external_contest')]
     public function indexAction(Request $request): Response
     {
         /** @var ExternalContestSource $externalContestSource */
@@ -133,9 +129,7 @@ class ExternalContestController extends BaseController
         }
     }
 
-    /**
-     * @Route("/manage", name="jury_external_contest_manage")
-     */
+    #[Route(path: '/manage', name: 'jury_external_contest_manage')]
     public function manageAction(Request $request): Response
     {
         /** @var ExternalContestSource $externalContestSource */

@@ -24,10 +24,8 @@ use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Routing\Annotation\Route;
 
-/**
- * @Route("/jury/categories")
- * @IsGranted("ROLE_JURY")
- */
+#[Route(path: '/jury/categories')]
+#[IsGranted('ROLE_JURY')]
 class TeamCategoryController extends BaseController
 {
     public function __construct(
@@ -39,9 +37,7 @@ class TeamCategoryController extends BaseController
     ) {
     }
 
-    /**
-     * @Route("", name="jury_team_categories")
-     */
+    #[Route(path: '', name: 'jury_team_categories')]
     public function indexAction(): Response
     {
         $em             = $this->em;
@@ -121,10 +117,10 @@ class TeamCategoryController extends BaseController
     }
 
     /**
-     * @Route("/{categoryId<\d+>}", name="jury_team_category")
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
+    #[Route(path: '/{categoryId<\d+>}', name: 'jury_team_category')]
     public function viewAction(Request $request, SubmissionService $submissionService, int $categoryId): Response
     {
         /** @var TeamCategory $teamCategory */
@@ -163,10 +159,8 @@ class TeamCategoryController extends BaseController
         return $this->render('jury/team_category.html.twig', $data);
     }
 
-    /**
-     * @Route("/{categoryId<\d+>}/edit", name="jury_team_category_edit")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{categoryId<\d+>}/edit', name: 'jury_team_category_edit')]
+    #[IsGranted('ROLE_ADMIN')]
     public function editAction(Request $request, int $categoryId): Response
     {
         /** @var TeamCategory $teamCategory */
@@ -208,10 +202,8 @@ class TeamCategoryController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/{categoryId<\d+>}/delete", name="jury_team_category_delete")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{categoryId<\d+>}/delete', name: 'jury_team_category_delete')]
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteAction(Request $request, int $categoryId): Response
     {
         /** @var TeamCategory $teamCategory */
@@ -224,10 +216,8 @@ class TeamCategoryController extends BaseController
                                      [$teamCategory], $this->generateUrl('jury_team_categories'));
     }
 
-    /**
-     * @Route("/add", name="jury_team_category_add")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/add', name: 'jury_team_category_add')]
+    #[IsGranted('ROLE_ADMIN')]
     public function addAction(Request $request): Response
     {
         $teamCategory = new TeamCategory();
@@ -247,9 +237,7 @@ class TeamCategoryController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/{categoryId<\d+>}/request-remaining", name="jury_team_category_request_remaining")
-     */
+    #[Route(path: '/{categoryId<\d+>}/request-remaining', name: 'jury_team_category_request_remaining')]
     public function requestRemainingRunsWholeTeamCategoryAction(string $categoryId): RedirectResponse
     {
         /** @var TeamCategory $category */

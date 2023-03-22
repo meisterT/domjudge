@@ -13,112 +13,87 @@ use Symfony\Component\Validator\Constraints as Assert;
 /**
  * Categories for teams (e.g.: participants, observers, ...).
  *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="team_category",
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Categories for teams (e.g.: participants, observers, ...)"},
- *     indexes={@ORM\Index(name="sortorder", columns={"sortorder"})},
- *     uniqueConstraints={
- *         @ORM\UniqueConstraint(name="externalid", columns={"externalid"}, options={"lengths": {190}}),
- *     })
  * @Serializer\VirtualProperty(
  *     "hidden",
  *     exp="!object.getVisible()",
  *     options={@Serializer\Type("boolean"), @Serializer\Groups({"Nonstrict"})}
  * )
- * @UniqueEntity("externalid")
  */
+#[ORM\Table(name: 'team_category', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'Categories for teams (e.g.: participants, observers, ...)'])]
+#[ORM\Index(name: 'sortorder', columns: ['sortorder'])]
+#[ORM\UniqueConstraint(name: 'externalid', columns: ['externalid'], options: ['lengths' => [190]])]
+#[ORM\Entity]
+#[UniqueEntity('externalid')]
 class TeamCategory extends BaseApiEntity implements Stringable
 {
     /**
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     * @ORM\Column(type="integer", name="categoryid", length=4,
-     *     options={"comment"="Team category ID","unsigned"=true}, nullable=false)
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
+    #[ORM\Column(type: 'integer', name: 'categoryid', length: 4, options: ['comment' => 'Team category ID', 'unsigned' => true], nullable: false)]
     protected ?int $categoryid = null;
 
     /**
-     * @ORM\Column(type="string", name="externalid", length=255,
-     *     options={"comment"="Team category ID in an external system",
-     *              "collation"="utf8mb4_bin"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'externalid', length: 255, options: ['comment' => 'Team category ID in an external system', 'collation' => 'utf8mb4_bin'], nullable: true)]
     protected ?string $externalid = null;
 
     /**
-     * @ORM\Column(type="string", name="icpcid", length=255,
-     *     options={"comment"="External identifier from ICPC CMS",
-     *              "collation"="utf8mb4_bin"},
-     *     nullable=true)
      * @Serializer\SerializedName("icpc_id")
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'string', name: 'icpcid', length: 255, options: ['comment' => 'External identifier from ICPC CMS', 'collation' => 'utf8mb4_bin'], nullable: true)]
     protected ?string $icpcid = null;
 
-    /**
-     * @ORM\Column(type="string", name="name", length=255,
-     *     options={"comment"="Descriptive name"}, nullable=false)
-     * @Assert\NotBlank()
-     */
+    #[ORM\Column(type: 'string', name: 'name', length: 255, options: ['comment' => 'Descriptive name'], nullable: false)]
+    #[Assert\NotBlank]
     private string $name;
 
     /**
-     * @ORM\Column(type="tinyint", name="sortorder",
-     *     options={"comment"="Where to sort this category on the scoreboard",
-     *              "unsigned"=true,"default"="0"},
-     *     nullable=false)
      * @Serializer\Groups({"Nonstrict"})
-     * @Assert\GreaterThanOrEqual(0, message="Only non-negative sortorders are supported")
      */
+    #[ORM\Column(type: 'tinyint', name: 'sortorder', options: ['comment' => 'Where to sort this category on the scoreboard', 'unsigned' => true, 'default' => 0], nullable: false)]
+    #[Assert\GreaterThanOrEqual(0, message: 'Only non-negative sortorders are supported')]
     private int $sortorder = 0;
 
     /**
-     * @ORM\Column(type="string", length=32, name="color",
-     *     options={"comment"="Background colour on the scoreboard"},
-     *     nullable=true)
      * @Serializer\Groups({"Nonstrict"})
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'string', length: 32, name: 'color', options: ['comment' => 'Background colour on the scoreboard'], nullable: true)]
     private ?string $color = null;
 
     /**
-     * @ORM\Column(type="boolean", name="visible",
-     *     options={"comment"="Are teams in this category visible?",
-     *              "default"="1"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'visible', options: ['comment' => 'Are teams in this category visible?', 'default' => 1], nullable: false)]
     private bool $visible = true;
 
     /**
-     * @ORM\Column(type="boolean", name="allow_self_registration",
-     *     options={"comment"="Are self-registered teams allowed to choose this category?",
-     *              "default"="0"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'allow_self_registration', options: ['comment' => 'Are self-registered teams allowed to choose this category?', 'default' => 0], nullable: false)]
     private bool $allow_self_registration = false;
 
     /**
-     * @ORM\OneToMany(targetEntity="Team", mappedBy="category")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'Team', mappedBy: 'category')]
     private Collection $teams;
 
     /**
-     * @ORM\ManyToMany(targetEntity="Contest", mappedBy="team_categories")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToMany(targetEntity: 'Contest', mappedBy: 'team_categories')]
     private Collection $contests;
 
     /**
-     * @ORM\ManyToMany(targetEntity="Contest", mappedBy="medal_categories")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToMany(targetEntity: 'Contest', mappedBy: 'medal_categories')]
     private Collection $contests_for_medals;
 
     public function __construct()

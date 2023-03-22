@@ -25,7 +25,6 @@ class ExecutableController extends AbstractFOSRestController
     /**
      * Get the executable with the given ID.
      * @throws NonUniqueResultException
-     * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST')")
      * @Rest\Get("/{id}")
      * @OA\Parameter(ref="#/components/parameters/id")
      * @OA\Response(
@@ -37,6 +36,7 @@ class ExecutableController extends AbstractFOSRestController
      * @OA\Response(response="401", ref="#/components/responses/Unauthenticated")
      * @OA\Response(response="403", ref="#/components/responses/Unauthorized")
      */
+    #[Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST')")]
     public function singleAction(string $id): string
     {
         /** @var Executable|null $executable */

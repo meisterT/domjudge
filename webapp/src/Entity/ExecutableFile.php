@@ -7,65 +7,40 @@ use RuntimeException;
 
 /**
  * Files associated to an executable.
- *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="executable_file",
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Files associated to an executable"},
- *     indexes={@ORM\Index(name="immutable_execid", columns={"immutable_execid"})},
- *     uniqueConstraints={
- *         @ORM\UniqueConstraint(name="rankindex", columns={"immutable_execid", "ranknumber"}),
- *         @ORM\UniqueConstraint(name="filename", columns={"immutable_execid", "filename"}, options={"lengths": {NULL, 190}})
- *     })
- * @ORM\HasLifecycleCallbacks()
  */
+#[ORM\Table(name: 'executable_file', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'Files associated to an executable'])]
+#[ORM\Index(name: 'immutable_execid', columns: ['immutable_execid'])]
+#[ORM\UniqueConstraint(name: 'rankindex', columns: ['immutable_execid', 'ranknumber'])]
+#[ORM\UniqueConstraint(name: 'filename', columns: ['immutable_execid', 'filename'], options: ['lengths' => [null, 190]])]
+#[ORM\Entity]
+#[ORM\HasLifecycleCallbacks]
 class ExecutableFile
 {
-    /**
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     * @ORM\Column(type="integer", name="execfileid", length=4,
-     *     options={"comment"="Executable file ID","unsigned"=true},
-     *     nullable=false)
-     */
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
+    #[ORM\Column(type: 'integer', name: 'execfileid', length: 4, options: ['comment' => 'Executable file ID', 'unsigned' => true], nullable: false)]
     private int $execfileid;
 
-    /**
-     * @ORM\Column(type="string", name="filename", length=255, options={"comment"="Filename as uploaded"}, nullable=false)
-     */
+    #[ORM\Column(type: 'string', name: 'filename', length: 255, options: ['comment' => 'Filename as uploaded'], nullable: false)]
     private string $filename;
 
-    /**
-     * @ORM\Column(type="integer", name="ranknumber",
-     *     options={"comment"="Order of the executable files, zero-indexed", "unsigned"=true},
-     *     nullable=false)
-     */
+    #[ORM\Column(type: 'integer', name: 'ranknumber', options: ['comment' => 'Order of the executable files, zero-indexed', 'unsigned' => true], nullable: false)]
     private int $rank;
 
-    /**
-     * @ORM\ManyToOne(targetEntity="ImmutableExecutable", inversedBy="files")
-     * @ORM\JoinColumn(name="immutable_execid", referencedColumnName="immutable_execid", onDelete="CASCADE")
-     */
+    #[ORM\ManyToOne(targetEntity: 'ImmutableExecutable', inversedBy: 'files')]
+    #[ORM\JoinColumn(name: 'immutable_execid', referencedColumnName: 'immutable_execid', onDelete: 'CASCADE')]
     private ImmutableExecutable $immutableExecutable;
 
-    /**
-     * @ORM\Column(type="blobtext", name="file_content", length=4294967295,
-     *     options={"comment"="Full file content"}, nullable=false)
-     */
+    #[ORM\Column(type: 'blobtext', name: 'file_content', length: 4294967295, options: ['comment' => 'Full file content'], nullable: false)]
     private string $fileContent;
 
-    /**
-     * @ORM\Column(type="string", name="hash", length=32, options={"comment"="hash of the content"}, nullable=true)
-     */
+    #[ORM\Column(type: 'string', name: 'hash', length: 32, options: ['comment' => 'hash of the content'], nullable: true)]
     private string $hash;
 
     /**
-     * @ORM\Column(type="boolean", name="is_executable",
-     *     options={"comment"="Whether this file gets an executable bit.",
-     *              "default"="0"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'is_executable', options: ['comment' => 'Whether this file gets an executable bit.', 'default' => 0], nullable: false)]
     private bool $isExecutable = false;
 
     public function getExecFileId(): int
@@ -141,9 +116,7 @@ class ExecutableFile
         return $this->isExecutable;
     }
 
-    /**
-     * @ORM\PreRemove()
-     */
+    #[ORM\PreRemove]
     public function disallowDelete(): never
     {
         throw new RuntimeException('An executable file cannot be deleted');

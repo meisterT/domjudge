@@ -74,7 +74,6 @@ class JudgehostController extends AbstractFOSRestController
     /**
      * Get judgehosts.
      * @Rest\Get("")
-     * @IsGranted("ROLE_JURY")
      * @OA\Response(
      *     response="200",
      *     description="The judgehosts",
@@ -87,6 +86,7 @@ class JudgehostController extends AbstractFOSRestController
      *     @OA\Schema(type="string")
      * )
      */
+    #[IsGranted('ROLE_JURY')]
     public function getJudgehostsAction(Request $request): array
     {
         $queryBuilder = $this->em->createQueryBuilder()
@@ -106,7 +106,6 @@ class JudgehostController extends AbstractFOSRestController
      * Add a new judgehost to the list of judgehosts.
      * Also restarts (and returns) unfinished judgings.
      * @Rest\Post("")
-     * @IsGranted("ROLE_JUDGEHOST")
      * @OA\Response(
      *     response="200",
      *     description="The returned unfinished judgings",
@@ -123,6 +122,7 @@ class JudgehostController extends AbstractFOSRestController
      * )
      * @throws NonUniqueResultException
      */
+    #[IsGranted('ROLE_JUDGEHOST')]
     public function createJudgehostAction(Request $request): array
     {
         if (!$request->request->has('hostname')) {
@@ -185,7 +185,6 @@ class JudgehostController extends AbstractFOSRestController
     /**
      * Update the configuration of the given judgehost.
      * @Rest\Put("/{hostname}")
-     * @IsGranted("ROLE_JUDGEHOST")
      * @OA\Response(
      *     response="200",
      *     description="The modified judgehost",
@@ -211,6 +210,7 @@ class JudgehostController extends AbstractFOSRestController
      *     )
      * )
      */
+    #[IsGranted('ROLE_JUDGEHOST')]
     public function updateJudgeHostAction(Request $request, string $hostname): array
     {
         if (!$request->request->has('enabled')) {
@@ -230,7 +230,6 @@ class JudgehostController extends AbstractFOSRestController
     /**
      * Update the given judging for the given judgehost.
      * @Rest\Put("/update-judging/{hostname}/{judgetaskid<\d+>}")
-     * @IsGranted("ROLE_JUDGEHOST")
      * @OA\Response(
      *     response="200",
      *     description="When the judging has been updated"
@@ -277,6 +276,7 @@ class JudgehostController extends AbstractFOSRestController
      * )
      * @throws NonUniqueResultException
      */
+    #[IsGranted('ROLE_JUDGEHOST')]
     public function updateJudgingAction(Request $request, string $hostname, int $judgetaskid): void
     {
         /** @var Judgehost $judgehost */
@@ -463,7 +463,6 @@ class JudgehostController extends AbstractFOSRestController
     /**
      * Add back debug info.
      * @Rest\Post("/add-debug-info/{hostname}/{judgeTaskId<\d+>}")
-     * @IsGranted("ROLE_JUDGEHOST")
      * @OA\Response(
      *     response="200",
      *     description="When the debug info has been added"
@@ -481,6 +480,7 @@ class JudgehostController extends AbstractFOSRestController
      *     @OA\Schema(type="integer")
      * )
      */
+    #[IsGranted('ROLE_JUDGEHOST')]
     public function addDebugInfo(
         Request $request,
         string $hostname,
@@ -560,7 +560,6 @@ class JudgehostController extends AbstractFOSRestController
     /**
      * Add one JudgingRun. When relevant, finalize the judging.
      * @Rest\Post("/add-judging-run/{hostname}/{judgeTaskId<\d+>}")
-     * @IsGranted("ROLE_JUDGEHOST")
      * @OA\Response(
      *     response="200",
      *     description="When the judging run has been added"
@@ -627,6 +626,7 @@ class JudgehostController extends AbstractFOSRestController
      * @throws NonUniqueResultException
      * @throws ORMException
      */
+    #[IsGranted('ROLE_JUDGEHOST')]
     public function addJudgingRunAction(
         Request $request,
         string $hostname,
@@ -675,7 +675,6 @@ class JudgehostController extends AbstractFOSRestController
      * Internal error reporting (back from judgehost).
      *
      * @Rest\Post("/internal-error")
-     * @IsGranted("ROLE_JUDGEHOST")
      * @OA\Response(
      *     response="200",
      *     description="The ID of the created internal error",
@@ -713,6 +712,7 @@ class JudgehostController extends AbstractFOSRestController
      * @throws NonUniqueResultException
      * @throws ORMException
      */
+    #[IsGranted('ROLE_JUDGEHOST')]
     public function internalErrorAction(Request $request): ?int
     {
         $required = ['description', 'judgehostlog', 'disabled'];
@@ -1170,7 +1170,6 @@ class JudgehostController extends AbstractFOSRestController
     /**
      * Get files for a given type and id.
      * @Rest\Get("/get_files/{type}/{id<\d+>}")
-     * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST')")
      * @throws NonUniqueResultException
      * @OA\Response(
      *     response="200",
@@ -1185,6 +1184,7 @@ class JudgehostController extends AbstractFOSRestController
      * )
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST')")]
     public function getFilesAction(string $type, string $id): array
     {
         return match ($type) {
@@ -1276,8 +1276,8 @@ class JudgehostController extends AbstractFOSRestController
     /**
      * Fetch work tasks.
      * @Rest\Post("/fetch-work")
-     * @Security("is_granted('ROLE_JUDGEHOST')")
      */
+    #[Security("is_granted('ROLE_JUDGEHOST')")]
     public function getJudgeTasksAction(Request $request): array
     {
         if (!$request->request->has('hostname')) {

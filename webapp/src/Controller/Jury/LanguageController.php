@@ -23,10 +23,8 @@ use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Routing\Annotation\Route;
 
-/**
- * @Route("/jury/languages")
- * @IsGranted("ROLE_JURY")
- */
+#[Route(path: '/jury/languages')]
+#[IsGranted('ROLE_JURY')]
 class LanguageController extends BaseController
 {
     public function __construct(
@@ -38,9 +36,7 @@ class LanguageController extends BaseController
     ) {
     }
 
-    /**
-     * @Route("", name="jury_languages")
-     */
+    #[Route(path: '', name: 'jury_languages')]
     public function indexAction(): Response
     {
         $em = $this->em;
@@ -141,10 +137,8 @@ class LanguageController extends BaseController
 
     // Note that the add action appears before the view action to make sure
     // /add is not seen as a language.
-    /**
-     * @Route("/add", name="jury_language_add")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/add', name: 'jury_language_add')]
+    #[IsGranted('ROLE_ADMIN')]
     public function addAction(Request $request): Response
     {
         $language = new Language();
@@ -173,10 +167,10 @@ class LanguageController extends BaseController
     }
 
     /**
-     * @Route("/{langId}", name="jury_language")
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
+    #[Route(path: '/{langId}', name: 'jury_language')]
     public function viewAction(Request $request, SubmissionService $submissionService, string $langId): Response
     {
         /** @var Language $language */
@@ -215,9 +209,7 @@ class LanguageController extends BaseController
         return $this->render('jury/language.html.twig', $data);
     }
 
-    /**
-     * @Route("/{langId}/toggle-submit", name="jury_language_toggle_submit")
-     */
+    #[Route(path: '/{langId}/toggle-submit', name: 'jury_language_toggle_submit')]
     public function toggleSubmitAction(Request $request, string $langId): Response
     {
         /** @var Language $language */
@@ -234,9 +226,7 @@ class LanguageController extends BaseController
         return $this->redirectToRoute('jury_language', ['langId' => $langId]);
     }
 
-    /**
-     * @Route("/{langId}/toggle-judge", name="jury_language_toggle_judge")
-     */
+    #[Route(path: '/{langId}/toggle-judge', name: 'jury_language_toggle_judge')]
     public function toggleJudgeAction(Request $request, string $langId): Response
     {
         /** @var Language $language */
@@ -258,10 +248,8 @@ class LanguageController extends BaseController
         return $this->redirectToRoute('jury_language', ['langId' => $langId]);
     }
 
-    /**
-     * @Route("/{langId}/edit", name="jury_language_edit")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{langId}/edit', name: 'jury_language_edit')]
+    #[IsGranted('ROLE_ADMIN')]
     public function editAction(Request $request, string $langId): Response
     {
         /** @var Language $language */
@@ -296,10 +284,8 @@ class LanguageController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/{langId}/delete", name="jury_language_delete")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/{langId}/delete', name: 'jury_language_delete')]
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteAction(Request $request, string $langId): Response
     {
         /** @var Language $language */
@@ -313,9 +299,7 @@ class LanguageController extends BaseController
         );
     }
 
-    /**
-     * @Route("/{langId}/request-remaining", name="jury_language_request_remaining")
-     */
+    #[Route(path: '/{langId}/request-remaining', name: 'jury_language_request_remaining')]
     public function requestRemainingRunsWholeLanguageAction(string $langId): RedirectResponse
     {
         /** @var Language $language */

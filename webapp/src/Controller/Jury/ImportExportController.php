@@ -42,10 +42,8 @@ use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 
-/**
- * @Route("/jury/import-export")
- * @IsGranted("ROLE_ADMIN")
- */
+#[Route(path: '/jury/import-export')]
+#[IsGranted('ROLE_ADMIN')]
 class ImportExportController extends BaseController
 {
     public function __construct(
@@ -62,13 +60,13 @@ class ImportExportController extends BaseController
     }
 
     /**
-     * @Route("", name="jury_import_export")
      * @throws ClientExceptionInterface
      * @throws DecodingExceptionInterface
      * @throws RedirectionExceptionInterface
      * @throws ServerExceptionInterface
      * @throws TransportExceptionInterface
      */
+    #[Route(path: '', name: 'jury_import_export')]
     public function indexAction(Request $request): Response
     {
         $tsvForm = $this->createForm(TsvImportType::class);
@@ -282,9 +280,7 @@ class ImportExportController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/export/{type<groups|teams|results>}.tsv", name="jury_tsv_export")
-     */
+    #[Route(path: '/export/{type<groups|teams|results>}.tsv', name: 'jury_tsv_export')]
     public function exportTsvAction(Request $request, string $type): Response
     {
         $data    = [];
@@ -322,9 +318,7 @@ class ImportExportController extends BaseController
         return $response;
     }
 
-    /**
-     * @Route("/export/{type<results|clarifications>}.html", name="jury_html_export")
-     */
+    #[Route(path: '/export/{type<results|clarifications>}.html', name: 'jury_html_export')]
     public function exportHtmlAction(Request $request, string $type): Response
     {
         try {

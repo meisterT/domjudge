@@ -16,19 +16,15 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
-/**
- * @Route("/jury/analysis")
- * @IsGranted("ROLE_JURY")
- */
+#[Route(path: '/jury/analysis')]
+#[IsGranted('ROLE_JURY')]
 class AnalysisController extends AbstractController
 {
     public function __construct(private DOMJudgeService $dj, private StatisticsService $stats, private EntityManagerInterface $em)
     {
     }
 
-    /**
-     * @Route("", name="analysis_index")
-     */
+    #[Route(path: '', name: 'analysis_index')]
     public function indexAction(Request $request): Response
     {
         $em = $this->em;
@@ -80,9 +76,7 @@ class AnalysisController extends AbstractController
         ]);
     }
 
-    /**
-     * @Route("/team/{teamid}", name="analysis_team")
-     */
+    #[Route(path: '/team/{teamid}', name: 'analysis_team')]
     public function teamAction(Team $team): Response
     {
         $contest = $this->dj->getCurrentContest();
@@ -98,9 +92,7 @@ class AnalysisController extends AbstractController
         );
     }
 
-    /**
-     * @Route("/problem/{probid}", name="analysis_problem")
-     */
+    #[Route(path: '/problem/{probid}', name: 'analysis_problem')]
     public function problemAction(Request $request, Problem $problem): Response
     {
         $contest = $this->dj->getCurrentContest();

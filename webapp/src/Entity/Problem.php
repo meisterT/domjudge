@@ -16,103 +16,77 @@ use Symfony\Component\Validator\Constraints as Assert;
 
 /**
  * Stores testcases per problem.
- *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="problem",
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4","comment"="Problems the teams can submit solutions for"},
- *     indexes={
- *         @ORM\Index(name="externalid", columns={"externalid"}, options={"lengths": {190}}),
- *         @ORM\Index(name="special_run", columns={"special_run"}),
- *         @ORM\Index(name="special_compare", columns={"special_compare"})
- *     })
- * @ORM\HasLifecycleCallbacks()
- * @UniqueEntity("externalid", message="A problem with the same `externalid` already exists - is this a duplicate?")
  */
+#[ORM\Table(name: 'problem', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'Problems the teams can submit solutions for'])]
+#[ORM\Index(name: 'externalid', columns: ['externalid'], options: ['lengths' => [190]])]
+#[ORM\Index(name: 'special_run', columns: ['special_run'])]
+#[ORM\Index(name: 'special_compare', columns: ['special_compare'])]
+#[ORM\Entity]
+#[ORM\HasLifecycleCallbacks]
+#[UniqueEntity('externalid', message: 'A problem with the same `externalid` already exists - is this a duplicate?')]
 class Problem extends BaseApiEntity
 {
     /**
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     * @ORM\Column(type="integer", name="probid", options={"comment"="Problem ID","unsigned"="true"}, nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
+    #[ORM\Column(type: 'integer', name: 'probid', options: ['comment' => 'Problem ID', 'unsigned' => true], nullable: false)]
     protected ?int $probid = null;
 
     /**
-     * @ORM\Column(type="string", name="externalid", length=255,
-     *     options={"comment"="Problem ID in an external system, should be unique inside a single contest",
-     *              "collation"="utf8mb4_bin"},
-     *     nullable=true)
      * @Serializer\Groups({"Nonstrict"})
      */
+    #[ORM\Column(type: 'string', name: 'externalid', length: 255, options: ['comment' => 'Problem ID in an external system, should be unique inside a single contest', 'collation' => 'utf8mb4_bin'], nullable: true)]
     protected ?string $externalid = null;
 
-    /**
-     * @ORM\Column(type="string", name="name", length=255, options={"comment"="Descriptive name"}, nullable=false)
-     */
+    #[ORM\Column(type: 'string', name: 'name', length: 255, options: ['comment' => 'Descriptive name'], nullable: false)]
     private string $name;
 
     /**
-     * @ORM\Column(type="float", name="timelimit",
-     *     options={"comment"="Maximum run time (in seconds) for this problem",
-     *              "default"="0","unsigned"="true"},
-     *     nullable=false)
      * @Serializer\Exclude()
-     * @Assert\GreaterThan(0)
      */
+    #[ORM\Column(type: 'float', name: 'timelimit', options: ['comment' => 'Maximum run time (in seconds) for this problem', 'default' => 0, 'unsigned' => true], nullable: false)]
+    #[Assert\GreaterThan(0)]
     private float $timelimit = 0;
 
     /**
-     * @ORM\Column(type="integer", name="memlimit",
-     *     options={"comment"="Maximum memory available (in kB) for this problem",
-     *              "unsigned"=true},
-     *     nullable=true)
      * @Serializer\Exclude()
-     * @Assert\GreaterThan(0)
      */
+    #[ORM\Column(type: 'integer', name: 'memlimit', options: ['comment' => 'Maximum memory available (in kB) for this problem', 'unsigned' => true], nullable: true)]
+    #[Assert\GreaterThan(0)]
     private ?int $memlimit = null;
 
     /**
-     * @ORM\Column(type="integer", name="outputlimit",
-     *     options={"comment"="Maximum output size (in kB) for this problem",
-     *              "unsigned"=true},
-     *     nullable=true)
      * @Serializer\Exclude()
-     * @Assert\GreaterThan(0)
      */
+    #[ORM\Column(type: 'integer', name: 'outputlimit', options: ['comment' => 'Maximum output size (in kB) for this problem', 'unsigned' => true], nullable: true)]
+    #[Assert\GreaterThan(0)]
     private ?int $outputlimit = null;
 
     /**
-     * @ORM\Column(type="string", name="special_compare_args", length=255,
-     *     options={"comment"="Optional arguments to special_compare script"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'special_compare_args', length: 255, options: ['comment' => 'Optional arguments to special_compare script'], nullable: true)]
     private ?string $special_compare_args = null;
 
     /**
-     * @ORM\Column(type="boolean", name="combined_run_compare",
-     *     options={"comment"="Use the exit code of the run script to compute the verdict",
-     *              "default":"0"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'combined_run_compare', options: ['comment' => 'Use the exit code of the run script to compute the verdict', 'default' => 0], nullable: false)]
     private bool $combined_run_compare = false;
 
     /**
      * @var resource|string|null
-     * @ORM\Column(type="blob", name="problemtext",
-     *     options={"comment"="Problem text in HTML/PDF/ASCII"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'blob', name: 'problemtext', options: ['comment' => 'Problem text in HTML/PDF/ASCII'], nullable: true)]
     private mixed $problemtext = null;
 
     /**
-     * @Assert\File()
      * @Serializer\Exclude()
      */
+    #[Assert\File]
     private ?UploadedFile $problemtextFile = null;
 
     /**
@@ -121,58 +95,56 @@ class Problem extends BaseApiEntity
     private bool $clearProblemtext = false;
 
     /**
-     * @ORM\Column(type="string", length=4, name="problemtext_type",
-     *     options={"comment"="File type of problem text"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', length: 4, name: 'problemtext_type', options: ['comment' => 'File type of problem text'], nullable: true)]
     private ?string $problemtext_type = null;
 
     /**
-     * @ORM\OneToMany(targetEntity="Submission", mappedBy="problem")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'Submission', mappedBy: 'problem')]
     private Collection $submissions;
 
     /**
-     * @ORM\OneToMany(targetEntity="Clarification", mappedBy="problem")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'Clarification', mappedBy: 'problem')]
     private Collection $clarifications;
 
     /**
-     * @ORM\OneToMany(targetEntity="ContestProblem", mappedBy="problem")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'ContestProblem', mappedBy: 'problem')]
     private Collection $contest_problems;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Executable", inversedBy="problems_compare")
-     * @ORM\JoinColumn(name="special_compare", referencedColumnName="execid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Executable', inversedBy: 'problems_compare')]
+    #[ORM\JoinColumn(name: 'special_compare', referencedColumnName: 'execid', onDelete: 'SET NULL')]
     private ?Executable $compare_executable = null;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Executable", inversedBy="problems_run")
-     * @ORM\JoinColumn(name="special_run", referencedColumnName="execid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Executable', inversedBy: 'problems_run')]
+    #[ORM\JoinColumn(name: 'special_run', referencedColumnName: 'execid', onDelete: 'SET NULL')]
     private ?Executable $run_executable = null;
 
     /**
-     * @ORM\OneToMany(targetEntity="Testcase", mappedBy="problem")
-     * @ORM\OrderBy({"ranknumber" = "ASC"})
      * @Serializer\Exclude()
      * Note that we order the test cases here by ranknumber to make use of it during judgetask creation.
      */
+    #[ORM\OneToMany(targetEntity: 'Testcase', mappedBy: 'problem')]
+    #[ORM\OrderBy(['ranknumber' => 'ASC'])]
     private Collection $testcases;
 
     /**
-     * @ORM\OneToMany(targetEntity=ProblemAttachment::class, mappedBy="problem", orphanRemoval=true)
-     * @ORM\OrderBy({"name"="ASC"})
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: ProblemAttachment::class, mappedBy: 'problem', orphanRemoval: true)]
+    #[ORM\OrderBy(['name' => 'ASC'])]
     private Collection $attachments;
 
     public function setProbid(int $probid): Problem
@@ -458,10 +430,8 @@ class Problem extends BaseApiEntity
         return $this->attachments;
     }
 
-    /**
-     * @ORM\PrePersist()
-     * @ORM\PreUpdate()
-     */
+    #[ORM\PrePersist]
+    #[ORM\PreUpdate]
     public function processProblemText(): void
     {
         if ($this->isClearProblemtext()) {

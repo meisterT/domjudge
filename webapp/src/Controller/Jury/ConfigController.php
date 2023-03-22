@@ -15,10 +15,8 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
-/**
- * @Route("/jury/config")
- * @IsGranted("ROLE_ADMIN")
- */
+#[Route(path: '/jury/config')]
+#[IsGranted('ROLE_ADMIN')]
 class ConfigController extends AbstractController
 {
     public function __construct(
@@ -30,9 +28,7 @@ class ConfigController extends AbstractController
     ) {
     }
 
-    /**
-     * @Route("", name="jury_config")
-     */
+    #[Route(path: '', name: 'jury_config')]
     public function indexAction(EventLogService $eventLogService, Request $request): Response
     {
         $specs = $this->config->getConfigSpecification();
@@ -108,9 +104,7 @@ class ConfigController extends AbstractController
         ]);
     }
 
-    /**
-     * @Route("/check", name="jury_config_check")
-     */
+    #[Route(path: '/check', name: 'jury_config_check')]
     public function checkAction(string $projectDir, string $logsDir): Response
     {
         $results = $this->checkConfigService->runAll();

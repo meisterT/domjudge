@@ -20,8 +20,8 @@ use Symfony\Component\HttpFoundation\Request;
  * @OA\Response(response="400", ref="#/components/responses/InvalidResponse")
  * @OA\Response(response="401", ref="#/components/responses/Unauthenticated")
  * @OA\Response(response="403", ref="#/components/responses/Unauthorized")
- * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_API_READER') or is_granted('ROLE_BALLOON')")
  */
+#[Security("is_granted('ROLE_JURY') or is_granted('ROLE_API_READER') or is_granted('ROLE_BALLOON')")]
 class BalloonController extends AbstractRestController
 {
     /**
@@ -59,8 +59,8 @@ class BalloonController extends AbstractRestController
      *     description="The balloon was now marked as done or already marked as such.",
      * )
      * @OA\Parameter(ref="#/components/parameters/balloonId")
-     * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_BALLOON')")
      */
+    #[Security("is_granted('ROLE_JURY') or is_granted('ROLE_BALLOON')")]
     public function markDoneAction(int $balloonId, BalloonService $balloonService): void
     {
         $balloonService->setDone($balloonId);

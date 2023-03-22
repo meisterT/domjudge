@@ -65,7 +65,6 @@ class ContestController extends AbstractRestController
     /**
      * Add a new contest.
      * @Rest\Post("")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -92,6 +91,7 @@ class ContestController extends AbstractRestController
      * )
      * @throws BadRequestHttpException
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function addContestAction(Request $request): string
     {
         /** @var UploadedFile $yamlFile */
@@ -203,10 +203,10 @@ class ContestController extends AbstractRestController
     /**
      * Delete the banner for the given contest.
      * @Rest\Delete("/{cid}/banner", name="delete_contest_banner")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\Response(response="204", description="Deleting banner succeeded")
      * @OA\Parameter(ref="#/components/parameters/cid")
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteBannerAction(Request $request, string $cid): Response
     {
         /** @var Contest $contest */
@@ -253,10 +253,10 @@ class ContestController extends AbstractRestController
      *         )
      *     )
      * )
-     * @IsGranted("ROLE_ADMIN")
      * @OA\Response(response="204", description="Setting banner succeeded")
      * @OA\Parameter(ref="#/components/parameters/cid")
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function setBannerAction(Request $request, string $cid, ValidatorInterface $validator): Response
     {
         /** @var Contest $contest */
@@ -298,7 +298,6 @@ class ContestController extends AbstractRestController
     /**
      * Change the start time of the given contest.
      * @Rest\Patch("/{cid}")
-     * @IsGranted("ROLE_API_WRITER")
      * @throws NonUniqueResultException
      * @OA\Parameter(
      *     name="cid",
@@ -339,6 +338,7 @@ class ContestController extends AbstractRestController
      *     )
      * )
      */
+    #[IsGranted('ROLE_API_WRITER')]
     public function changeStartTimeAction(Request $request, string $cid): Response
     {
         $contest  = $this->getContestWithId($request, $cid);
@@ -453,7 +453,6 @@ class ContestController extends AbstractRestController
     /**
      * Get the event feed for the given contest.
      * @Rest\Get("/{cid}/event-feed")
-     * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_API_READER')")
      * @throws NonUniqueResultException
      * @OA\Parameter(ref="#/components/parameters/cid")
      * @OA\Parameter(
@@ -493,6 +492,7 @@ class ContestController extends AbstractRestController
      *     )
      * )
      */
+    #[Security("is_granted('ROLE_JURY') or is_granted('ROLE_API_READER')")]
     public function getEventFeedAction(
         Request $request,
         string $cid,
@@ -718,7 +718,6 @@ class ContestController extends AbstractRestController
     /**
      * Get general status information.
      * @Rest\Get("/{cid}/status")
-     * @IsGranted("ROLE_API_READER")
      * @OA\Parameter(ref="#/components/parameters/cid")
      * @OA\Response(
      *     response="200",
@@ -733,6 +732,7 @@ class ContestController extends AbstractRestController
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
+    #[IsGranted('ROLE_API_READER')]
     public function getStatusAction(Request $request, string $cid): array
     {
         return $this->dj->getContestStats($this->getContestWithId($request, $cid));

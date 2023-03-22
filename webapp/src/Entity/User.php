@@ -16,104 +16,81 @@ use Symfony\Component\Validator\Constraints as Assert;
 
 /**
  * Users that have access to DOMjudge.
- *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="user",
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Users that have access to DOMjudge"},
- *     indexes={@ORM\Index(name="teamid", columns={"teamid"})},
- *     uniqueConstraints={
- *         @ORM\UniqueConstraint(name="username", columns={"username"}, options={"lengths":{190}}),
- *         @ORM\UniqueConstraint(name="externalid", columns={"externalid"}, options={"lengths":{190}}),
- *     })
- * @UniqueEntity("username", message="The username '{{ value }}' is already in use.")
  */
+#[ORM\Table(name: 'user', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'Users that have access to DOMjudge'])]
+#[ORM\Index(name: 'teamid', columns: ['teamid'])]
+#[ORM\UniqueConstraint(name: 'username', columns: ['username'], options: ['lengths' => [190]])]
+#[ORM\UniqueConstraint(name: 'externalid', columns: ['externalid'], options: ['lengths' => [190]])]
+#[ORM\Entity]
+#[UniqueEntity('username', message: "The username '{{ value }}' is already in use.")]
 class User extends BaseApiEntity implements UserInterface, PasswordAuthenticatedUserInterface, EquatableInterface, ExternalRelationshipEntityInterface
 {
     /**
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     * @ORM\Column(type="integer", name="userid", length=4,
-     *     options={"comment"="User ID","unsigned"=true}, nullable=false)
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
+    #[ORM\Column(type: 'integer', name: 'userid', length: 4, options: ['comment' => 'User ID', 'unsigned' => true], nullable: false)]
     private ?int $userid = null;
 
     /**
-     * @ORM\Column(type="string", name="externalid", length=255,
-     *     options={"comment"="User ID in an external system",
-     *              "collation"="utf8mb4_bin"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'externalid', length: 255, options: ['comment' => 'User ID in an external system', 'collation' => 'utf8mb4_bin'], nullable: true)]
     protected ?string $externalid = null;
 
-    /**
-     * @ORM\Column(type="string", name="username", length=255,
-     *     options={"comment"="User login name"}, nullable=false)
-     * @Assert\Regex("/^[a-z0-9@._-]+$/i", message="Only alphanumeric characters and _-@. are allowed")
-     */
+    #[ORM\Column(type: 'string', name: 'username', length: 255, options: ['comment' => 'User login name'], nullable: false)]
+    #[Assert\Regex('/^[a-z0-9@._-]+$/i', message: 'Only alphanumeric characters and _-@. are allowed')]
     private string $username = '';
 
     /**
-     * @ORM\Column(type="string", name="name", length=255,
-     *     options={"comment"="Name"}, nullable=false)
      * @Serializer\Groups({"Nonstrict"})
      */
+    #[ORM\Column(type: 'string', name: 'name', length: 255, options: ['comment' => 'Name'], nullable: false)]
     private string $name = '';
 
     /**
-     * @ORM\Column(type="string", name="email", length=255,
-     *     options={"comment"="Email address"}, nullable=true)
-     * @Assert\Email()
      * @Serializer\Groups({"Nonstrict"})
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'string', name: 'email', length: 255, options: ['comment' => 'Email address'], nullable: true)]
+    #[Assert\Email]
     private ?string $email = null;
 
     /**
-     * @ORM\Column(type="decimal", precision=32, scale=9, name="last_login",
-     *     options={"comment"="Time of last successful login", "unsigned"=true},
-     *     nullable=true)
      * @Serializer\Exclude()
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'decimal', precision: 32, scale: 9, name: 'last_login', options: ['comment' => 'Time of last successful login', 'unsigned' => true], nullable: true)]
     private string|float|null $last_login = null;
 
     /**
-     * @ORM\Column(type="decimal", precision=32, scale=9, name="last_api_login",
-     *     options={"comment"="Time of last successful login on the API", "unsigned"=true},
-     *     nullable=true)
      * @Serializer\Exclude()
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'decimal', precision: 32, scale: 9, name: 'last_api_login', options: ['comment' => 'Time of last successful login on the API', 'unsigned' => true], nullable: true)]
     private string|float|null $last_api_login = null;
 
     /**
-     * @ORM\Column(type="decimal", precision=32, scale=9, name="first_login",
-     *     options={"comment"="Time of first login", "unsigned"=true},
-     *     nullable=true)
      * @Serializer\Exclude()
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'decimal', precision: 32, scale: 9, name: 'first_login', options: ['comment' => 'Time of first login', 'unsigned' => true], nullable: true)]
     private string|float|null $first_login = null;
 
     /**
-     * @ORM\Column(type="string", name="last_ip_address", length=255,
-     *     options={"comment"="Last IP address of successful login"},
-     *     nullable=true)
      * @Serializer\SerializedName("last_ip")
      * @Serializer\Groups({"Nonstrict"})
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'string', name: 'last_ip_address', length: 255, options: ['comment' => 'Last IP address of successful login'], nullable: true)]
     private ?string $last_ip_address = null;
 
     /**
-     * @ORM\Column(type="string", name="password", length=255,
-     *     options={"comment"="Password hash"}, nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'password', length: 255, options: ['comment' => 'Password hash'], nullable: true)]
     private ?string $password = null;
 
     /**
@@ -122,49 +99,43 @@ class User extends BaseApiEntity implements UserInterface, PasswordAuthenticated
     private ?string $plainPassword = null;
 
     /**
-     * @ORM\Column(type="string", name="ip_address", length=255,
-     *     options={"comment"="IP Address used to autologin"},
-     *     nullable=true)
      * @Serializer\SerializedName("ip")
-     * @Assert\Ip(version="all")
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'string', name: 'ip_address', length: 255, options: ['comment' => 'IP Address used to autologin'], nullable: true)]
+    #[Assert\Ip(version: 'all')]
     private ?string $ipAddress = null;
 
     /**
-     * @ORM\Column(type="boolean", name="enabled",
-     *     options={"comment"="Whether the user is able to log in",
-     *              "default"="1"},
-     *     nullable=false)
      * @Serializer\Groups({"Nonstrict"})
      */
+    #[ORM\Column(type: 'boolean', name: 'enabled', options: ['comment' => 'Whether the user is able to log in', 'default' => 1], nullable: false)]
     private bool $enabled = true;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Team", inversedBy="users")
-     * @ORM\JoinColumn(name="teamid", referencedColumnName="teamid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Team', inversedBy: 'users')]
+    #[ORM\JoinColumn(name: 'teamid', referencedColumnName: 'teamid', onDelete: 'SET NULL')]
     private ?Team $team = null;
 
     /**
-     * @ORM\ManyToMany(targetEntity="Role", inversedBy="users")
-     * @ORM\JoinTable(name="userrole",
-     *                joinColumns={@ORM\JoinColumn(name="userid", referencedColumnName="userid", onDelete="CASCADE")},
-     *                inverseJoinColumns={@ORM\JoinColumn(name="roleid", referencedColumnName="roleid", onDelete="CASCADE")}
-     *               )
      * @Serializer\Exclude()
-     * @Assert\Count(min="1")
      *
      * Note that this property is called `user_roles` and not `roles` because the
      * UserInterface expects roles/getRoles to return a string list of roles, not objects.
      */
+    #[ORM\JoinTable(name: 'userrole')]
+    #[ORM\JoinColumn(name: 'userid', referencedColumnName: 'userid', onDelete: 'CASCADE')]
+    #[ORM\InverseJoinColumn(name: 'roleid', referencedColumnName: 'roleid', onDelete: 'CASCADE')]
+    #[ORM\ManyToMany(targetEntity: 'Role', inversedBy: 'users')]
+    #[Assert\Count(min: 1)]
     private Collection $user_roles;
 
     /**
-     * @ORM\OneToMany(targetEntity="Submission", mappedBy="user")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'Submission', mappedBy: 'user')]
     private Collection $submissions;
 
     public function getSalt(): ?string

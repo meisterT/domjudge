@@ -45,7 +45,6 @@ class UserController extends AbstractRestController
     /**
      * Add one or more groups.
      * @Rest\Post("/groups")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -71,6 +70,7 @@ class UserController extends AbstractRestController
      *     description="Returns a (currently meaningless) status message.",
      * )
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function addGroupsAction(Request $request): string
     {
         /** @var UploadedFile $tsvFile */
@@ -95,7 +95,6 @@ class UserController extends AbstractRestController
      * Add one or more organizations.
      *
      * @Rest\Post("/organizations")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -116,6 +115,7 @@ class UserController extends AbstractRestController
      *     description="Returns a (currently meaningless) status message.",
      * )
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function addOrganizationsAction(Request $request): string
     {
         $message = null;
@@ -134,7 +134,6 @@ class UserController extends AbstractRestController
     /**
      * Add one or more teams.
      * @Rest\Post("/teams")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -160,6 +159,7 @@ class UserController extends AbstractRestController
      *     description="Returns a (currently meaningless) status message.",
      * )
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function addTeamsAction(Request $request): string
     {
         /** @var UploadedFile $tsvFile */
@@ -183,7 +183,6 @@ class UserController extends AbstractRestController
     /**
      * Add accounts to teams.
      * @Rest\Post("/accounts")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -217,6 +216,7 @@ class UserController extends AbstractRestController
      *
      * @throws BadRequestHttpException
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function addAccountsAction(Request $request): string
     {
         /** @var UploadedFile $tsvFile */
@@ -249,7 +249,6 @@ class UserController extends AbstractRestController
     /**
      * Get all the users.
      * @Rest\Get("")
-     * @Security("is_granted('ROLE_ADMIN') or is_granted('ROLE_API_READER')")
      * @OA\Response(
      *     response="200",
      *     description="Returns all the users for this contest",
@@ -267,6 +266,7 @@ class UserController extends AbstractRestController
      * )
      * @throws NonUniqueResultException
      */
+    #[Security("is_granted('ROLE_ADMIN') or is_granted('ROLE_API_READER')")]
     public function listAction(Request $request): Response
     {
         return parent::performListAction($request);
@@ -276,7 +276,6 @@ class UserController extends AbstractRestController
      * Get the given user.
      * @throws NonUniqueResultException
      * @Rest\Get("/{id}")
-     * @Security("is_granted('ROLE_ADMIN') or is_granted('ROLE_API_READER')")
      * @OA\Response(
      *     response="200",
      *     description="Returns the given user",
@@ -284,6 +283,7 @@ class UserController extends AbstractRestController
      * )
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[Security("is_granted('ROLE_ADMIN') or is_granted('ROLE_API_READER')")]
     public function singleAction(Request $request, string $id): Response
     {
         return parent::performSingleAction($request, $id);
@@ -293,7 +293,6 @@ class UserController extends AbstractRestController
      * Add a new user.
      *
      * @Rest\Post()
-     * @IsGranted("ROLE_API_WRITER")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -311,6 +310,7 @@ class UserController extends AbstractRestController
      *     @Model(type=User::class)
      * )
      */
+    #[IsGranted('ROLE_API_WRITER')]
     public function addAction(Request $request): Response
     {
         $required = [

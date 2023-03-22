@@ -31,11 +31,9 @@ class AccountController extends AbstractRestController
     // - The fact that we have /api/contests/<cid>/account
     // Also it seems to not be possible to overwrite the OA\Tag or the base controller route when
     // extending a controller.
-
     /**
      * Get all the accounts.
      * @Rest\Get("/accounts")
-     * @Security("is_granted('ROLE_ADMIN') or is_granted('ROLE_API_READER')")
      * @OA\Response(
      *     response="200",
      *     description="Returns all the accounts for this contest",
@@ -53,6 +51,7 @@ class AccountController extends AbstractRestController
      * )
      * @throws NonUniqueResultException
      */
+    #[Security("is_granted('ROLE_ADMIN') or is_granted('ROLE_API_READER')")]
     public function listAction(Request $request): Response
     {
         // Get the contest ID to make sure the contest exists
@@ -64,7 +63,6 @@ class AccountController extends AbstractRestController
      * Get the given account.
      * @throws NonUniqueResultException
      * @Rest\Get("/accounts/{id}")
-     * @Security("is_granted('ROLE_ADMIN') or is_granted('ROLE_API_READER')")
      * @OA\Response(
      *     response="200",
      *     description="Returns the given account",
@@ -72,6 +70,7 @@ class AccountController extends AbstractRestController
      * )
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[Security("is_granted('ROLE_ADMIN') or is_granted('ROLE_API_READER')")]
     public function singleAction(Request $request, string $id): Response
     {
         // Get the contest ID to make sure the contest exists

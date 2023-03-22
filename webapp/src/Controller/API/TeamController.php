@@ -149,10 +149,10 @@ class TeamController extends AbstractRestController
      * Delete the photo for the given team.
      * @Rest\Delete("contests/{cid}/teams/{id}/photo", name="delete_team_photo")
      * @Rest\Delete("teams/{id}/photo")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\Response(response="204", description="Deleting photo succeeded")
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function deletePhotoAction(Request $request, string $id): Response
     {
         $contestId = null;
@@ -200,10 +200,10 @@ class TeamController extends AbstractRestController
      *         )
      *     )
      * )
-     * @IsGranted("ROLE_ADMIN")
      * @OA\Response(response="204", description="Setting photo succeeded")
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function setPhotoAction(Request $request, string $id, ValidatorInterface $validator): Response
     {
         /** @var Team $team */
@@ -246,7 +246,6 @@ class TeamController extends AbstractRestController
      *
      * @Rest\Post("contests/{cid}/teams")
      * @Rest\Post("teams")
-     * @IsGranted("ROLE_API_WRITER")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -264,6 +263,7 @@ class TeamController extends AbstractRestController
      *     @Model(type=Team::class)
      * )
      */
+    #[IsGranted('ROLE_API_WRITER')]
     public function addAction(Request $request, ImportExportService $importExport): Response
     {
         $saved = [];

@@ -22,12 +22,12 @@ use Prometheus\CollectorRegistry;
 use Prometheus\RenderTextFormat;
 
 /**
- * @Route("/metrics")
- * @IsGranted("ROLE_API_READER")
  * @OA\Response(response="401", ref="#/components/responses/Unauthenticated")
  * @OA\Response(response="403", ref="#/components/responses/Unauthorized")
  * @OA\Tag(name="Metrics")
  */
+#[Route(path: '/metrics')]
+#[IsGranted('ROLE_API_READER')]
 class MetricsController extends AbstractFOSRestController
 {
     public function __construct(

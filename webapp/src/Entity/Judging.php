@@ -11,108 +11,81 @@ use Ramsey\Uuid\Uuid;
 
 /**
  * Result of judging a submission.
- *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="judging",
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Result of judging a submission"},
- *     indexes={
- *         @ORM\Index(name="submitid", columns={"submitid"}),
- *         @ORM\Index(name="cid", columns={"cid"}),
- *         @ORM\Index(name="rejudgingid", columns={"rejudgingid"}),
- *         @ORM\Index(name="prevjudgingid", columns={"prevjudgingid"})
- *     })
  */
+#[ORM\Table(name: 'judging', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'Result of judging a submission'])]
+#[ORM\Index(name: 'submitid', columns: ['submitid'])]
+#[ORM\Index(name: 'cid', columns: ['cid'])]
+#[ORM\Index(name: 'rejudgingid', columns: ['rejudgingid'])]
+#[ORM\Index(name: 'prevjudgingid', columns: ['prevjudgingid'])]
+#[ORM\Entity]
 class Judging extends BaseApiEntity implements ExternalRelationshipEntityInterface
 {
     final public const RESULT_CORRECT = 'correct';
     final public const RESULT_COMPILER_ERROR = 'compiler-error';
 
     /**
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     * @ORM\Column(type="integer", name="judgingid", length=4,
-     *     options={"comment"="Judging ID","unsigned"=true}, nullable=false)
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
+    #[ORM\Column(type: 'integer', name: 'judgingid', length: 4, options: ['comment' => 'Judging ID', 'unsigned' => true], nullable: false)]
     protected int $judgingid;
 
     /**
-     * @ORM\Column(type="decimal", precision=32, scale=9, name="starttime",
-     *     options={"comment"="Time judging started", "unsigned"=true},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'decimal', precision: 32, scale: 9, name: 'starttime', options: ['comment' => 'Time judging started', 'unsigned' => true], nullable: true)]
     private string|float|null $starttime = null;
 
     /**
-     * @ORM\Column(type="decimal", precision=32, scale=9, name="endtime",
-     *     options={"comment"="Time judging ended, null = still busy",
-     *              "unsigned"=true},
-     *     nullable=true)
      * @Serializer\Exclude()
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'decimal', precision: 32, scale: 9, name: 'endtime', options: ['comment' => 'Time judging ended, null = still busy', 'unsigned' => true], nullable: true)]
     private string|float|null $endtime = null;
 
     /**
-     * @ORM\Column(type="string", name="result", length=32,
-     *     options={"comment"="Result string as defined in config.php"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'result', length: 32, options: ['comment' => 'Result string as defined in config.php'], nullable: true)]
     private ?string $result = null;
 
     /**
-     * @ORM\Column(type="boolean", name="verified",
-     *     options={"comment"="Result verified by jury member?",
-     *              "default"="0"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'verified', options: ['comment' => 'Result verified by jury member?', 'default' => 0], nullable: false)]
     private bool $verified = false;
 
     /**
-     * @ORM\Column(type="string", name="jury_member", length=255,
-     *     options={"comment"="Name of jury member who verified this"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'jury_member', length: 255, options: ['comment' => 'Name of jury member who verified this'], nullable: true)]
     private ?string $jury_member = null;
 
     /**
-     * @ORM\Column(type="string", name="verify_comment", length=255,
-     *     options={"comment"="Optional additional information provided by the verifier"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'verify_comment', length: 255, options: ['comment' => 'Optional additional information provided by the verifier'], nullable: true)]
     private ?string $verify_comment = null;
 
     /**
-     * @ORM\Column(type="boolean", name="valid",
-     *     options={"comment"="Old judging is marked as invalid when rejudging",
-     *              "default"="1"},
-     *     nullable=false)
      * @Serializer\Groups({"Nonstrict"})
      */
+    #[ORM\Column(type: 'boolean', name: 'valid', options: ['comment' => 'Old judging is marked as invalid when rejudging', 'default' => 1], nullable: false)]
     private bool $valid = true;
 
     /**
      * @var resource|null
-     * @ORM\Column(type="blob", name="output_compile",
-     *     options={"comment"="Output of the compiling the program"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'blob', name: 'output_compile', options: ['comment' => 'Output of the compiling the program'], nullable: true)]
     private $output_compile;
 
     /**
-     * @ORM\Column(type="blobtext", length=4294967295, name="metadata",
-     *     options={"comment"="Compilation metadata"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'blobtext', length: 4294967295, name: 'metadata', options: ['comment' => 'Compilation metadata'], nullable: true)]
     private ?string $compile_metadata = null;
 
     /**
@@ -121,80 +94,72 @@ class Judging extends BaseApiEntity implements ExternalRelationshipEntityInterfa
     private ?string $output_compile_as_string = null;
 
     /**
-     * @ORM\Column(type="boolean", name="seen",
-     *     options={"comment"="Whether the team has seen this judging",
-     *              "default"="0"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'seen', options: ['comment' => 'Whether the team has seen this judging', 'default' => 0], nullable: false)]
     private bool $seen = false;
 
     /**
-     * @ORM\Column(type="boolean", name="judge_completely",
-     *     options={"comment"="Explicitly requested to be judged completely.",
-     *              "default"="0"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'judge_completely', options: ['comment' => 'Explicitly requested to be judged completely.', 'default' => 0], nullable: false)]
     private bool $judgeCompletely = false;
 
     /**
-     * @ORM\Column(type="string", name="uuid",
-     *     options={"comment"="UUID, to make caching of compilation results safe."},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'uuid', options: ['comment' => 'UUID, to make caching of compilation results safe.'], nullable: false)]
     private string $uuid;
 
 
     /**
-     * @ORM\ManyToOne(targetEntity="Contest")
-     * @ORM\JoinColumn(name="cid", referencedColumnName="cid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Contest')]
+    #[ORM\JoinColumn(name: 'cid', referencedColumnName: 'cid', onDelete: 'CASCADE')]
     private ?Contest $contest = null;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Submission", inversedBy="judgings")
-     * @ORM\JoinColumn(name="submitid", referencedColumnName="submitid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Submission', inversedBy: 'judgings')]
+    #[ORM\JoinColumn(name: 'submitid', referencedColumnName: 'submitid', onDelete: 'CASCADE')]
     private Submission $submission;
 
     /**
      * rejudgings have one parent judging
-     * @ORM\ManyToOne(targetEntity="Rejudging", inversedBy="judgings")
-     * @ORM\JoinColumn(name="rejudgingid", referencedColumnName="rejudgingid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Rejudging', inversedBy: 'judgings')]
+    #[ORM\JoinColumn(name: 'rejudgingid', referencedColumnName: 'rejudgingid', onDelete: 'SET NULL')]
     private ?Rejudging $rejudging = null;
 
     /**
      * Rejudgings have one parent judging.
-     * @ORM\ManyToOne(targetEntity="Judging")
-     * @ORM\JoinColumn(name="prevjudgingid", referencedColumnName="judgingid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Judging')]
+    #[ORM\JoinColumn(name: 'prevjudgingid', referencedColumnName: 'judgingid', onDelete: 'SET NULL')]
     private ?Judging $original_judging = null;
 
     /**
-     * @ORM\OneToMany(targetEntity="JudgingRun", mappedBy="judging")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'JudgingRun', mappedBy: 'judging')]
     private Collection $runs;
 
     /**
-     * @ORM\OneToMany(targetEntity="DebugPackage", mappedBy="judging")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'DebugPackage', mappedBy: 'judging')]
     private Collection $debug_packages;
 
     /**
      * Rejudgings have one parent judging.
-     * @ORM\ManyToOne(targetEntity="InternalError", inversedBy="affectedJudgings")
-     * @ORM\JoinColumn(name="errorid", referencedColumnName="errorid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'InternalError', inversedBy: 'affectedJudgings')]
+    #[ORM\JoinColumn(name: 'errorid', referencedColumnName: 'errorid', onDelete: 'SET NULL')]
     private ?InternalError $internalError = null;
 
     public function getMaxRuntime(): ?float

@@ -9,54 +9,35 @@ use JMS\Serializer\Annotation as Serializer;
 
 /**
  * Individual judge tasks.
- *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="judgetask",
- *     indexes={
- *         @ORM\Index(name="judgehostid", columns={"judgehostid"}),
- *         @ORM\Index(name="priority", columns={"priority"}),
- *         @ORM\Index(name="jobid", columns={"jobid"}),
- *         @ORM\Index(name="submitid", columns={"submitid"}),
- *         @ORM\Index(name="valid", columns={"valid"}),
- *         @ORM\Index(name="judgehostid_jobid", columns={"judgehostid", "jobid"}),
- *         @ORM\Index(name="judgehostid_valid_priority", columns={"judgehostid", "valid", "priority"}),
- *         @ORM\Index(name="specific_type", columns={"judgehostid", "starttime", "valid", "type", "priority", "judgetaskid"}),
- *     },
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Individual judge tasks."}
- *     )
  */
+#[ORM\Table(name: 'judgetask', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'Individual judge tasks.'])]
+#[ORM\Index(name: 'judgehostid', columns: ['judgehostid'])]
+#[ORM\Index(name: 'priority', columns: ['priority'])]
+#[ORM\Index(name: 'jobid', columns: ['jobid'])]
+#[ORM\Index(name: 'submitid', columns: ['submitid'])]
+#[ORM\Index(name: 'valid', columns: ['valid'])]
+#[ORM\Index(name: 'judgehostid_jobid', columns: ['judgehostid', 'jobid'])]
+#[ORM\Index(name: 'judgehostid_valid_priority', columns: ['judgehostid', 'valid', 'priority'])]
+#[ORM\Index(name: 'specific_type', columns: ['judgehostid', 'starttime', 'valid', 'type', 'priority', 'judgetaskid'])]
+#[ORM\Entity]
 class JudgeTask
 {
-    /**
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     * @ORM\Column(type="integer", name="judgetaskid", length=4,
-     *     options={"comment"="Judgetask ID","unsigned"=true},
-     *     nullable=false)
-     */
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
+    #[ORM\Column(type: 'integer', name: 'judgetaskid', length: 4, options: ['comment' => 'Judgetask ID', 'unsigned' => true], nullable: false)]
     private int $judgetaskid;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Judgehost", inversedBy="judgetasks")
-     * @ORM\JoinColumn(name="judgehostid", referencedColumnName="judgehostid")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Judgehost', inversedBy: 'judgetasks')]
+    #[ORM\JoinColumn(name: 'judgehostid', referencedColumnName: 'judgehostid')]
     private ?Judgehost $judgehost = null;
 
-    /**
-     * @ORM\Column(type="judge_task_type", name="type",
-     *     options={"comment"="Type of the judge task.","default"="judging_run"},
-     *     nullable=false)
-     */
+    #[ORM\Column(type: 'judge_task_type', name: 'type', options: ['comment' => 'Type of the judge task.', 'default' => 'judging_run'], nullable: false)]
     private string $type = JudgeTaskType::JUDGING_RUN;
 
-    /**
-     * @ORM\Column(type="integer", name="priority", length=4,
-     *     options={"comment"="Priority; negative means higher priority",
-     *              "unsigned"=false},
-     *     nullable=false)
-     */
+    #[ORM\Column(type: 'integer', name: 'priority', length: 4, options: ['comment' => 'Priority; negative means higher priority', 'unsigned' => false], nullable: false)]
     private int $priority;
 
     final public const PRIORITY_HIGH = -10;
@@ -64,116 +45,77 @@ class JudgeTask
     final public const PRIORITY_LOW = 10;
 
     /**
-     * @ORM\Column(type="integer", name="jobid", length=4,
-     *     options={"comment"="All judgetasks with the same jobid belong together.","unsigned"=true},
-     *     nullable=true)
      * @Serializer\Type("string")
      */
+    #[ORM\Column(type: 'integer', name: 'jobid', length: 4, options: ['comment' => 'All judgetasks with the same jobid belong together.', 'unsigned' => true], nullable: true)]
     private ?int $jobid = null;
 
-    /**
-     * @ORM\Column(type="string", name="uuid",
-     *     options={"comment"="Optional UUID for the associated judging, used for caching."},
-     *     nullable=true)
-     */
+    #[ORM\Column(type: 'string', name: 'uuid', options: ['comment' => 'Optional UUID for the associated judging, used for caching.'], nullable: true)]
     private ?string $uuid = null;
 
     /**
-     * @ORM\Column(type="integer", name="submitid", length=4,
-     *     options={"comment"="Submission ID being judged","unsigned"=true},
-     *     nullable=true)
      * @Serializer\Type("string")
      */
+    #[ORM\Column(type: 'integer', name: 'submitid', length: 4, options: ['comment' => 'Submission ID being judged', 'unsigned' => true], nullable: true)]
     private ?int $submitid = null;
 
     // Note that we rely on the fact here that files with an ID are immutable,
     // so clients are allowed to cache them on disk.
-
     /**
-     * @ORM\Column(type="integer", name="compile_script_id", length=4,
-     *     options={"comment"="Compile script ID","unsigned"=true},
-     *     nullable=true)
      * @Serializer\Type("string")
      */
+    #[ORM\Column(type: 'integer', name: 'compile_script_id', length: 4, options: ['comment' => 'Compile script ID', 'unsigned' => true], nullable: true)]
     private ?int $compile_script_id = null;
 
     /**
-     * @ORM\Column(type="integer", name="run_script_id", length=4,
-     *     options={"comment"="Run script ID","unsigned"=true},
-     *     nullable=true)
      * @Serializer\Type("string")
      */
+    #[ORM\Column(type: 'integer', name: 'run_script_id', length: 4, options: ['comment' => 'Run script ID', 'unsigned' => true], nullable: true)]
     private ?int $run_script_id = null;
 
     /**
-     * @ORM\Column(type="integer", name="compare_script_id", length=4,
-     *     options={"comment"="Compare script ID","unsigned"=true},
-     *     nullable=true)
      * @Serializer\Type("string")
      */
+    #[ORM\Column(type: 'integer', name: 'compare_script_id', length: 4, options: ['comment' => 'Compare script ID', 'unsigned' => true], nullable: true)]
     private ?int $compare_script_id = null;
 
     /**
-     * @ORM\Column(type="integer", name="testcase_id", length=4,
-     *     options={"comment"="Testcase ID","unsigned"=true},
-     *     nullable=true)
      * @Serializer\Type("string")
      */
+    #[ORM\Column(type: 'integer', name: 'testcase_id', length: 4, options: ['comment' => 'Testcase ID', 'unsigned' => true], nullable: true)]
     private ?int $testcase_id = null;
 
     /**
-     * @ORM\Column(type="string", name="testcase_hash", length=100,
-     *     options={"comment"="Testcase Hash"},
-     *     nullable=true)
      * @Serializer\Type("string")
      */
+    #[ORM\Column(type: 'string', name: 'testcase_hash', length: 100, options: ['comment' => 'Testcase Hash'], nullable: true)]
     private ?string $testcase_hash = null;
 
-    /**
-     * @ORM\Column(type="text", name="compile_config",
-     *     options={"comment"="The compile config as JSON-blob.",
-     *              "collation"="utf8mb4_bin", "default"=NULL},
-     *     nullable=true)
-     */
+    #[ORM\Column(type: 'text', name: 'compile_config', options: ['comment' => 'The compile config as JSON-blob.', 'collation' => 'utf8mb4_bin', 'default' => null], nullable: true)]
     protected ?string $compile_config = null;
 
-    /**
-     * @ORM\Column(type="text", name="run_config",
-     *     options={"comment"="The run config as JSON-blob.",
-     *              "collation"="utf8mb4_bin", "default"=NULL},
-     *     nullable=true)
-     */
+    #[ORM\Column(type: 'text', name: 'run_config', options: ['comment' => 'The run config as JSON-blob.', 'collation' => 'utf8mb4_bin', 'default' => null], nullable: true)]
     protected ?string $run_config = null;
 
-    /**
-     * @ORM\Column(type="text", name="compare_config",
-     *     options={"comment"="The compare config as JSON-blob.",
-     *              "collation"="utf8mb4_bin", "default"=NULL},
-     *     nullable=true)
-     */
+    #[ORM\Column(type: 'text', name: 'compare_config', options: ['comment' => 'The compare config as JSON-blob.', 'collation' => 'utf8mb4_bin', 'default' => null], nullable: true)]
     protected ?string $compare_config = null;
 
     /**
-     * @ORM\Column(type="boolean", name="valid",
-     *     options={"comment"="Only handed out if still valid.",
-     *              "default"="1"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'valid', options: ['comment' => 'Only handed out if still valid.', 'default' => 1], nullable: false)]
     protected bool $valid = true;
 
     /**
-     * @ORM\Column(type="decimal", precision=32, scale=9, name="starttime",
-     *     options={"comment"="Time the judgetask was started", "unsigned"=true},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'decimal', precision: 32, scale: 9, name: 'starttime', options: ['comment' => 'Time the judgetask was started', 'unsigned' => true], nullable: true)]
     private string|float|null $starttime = null;
 
     /**
-     * @ORM\OneToMany(targetEntity="JudgingRun", mappedBy="judgetask")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'JudgingRun', mappedBy: 'judgetask')]
     private Collection $judging_runs;
 
     public function __construct()

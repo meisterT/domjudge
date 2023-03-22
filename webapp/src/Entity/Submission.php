@@ -12,174 +12,152 @@ use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 
 /**
  * All incoming submissions.
- *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="submission",
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4","comment"="All incoming submissions"},
- *     indexes={
- *         @ORM\Index(name="teamid", columns={"cid","teamid"}),
- *         @ORM\Index(name="teamid_2", columns={"teamid"}),
- *         @ORM\Index(name="userid", columns={"userid"}),
- *         @ORM\Index(name="probid", columns={"probid"}),
- *         @ORM\Index(name="langid", columns={"langid"}),
- *         @ORM\Index(name="origsubmitid", columns={"origsubmitid"}),
- *         @ORM\Index(name="rejudgingid", columns={"rejudgingid"}),
- *         @ORM\Index(name="probid_2", columns={"cid","probid"})
- *     },
- *     uniqueConstraints={
- *         @ORM\UniqueConstraint(name="externalid", columns={"cid", "externalid"}, options={"lengths": {null, 190}}),
- *     })
- * @UniqueEntity("externalid")
  */
+#[ORM\Table(name: 'submission', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'All incoming submissions'])]
+#[ORM\Index(name: 'teamid', columns: ['cid', 'teamid'])]
+#[ORM\Index(name: 'teamid_2', columns: ['teamid'])]
+#[ORM\Index(name: 'userid', columns: ['userid'])]
+#[ORM\Index(name: 'probid', columns: ['probid'])]
+#[ORM\Index(name: 'langid', columns: ['langid'])]
+#[ORM\Index(name: 'origsubmitid', columns: ['origsubmitid'])]
+#[ORM\Index(name: 'rejudgingid', columns: ['rejudgingid'])]
+#[ORM\Index(name: 'probid_2', columns: ['cid', 'probid'])]
+#[ORM\UniqueConstraint(name: 'externalid', columns: ['cid', 'externalid'], options: ['lengths' => [null, 190]])]
+#[ORM\Entity]
+#[UniqueEntity('externalid')]
 class Submission extends BaseApiEntity implements ExternalRelationshipEntityInterface
 {
     /**
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     * @ORM\Column(type="integer", length=4, name="submitid",
-     *     options={"comment"="Submission ID","unsigned"=true},
-     *     nullable=false)
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
+    #[ORM\Column(type: 'integer', length: 4, name: 'submitid', options: ['comment' => 'Submission ID', 'unsigned' => true], nullable: false)]
     protected int $submitid;
 
     /**
-     * @ORM\Column(type="string", name="externalid", length=255,
-     *     options={"comment"="Specifies ID of submission if imported from external CCS, e.g. Kattis",
-     *              "collation"="utf8mb4_bin"},
-     *     nullable=true)
      * @Serializer\Groups({"Nonstrict"})
      * @Serializer\SerializedName("external_id")
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'string', name: 'externalid', length: 255, options: ['comment' => 'Specifies ID of submission if imported from external CCS, e.g. Kattis', 'collation' => 'utf8mb4_bin'], nullable: true)]
     protected ?string $externalid = null;
 
     /**
      * @var double|string
-     * @ORM\Column(type="decimal", precision=32, scale=9, name="submittime", options={"comment"="Time submitted",
-     *                             "unsigned"=true}, nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'decimal', precision: 32, scale: 9, name: 'submittime', options: ['comment' => 'Time submitted', 'unsigned' => true], nullable: false)]
     private string|float|null $submittime = null;
 
     /**
-     * @ORM\Column(type="boolean", name="valid",
-     *     options={"comment"="If false ignore this submission in all scoreboard calculations",
-     *              "default"="1"},
-     *     nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'boolean', name: 'valid', options: ['comment' => 'If false ignore this submission in all scoreboard calculations', 'default' => 1], nullable: false)]
     private bool $valid = true;
 
     /**
-     * @ORM\Column(type="json", name="expected_results", length=255,
-     *     options={"comment"="JSON encoded list of expected results - used to validate jury submissions"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'json', name: 'expected_results', length: 255, options: ['comment' => 'JSON encoded list of expected results - used to validate jury submissions'], nullable: true)]
     private ?array $expected_results;
 
     /**
-     * @ORM\Column(type="string", name="entry_point", length=255,
-     *     options={"comment"="Optional entry point. Can be used e.g. for java main class."},
-     *     nullable=true)
      * @Serializer\Expose(if="context.getAttribute('domjudge_service').checkrole('jury')")
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'string', name: 'entry_point', length: 255, options: ['comment' => 'Optional entry point. Can be used e.g. for java main class.'], nullable: true)]
     private ?string $entry_point = null;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Contest", inversedBy="submissions")
-     * @ORM\JoinColumn(name="cid", referencedColumnName="cid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Contest', inversedBy: 'submissions')]
+    #[ORM\JoinColumn(name: 'cid', referencedColumnName: 'cid', onDelete: 'CASCADE')]
     private Contest $contest;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Language", inversedBy="submissions")
-     * @ORM\JoinColumn(name="langid", referencedColumnName="langid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Language', inversedBy: 'submissions')]
+    #[ORM\JoinColumn(name: 'langid', referencedColumnName: 'langid', onDelete: 'CASCADE')]
     private Language $language;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Team", inversedBy="submissions")
-     * @ORM\JoinColumn(name="teamid", referencedColumnName="teamid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Team', inversedBy: 'submissions')]
+    #[ORM\JoinColumn(name: 'teamid', referencedColumnName: 'teamid', onDelete: 'CASCADE')]
     private Team $team;
 
     /**
-     * @ORM\ManyToOne(targetEntity="User", inversedBy="submissions")
-     * @ORM\JoinColumn(name="userid", referencedColumnName="userid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'User', inversedBy: 'submissions')]
+    #[ORM\JoinColumn(name: 'userid', referencedColumnName: 'userid', onDelete: 'CASCADE')]
     private ?User $user = null;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Problem", inversedBy="submissions")
-     * @ORM\JoinColumn(name="probid", referencedColumnName="probid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Problem', inversedBy: 'submissions')]
+    #[ORM\JoinColumn(name: 'probid', referencedColumnName: 'probid', onDelete: 'CASCADE')]
     private Problem $problem;
 
     /**
-     * @ORM\ManyToOne(targetEntity="App\Entity\ContestProblem", inversedBy="submissions")
-     * @ORM\JoinColumns({
-     *   @ORM\JoinColumn(name="cid", referencedColumnName="cid", onDelete="CASCADE"),
-     *   @ORM\JoinColumn(name="probid", referencedColumnName="probid", onDelete="CASCADE")
-     * })
      * @Serializer\Exclude()
      */
+    #[ORM\JoinColumn(name: 'cid', referencedColumnName: 'cid', onDelete: 'CASCADE')]
+    #[ORM\JoinColumn(name: 'probid', referencedColumnName: 'probid', onDelete: 'CASCADE')]
+    #[ORM\ManyToOne(targetEntity: \App\Entity\ContestProblem::class, inversedBy: 'submissions')]
     private ContestProblem $contest_problem;
 
     /**
-     * @ORM\OneToMany(targetEntity="Judging", mappedBy="submission")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'Judging', mappedBy: 'submission')]
     private Collection $judgings;
 
     /**
-     * @ORM\OneToMany(targetEntity="App\Entity\ExternalJudgement", mappedBy="submission")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: \App\Entity\ExternalJudgement::class, mappedBy: 'submission')]
     private Collection $external_judgements;
 
     /**
      * @var ArrayCollection
-     * @ORM\OneToMany(targetEntity="SubmissionFile", mappedBy="submission")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'SubmissionFile', mappedBy: 'submission')]
     private Collection $files;
 
     /**
-     * @ORM\OneToMany(targetEntity="Balloon", mappedBy="submission")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'Balloon', mappedBy: 'submission')]
     private Collection $balloons;
 
     /**
      * rejudgings have one parent judging
-     * @ORM\ManyToOne(targetEntity="Rejudging", inversedBy="submissions")
-     * @ORM\JoinColumn(name="rejudgingid", referencedColumnName="rejudgingid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Rejudging', inversedBy: 'submissions')]
+    #[ORM\JoinColumn(name: 'rejudgingid', referencedColumnName: 'rejudgingid', onDelete: 'SET NULL')]
     private ?Rejudging $rejudging = null;
 
     /**
-     * @ORM\ManyToOne(targetEntity="App\Entity\Submission", inversedBy="resubmissions")
-     * @ORM\JoinColumn(name="origsubmitid", referencedColumnName="submitid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: \App\Entity\Submission::class, inversedBy: 'resubmissions')]
+    #[ORM\JoinColumn(name: 'origsubmitid', referencedColumnName: 'submitid', onDelete: 'SET NULL')]
     private ?Submission $originalSubmission = null;
 
     /**
      * @var ArrayCollection
-     * @ORM\OneToMany(targetEntity="App\Entity\Submission", mappedBy="originalSubmission")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: \App\Entity\Submission::class, mappedBy: 'originalSubmission')]
     private Collection $resubmissions;
 
     /**

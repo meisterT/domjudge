@@ -11,132 +11,110 @@ use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 
 /**
  * Clarification requests by teams and responses by the jury.
- *
- * @ORM\Entity()
- * @ORM\Table(
- *     name="clarification",
- *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Clarification requests by teams and responses by the jury"},
- *     indexes={
- *         @ORM\Index(name="respid", columns={"respid"}),
- *         @ORM\Index(name="probid", columns={"probid"}),
- *         @ORM\Index(name="cid", columns={"cid"}),
- *         @ORM\Index(name="cid_2", columns={"cid","answered","submittime"}),
- *         @ORM\Index(name="sender", columns={"sender"}),
- *         @ORM\Index(name="recipient", columns={"recipient"})
- *     },
- *     uniqueConstraints={
- *         @ORM\UniqueConstraint(name="externalid", columns={"cid", "externalid"}, options={"lengths": {null, 190}})
- *     })
- * @UniqueEntity("externalid")
  */
+#[ORM\Table(name: 'clarification', options: ['collation' => 'utf8mb4_unicode_ci', 'charset' => 'utf8mb4', 'comment' => 'Clarification requests by teams and responses by the jury'])]
+#[ORM\Index(name: 'respid', columns: ['respid'])]
+#[ORM\Index(name: 'probid', columns: ['probid'])]
+#[ORM\Index(name: 'cid', columns: ['cid'])]
+#[ORM\Index(name: 'cid_2', columns: ['cid', 'answered', 'submittime'])]
+#[ORM\Index(name: 'sender', columns: ['sender'])]
+#[ORM\Index(name: 'recipient', columns: ['recipient'])]
+#[ORM\UniqueConstraint(name: 'externalid', columns: ['cid', 'externalid'], options: ['lengths' => [null, 190]])]
+#[ORM\Entity]
+#[UniqueEntity('externalid')]
 class Clarification extends BaseApiEntity implements ExternalRelationshipEntityInterface
 {
     /**
-     * @ORM\Id
-     * @ORM\GeneratedValue(strategy="AUTO")
-     * @ORM\Column(type="integer", length=4, name="clarid",
-     *     options={"comment"="Clarification ID","unsigned"=true},
-     *     nullable=false)
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
+    #[ORM\Id]
+    #[ORM\GeneratedValue(strategy: 'AUTO')]
+    #[ORM\Column(type: 'integer', length: 4, name: 'clarid', options: ['comment' => 'Clarification ID', 'unsigned' => true], nullable: false)]
     protected int $clarid;
 
     /**
-     * @ORM\Column(type="string", name="externalid", length=255,
-     *     options={"comment"="Clarification ID in an external system, should be unique inside a single contest",
-     *              "collation"="utf8mb4_bin"},
-     *     nullable=true)
      * @Serializer\Groups({"Nonstrict"})
      * @OA\Property(nullable=true)
      */
+    #[ORM\Column(type: 'string', name: 'externalid', length: 255, options: ['comment' => 'Clarification ID in an external system, should be unique inside a single contest', 'collation' => 'utf8mb4_bin'], nullable: true)]
     protected ?string $externalid = null;
 
     /**
-     * @ORM\Column(type="decimal", precision=32, scale=9, name="submittime", options={"comment"="Time sent", "unsigned"=true}, nullable=false)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'decimal', precision: 32, scale: 9, name: 'submittime', options: ['comment' => 'Time sent', 'unsigned' => true], nullable: false)]
     private string|float $submittime;
 
     /**
-     * @ORM\Column(type="string", name="jury_member", length=255,
-     *     options={"comment"="Name of jury member who answered this"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'jury_member', length: 255, options: ['comment' => 'Name of jury member who answered this'], nullable: true)]
     private ?string $jury_member = null;
 
     /**
-     * @ORM\Column(type="string", name="category", length=255,
-     *     options={"comment"="Category associated to this clarification; only set for non problem clars"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'category', length: 255, options: ['comment' => 'Category associated to this clarification; only set for non problem clars'], nullable: true)]
     private ?string $category = null;
 
     /**
-     * @ORM\Column(type="string", name="queue", length=255,
-     *     options={"comment"="Queue associated to this clarification"},
-     *     nullable=true)
      * @Serializer\Exclude()
      */
+    #[ORM\Column(type: 'string', name: 'queue', length: 255, options: ['comment' => 'Queue associated to this clarification'], nullable: true)]
     private ?string $queue = null;
 
     /**
-     * @ORM\Column(type="text", length=4294967295, name="body",
-     *     options={"comment"="Clarification text"},
-     *     nullable=false)
      * @Serializer\SerializedName("text")
      */
+    #[ORM\Column(type: 'text', length: 4294967295, name: 'body', options: ['comment' => 'Clarification text'], nullable: false)]
     private string $body;
 
     /**
-     * @ORM\Column(type="boolean", name="answered",
-     *     options={"comment"="Has been answered by jury?","default":"0"},
-     *     nullable=false)
      * @Serializer\Groups({"RestrictedNonstrict"})
      */
+    #[ORM\Column(type: 'boolean', name: 'answered', options: ['comment' => 'Has been answered by jury?', 'default' => 0], nullable: false)]
     private bool $answered = false;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Problem", inversedBy="clarifications")
-     * @ORM\JoinColumn(name="probid", referencedColumnName="probid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Problem', inversedBy: 'clarifications')]
+    #[ORM\JoinColumn(name: 'probid', referencedColumnName: 'probid', onDelete: 'SET NULL')]
     private ?Problem $problem = null;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Contest", inversedBy="clarifications")
-     * @ORM\JoinColumn(name="cid", referencedColumnName="cid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Contest', inversedBy: 'clarifications')]
+    #[ORM\JoinColumn(name: 'cid', referencedColumnName: 'cid', onDelete: 'CASCADE')]
     private Contest $contest;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Clarification", inversedBy="replies")
-     * @ORM\JoinColumn(name="respid", referencedColumnName="clarid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Clarification', inversedBy: 'replies')]
+    #[ORM\JoinColumn(name: 'respid', referencedColumnName: 'clarid', onDelete: 'SET NULL')]
     private ?Clarification $in_reply_to = null;
 
     /**
-     * @ORM\OneToMany(targetEntity="Clarification", mappedBy="in_reply_to")
      * @Serializer\Exclude()
      */
+    #[ORM\OneToMany(targetEntity: 'Clarification', mappedBy: 'in_reply_to')]
     private Collection $replies;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Team", inversedBy="sent_clarifications")
-     * @ORM\JoinColumn(name="sender", referencedColumnName="teamid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Team', inversedBy: 'sent_clarifications')]
+    #[ORM\JoinColumn(name: 'sender', referencedColumnName: 'teamid', onDelete: 'CASCADE')]
     private ?Team $sender = null;
 
     /**
-     * @ORM\ManyToOne(targetEntity="Team", inversedBy="received_clarifications")
-     * @ORM\JoinColumn(name="recipient", referencedColumnName="teamid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
+    #[ORM\ManyToOne(targetEntity: 'Team', inversedBy: 'received_clarifications')]
+    #[ORM\JoinColumn(name: 'recipient', referencedColumnName: 'teamid', onDelete: 'CASCADE')]
     private ?Team $recipient = null;
 
     public function __construct()

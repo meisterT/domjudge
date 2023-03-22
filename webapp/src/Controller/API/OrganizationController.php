@@ -137,10 +137,10 @@ class OrganizationController extends AbstractRestController
      * Delete the logo for the given organization.
      * @Rest\Delete("contests/{cid}/organizations/{id}/logo", name="delete_organization_logo")
      * @Rest\Delete("organizations/{id}/logo")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\Response(response="204", description="Deleting logo succeeded")
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteLogoAction(Request $request, string $id): Response
     {
         $contestId = null;
@@ -188,10 +188,10 @@ class OrganizationController extends AbstractRestController
      *         )
      *     )
      * )
-     * @IsGranted("ROLE_ADMIN")
      * @OA\Response(response="204", description="Setting logo succeeded")
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function setLogoAction(Request $request, string $id, ValidatorInterface $validator): Response
     {
         /** @var TeamAffiliation $teamAffiliation */
@@ -234,7 +234,6 @@ class OrganizationController extends AbstractRestController
      *
      * @Rest\Post("contests/{cid}/organizations")
      * @Rest\Post("organizations")
-     * @IsGranted("ROLE_API_WRITER")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -252,6 +251,7 @@ class OrganizationController extends AbstractRestController
      *     @Model(type=TeamAffiliation::class)
      * )
      */
+    #[IsGranted('ROLE_API_WRITER')]
     public function addAction(Request $request, ImportExportService $importExport): Response
     {
         $saved = [];

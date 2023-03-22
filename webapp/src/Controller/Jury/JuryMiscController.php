@@ -30,10 +30,10 @@ use Symfony\Component\Routing\RouterInterface;
 /**
  * Class JuryMiscController
  *
- * @Route("/jury")
  *
  * @package App\Controller\Jury
  */
+#[Route(path: '/jury')]
 class JuryMiscController extends BaseController
 {
     /**
@@ -43,28 +43,22 @@ class JuryMiscController extends BaseController
     {
     }
 
-    /**
-     * @Route("", name="jury_index")
-     * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_BALLOON') or is_granted('ROLE_CLARIFICATION_RW')")
-     */
+    #[Route(path: '', name: 'jury_index')]
+    #[Security("is_granted('ROLE_JURY') or is_granted('ROLE_BALLOON') or is_granted('ROLE_CLARIFICATION_RW')")]
     public function indexAction(): Response
     {
         return $this->render('jury/index.html.twig');
     }
 
-    /**
-     * @Route("/updates", methods={"GET"}, name="jury_ajax_updates")
-     * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_BALLOON')")
-     */
+    #[Route(path: '/updates', methods: ['GET'], name: 'jury_ajax_updates')]
+    #[Security("is_granted('ROLE_JURY') or is_granted('ROLE_BALLOON')")]
     public function updatesAction(): JsonResponse
     {
         return $this->json($this->dj->getUpdates());
     }
 
-    /**
-     * @Route("/ajax/{datatype}", methods={"GET"}, name="jury_ajax_data")
-     * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_BALLOON')")
-     */
+    #[Route(path: '/ajax/{datatype}', methods: ['GET'], name: 'jury_ajax_data')]
+    #[Security("is_granted('ROLE_JURY') or is_granted('ROLE_BALLOON')")]
     public function ajaxDataAction(Request $request, string $datatype): JsonResponse
     {
         $q  = $request->query->get('q');
@@ -187,10 +181,8 @@ class JuryMiscController extends BaseController
         return $this->json(['results' => $results]);
     }
 
-    /**
-     * @Route("/refresh-cache", name="jury_refresh_cache")
-     * @IsGranted("ROLE_ADMIN")
-     */
+    #[Route(path: '/refresh-cache', name: 'jury_refresh_cache')]
+    #[IsGranted('ROLE_ADMIN')]
     public function refreshCacheAction(Request $request, ScoreboardService $scoreboardService): Response
     {
         // Note: we use a XMLHttpRequest here as Symfony does not support
@@ -236,10 +228,8 @@ class JuryMiscController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/judging-verifier", name="jury_judging_verifier")
-     * @IsGranted("ROLE_JURY")
-     */
+    #[Route(path: '/judging-verifier', name: 'jury_judging_verifier')]
+    #[IsGranted('ROLE_JURY')]
     public function judgingVerifierAction(Request $request): Response
     {
         /** @var Submission[] $submissions */
@@ -325,9 +315,7 @@ class JuryMiscController extends BaseController
         ]);
     }
 
-    /**
-     * @Route("/change-contest/{contestId<-?\d+>}", name="jury_change_contest")
-     */
+    #[Route(path: '/change-contest/{contestId<-?\d+>}', name: 'jury_change_contest')]
     public function changeContestAction(Request $request, RouterInterface $router, int $contestId): Response
     {
         if ($this->isLocalReferer($router, $request)) {

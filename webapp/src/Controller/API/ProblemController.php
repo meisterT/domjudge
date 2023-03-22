@@ -54,7 +54,6 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
     /**
      * Add one or more problems.
      * @Rest\Post("/add-data")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -77,6 +76,7 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
      * @throws BadRequestHttpException
      * @throws NonUniqueResultException
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function addProblemsAction(Request $request): array
     {
         // Note we use /add-data as URL here since we already have a route listening
@@ -167,7 +167,6 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
     /**
      * Add a problem to this contest.
      * @Rest\Post("")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -201,6 +200,7 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
      * )
      * @throws NonUniqueResultException
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function addProblemAction(Request $request): array
     {
         $contestId = $this->getContestId($request);
@@ -216,10 +216,10 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
     /**
      * Unlink a problem from this contest.
      * @Rest\Delete("/{id}")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\Response(response="204", description="Problem unlinked from contest succeeded")
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function unlinkProblemAction(Request $request, string $id): Response
     {
         $problem = $this->em->createQueryBuilder()
@@ -269,7 +269,6 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
     /**
      * Link an existing problem to this contest.
      * @Rest\Put("/{id}")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\RequestBody(
      *     required=true,
      *     @OA\MediaType(
@@ -284,6 +283,7 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
      * )
      * @OA\Parameter(ref="#/components/parameters/id")
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function linkProblemAction(Request $request, string $id): Response
     {
         $required = ['label'];

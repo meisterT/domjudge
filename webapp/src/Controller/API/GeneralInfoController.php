@@ -121,7 +121,6 @@ class GeneralInfoController extends AbstractFOSRestController
     /**
      * Get general status information
      * @Rest\Get("/status")
-     * @IsGranted("ROLE_API_READER")
      * @OA\Response(
      *     response="200",
      *     description="General status information for the currently active contests",
@@ -139,6 +138,7 @@ class GeneralInfoController extends AbstractFOSRestController
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
+    #[IsGranted('ROLE_API_READER')]
     public function getStatusAction(): array
     {
         $contests = $this->dj->getCurrentContests(null);
@@ -161,13 +161,13 @@ class GeneralInfoController extends AbstractFOSRestController
     /**
      * Get information about the currently logged in user.
      * @Rest\Get("/user")
-     * @IsGranted("IS_AUTHENTICATED_FULLY")
      * @OA\Response(
      *     response="200",
      *     description="Information about the logged in user",
      *     @Model(type=User::class)
      * )
      */
+    #[IsGranted('IS_AUTHENTICATED_FULLY')]
     public function getUserAction(): User
     {
         return $this->dj->getUser();
@@ -214,7 +214,6 @@ class GeneralInfoController extends AbstractFOSRestController
     /**
      * Update configuration variables.
      * @Rest\Put("/config")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\Response(
      *     response="200",
      *     description="The full configuration after change",
@@ -228,6 +227,7 @@ class GeneralInfoController extends AbstractFOSRestController
      *
      * @throws NonUniqueResultException
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function updateConfigurationAction(Request $request): array
     {
         $this->config->saveChanges($request->request->all(), $this->eventLogService, $this->dj);
@@ -237,7 +237,6 @@ class GeneralInfoController extends AbstractFOSRestController
     /**
      * Check the DOMjudge configuration.
      * @Rest\Get("/config/check")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\Response(
      *     response="200",
      *     description="Result of the various checks performed, no problems found",
@@ -254,6 +253,7 @@ class GeneralInfoController extends AbstractFOSRestController
      *     @OA\JsonContent(type="object")
      * )
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function getConfigCheckAction(): JsonResponse
     {
         $result = $this->checkConfigService->runAll();
@@ -332,7 +332,6 @@ class GeneralInfoController extends AbstractFOSRestController
     /**
      * Add a problem without linking it to a contest.
      * @Rest\Post("/problems")
-     * @IsGranted("ROLE_ADMIN")
      * @OA\Tag(name="Problems")
      * @OA\RequestBody(
      *     required=true,
@@ -366,6 +365,7 @@ class GeneralInfoController extends AbstractFOSRestController
      *     )
      * )
      */
+    #[IsGranted('ROLE_ADMIN')]
     public function addProblemAction(Request $request): array
     {
         return $this->importProblemService->importProblemFromRequest($request);
