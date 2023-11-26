@@ -161,7 +161,6 @@ static volatile sig_atomic_t received_signal = -1;
 
 FILE *child_stdout;
 FILE *child_stderr;
-int child_pipefd[3][2];
 int child_redirfd[3];
 
 struct timeval progstarttime, starttime, endtime;
@@ -202,7 +201,7 @@ void warning(const char *format, ...)
 	va_list ap;
 	va_start(ap,format);
 
-	if ( ! be_quiet ) {
+	if (  true ) {
 		fprintf(stderr,"%s: warning: ",progname);
 		vfprintf(stderr,format,ap);
 		fprintf(stderr,"\n");
@@ -218,7 +217,7 @@ void verbose(const char *format, ...)
 	struct timeval currtime;
 	double runtime;
 
-	if ( ! be_quiet && be_verbose ) {
+	if ( true ) {
 		gettimeofday(&currtime,NULL);
 		runtime = (currtime.tv_sec  - progstarttime.tv_sec ) +
 		          (currtime.tv_usec - progstarttime.tv_usec)*1E-6;
@@ -883,92 +882,11 @@ void setrestrictions()
 	}
 }
 
-void pump_pipes(fd_set* readfds, size_t data_read[], size_t data_passed[])
-{
-	char buf[BUF_SIZE];
-	ssize_t nread, nwritten;
-	size_t to_read, to_write;
-	int i;
-
-	/* Check to see if data is available and pass it on */
-	for(i=1; i<=2; i++) {
-		if ( child_pipefd[i][PIPE_OUT] != -1 &&
-		     FD_ISSET(child_pipefd[i][PIPE_OUT], readfds) ) {
-
-			if (limit_streamsize && data_passed[i] == streamsize) {
-				/* Throw away data if we're at the output limit, but
-				   still count how much data we consumed  */
-				nread = read(child_pipefd[i][PIPE_OUT], buf, BUF_SIZE);
-			} else {
-				/* Otherwise copy the output to a file */
-				to_read = BUF_SIZE;
-				if (limit_streamsize) {
-					to_read = min(BUF_SIZE, streamsize-data_passed[i]);
-				}
-
-				if ( use_splice ) {
-					nread = splice(child_pipefd[i][PIPE_OUT], NULL,
-					               child_redirfd[i], NULL,
-					               to_read, SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
-
-					if ( nread==-1 && errno==EINVAL ) {
-						use_splice = 0;
-						verbose("splice failed, switching to read/write");
-						/* Setting errno here to repeat the copy. */
-						errno = EAGAIN;
-					}
-					if ( nread==-1 && errno==EPIPE ) {
-						/* This happens when the child process has
-						   exited and the pipe is closed. */
-						nread = 0;
-						errno = 0;
-					}
-				} else {
-					nread = read(child_pipefd[i][PIPE_OUT], buf, to_read);
-					if ( nread>0 ) {
-						to_write = nread;
-						while ( to_write>0 ) {
-							nwritten = write(child_redirfd[i], buf, to_write);
-							if ( nwritten==-1 ) {
-								nread = -1;
-								break;
-							}
-							to_write -= nwritten;
-						}
-					}
-				}
-
-				if ( nread>0 ) data_passed[i] += nread;
-
-				/* print message if we're at the streamsize limit */
-				if (limit_streamsize && data_passed[i] == streamsize) {
-					verbose("child fd %i limit reached",i);
-				}
-			}
-			if ( nread==-1 ) {
-				if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) continue;
-				error(errno,"copying data fd %d",i);
-			}
-			if ( nread==0 ) {
-				/* EOF detected: close fd and indicate this with -1 */
-				if ( close(child_pipefd[i][PIPE_OUT])!=0 ) {
-					error(errno,"closing pipe for fd %d",i);
-				}
-				child_pipefd[i][PIPE_OUT] = -1;
-				continue;
-			}
-			data_read[i] += nread;
-		}
-	}
-
-}
-
 int main(int argc, char **argv)
 {
 	sigset_t sigmask, emptymask;
-	fd_set readfds;
 	pid_t pid;
-	int   i, r, nfds;
+	int   i;
 	int   ret;
 	FILE *fp;
 	char *oom_path;
@@ -981,7 +899,6 @@ int main(int argc, char **argv)
 	double tmpd;
 	size_t data_read[3];
 	size_t data_passed[3];
-	size_t total_data;
 	char str[256];
 
 	struct itimerval itimer;
@@ -1162,11 +1079,6 @@ int main(int argc, char **argv)
 		if ( ptr==NULL || runuid<=0 ) error(0,"illegal user specified: %d",runuid);
 	}
 
-	/* Setup pipes connecting to child stdout/err streams (ignore stdin). */
-	for(i=1; i<=2; i++) {
-		if ( pipe(child_pipefd[i])!=0 ) error(errno,"creating pipe for fd %d",i);
-	}
-
 	if ( sigemptyset(&emptymask)!=0 ) error(errno,"creating empty signal mask");
 
 	/* unmask all signals, except SIGCHLD: detected in pselect() below */
@@ -1247,20 +1159,6 @@ int main(int argc, char **argv)
 		setrestrictions();
 		verbose("setrestrictions() done");
 
-		/* Connect pipes to command (stdin/)stdout/stderr and close
-		 * unneeded fd's. Do this after setting restrictions to let
-		 * any messages not go to command stderr pipe. */
-		for(i=1; i<=2; i++) {
-			if ( dup2(child_pipefd[i][PIPE_IN],i)<0 ) {
-				error(errno,"redirecting child fd %d",i);
-			}
-			if ( close(child_pipefd[i][PIPE_IN] )!=0 ||
-			     close(child_pipefd[i][PIPE_OUT])!=0 ) {
-				error(errno,"closing pipe for fd %d",i);
-			}
-		}
-		verbose("pipes closed in child");
-
 		/* And execute child command. */
 		execvp(cmdname,cmdargs);
 		error(errno,"cannot start `%s'",cmdname);
@@ -1278,11 +1176,7 @@ int main(int argc, char **argv)
 		if ( gettimeofday(&starttime,NULL) ) error(errno,"getting time");
 
 		/* Close unused file descriptors */
-		for(i=1; i<=2; i++) {
-			if ( close(child_pipefd[i][PIPE_IN])!=0 ) {
-				error(errno,"closing pipe for fd %i",i);
-			}
-		}
+        // TODO: we might want to close some fds here
 
 		/* Redirect child stdout/stderr to file */
 		for(i=1; i<=2; i++) {
@@ -1347,53 +1241,21 @@ int main(int argc, char **argv)
 		   Initialize status here to quelch clang++ warning about
 		   uninitialized value; it is set by the wait() call. */
 		status = 0;
-		/* We start using splice() to copy data from child to parent
-		   I/O file descriptors. If that fails (not all I/O
-		   source - dest combinations support it), then we revert to
-		   using read()/write(). */
-		use_splice = 1;
 		while ( 1 ) {
-
-			FD_ZERO(&readfds);
-			nfds = -1;
-			for(i=1; i<=2; i++) {
-				if ( child_pipefd[i][PIPE_OUT]>=0 ) {
-					FD_SET(child_pipefd[i][PIPE_OUT],&readfds);
-					nfds = max(nfds,child_pipefd[i][PIPE_OUT]);
-				}
-			}
-
-			r = pselect(nfds+1, &readfds, NULL, NULL, NULL, &emptymask);
-			if ( r==-1 && errno!=EINTR ) error(errno,"waiting for child data");
+            /*
+            // TODO: fix this delay and use EPOLL as in runpipe?
+            nanosleep(&killdelay,NULL);
 
 			if ( received_SIGCHLD || received_signal == SIGALRM ) {
 				if ( (pid = wait(&status))<0 ) error(errno,"waiting on child");
 				if ( pid==child_pid ) break;
 			}
-
-			pump_pipes(&readfds, data_read, data_passed);
+             */
+            if (child_pid == waitpid(child_pid, &status, WNOHANG)) {
+                break;
+            }
+            nanosleep(&cg_delete_delay,NULL);
 		}
-
-		/* Reset pipe filedescriptors to use blocking I/O. */
-		FD_ZERO(&readfds);
-		for(i=1; i<=2; i++) {
-			if ( child_pipefd[i][PIPE_OUT]>=0 ) {
-				FD_SET(child_pipefd[i][PIPE_OUT],&readfds);
-				r = fcntl(child_pipefd[i][PIPE_OUT], F_GETFL);
-				if (r == -1) {
-					error(errno, "fcntl, getting flags");
-				}
-				r = fcntl(child_pipefd[i][PIPE_OUT], F_SETFL, r ^ O_NONBLOCK);
-				if (r == -1) {
-					error(errno, "fcntl, setting flags");
-				}
-			}
-		}
-
-		do {
-			total_data = data_passed[1] + data_passed[2];
-			pump_pipes(&readfds, data_read, data_passed);
-		} while ( data_passed[1] + data_passed[2] > total_data );
 
 		/* Close the output files */
 		for(i=1; i<=2; i++) {
