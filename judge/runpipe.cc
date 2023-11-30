@@ -650,6 +650,7 @@ struct state_t {
                write_end, j, read_end);
         other.proxy_to_process = write_end;
         other.stdin_fd = read_end;
+        set_non_blocking(other.proxy_to_process);
       } else {
         // No proxy: direct communication.
         tie(read_end, write_end) = make_pipe();

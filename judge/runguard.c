@@ -1341,6 +1341,7 @@ int main(int argc, char **argv)
 		}
 
 		/* Return the exitstatus of the command */
+        verbose("WE ARE ABORTING OUR MISSION: %d", exitcode);
 		return exitcode;
 	}
 
