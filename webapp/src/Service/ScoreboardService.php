@@ -526,22 +526,34 @@ class ScoreboardService
         // for this team and if this submission is not a potential first to solve itself.
         // We also do this only once, to not have infinite loops if we have multiple
         // potential first to solves.
-        if ($updatePotentialFirstToSolves && $pendingJury === 0 && !$potentialFirstToSolve) {
-            /** @var ScoreCache[] $potentialFirstToSolves */
-            $potentialFirstToSolves = $this->em->createQueryBuilder()
+        if ($updatePotentialFirstToSolves && !$correctJury && $pendingJury === 0) {
+            $firstToSolveExists = $this->em->createQueryBuilder()
                 ->from(ScoreCache::class, 's')
-                ->join('s.team', 't')
-                ->select('s', 't')
+                ->select('s')
                 ->andWhere('s.contest = :contest')
                 ->andWhere('s.problem = :problem')
-                ->andWhere('s.is_potential_first_to_solve = 1')
+                ->andWhere('s.is_first_to_solve = 1')
                 ->setParameter('contest', $contest)
                 ->setParameter('problem', $problem)
                 ->getQuery()
-                ->getResult();
+                ->getOneOrNullResult();
+            if (!$firstToSolveExists) {
+                /** @var ScoreCache[] $potentialFirstToSolves */
+                $potentialFirstToSolves = $this->em->createQueryBuilder()
+                    ->from(ScoreCache::class, 's')
+                    ->join('s.team', 't')
+                    ->select('s', 't')
+                    ->andWhere('s.contest = :contest')
+                    ->andWhere('s.problem = :problem')
+                    ->andWhere('s.is_correct_restricted = 1')
+                    ->setParameter('contest', $contest)
+                    ->setParameter('problem', $problem)
+                    ->getQuery()
+                    ->getResult();
 
-            foreach ($potentialFirstToSolves as $row) {
-                $this->calculateScoreRow($contest, $row->getTeam(), $problem, $updateRankCache, false);
+                foreach ($potentialFirstToSolves as $row) {
+                    $this->calculateScoreRow($contest, $row->getTeam(), $problem, $updateRankCache, false);
+                }
             }
         }
     }
