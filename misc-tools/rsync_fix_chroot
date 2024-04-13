@@ -1,0 +1,80 @@
+#!/bin/sh
+
+# Abort when a single command fails:
+set -e
+
+# Default directory where to build the chroot tree:
+CHROOTDIR="/chroot/domjudge"
+
+error()
+{
+    echo "Error: $*"
+    echo
+    usage
+    exit 1
+}
+
+cd "$CHROOTDIR"
+CHROOTDIR="$PWD"
+
+# Add indication to interactive shell that the user is in the chroot
+for bashrc in "root/.bashrc" "etc/bash.bashrc"; do
+	echo 'PS1=(chroot)$PS1' >> "$CHROOTDIR/$bashrc"
+done
+
+mount -t proc proc "$CHROOTDIR/proc"
+mount -t sysfs sysfs "$CHROOTDIR/sys"
+
+# Required for some warning messages about writing to log files
+mount --bind /dev/pts "$CHROOTDIR/dev/pts"
+
+# Prevent perl locale warnings in the chroot:
+export LC_ALL=C
+
+in_chroot() {
+    chroot "$CHROOTDIR" /bin/sh -c "$@"
+}
+
+in_chroot debconf-set-selections <<EOF
+passwd     passwd/root-password-crypted          password
+passwd     passwd/user-password-crypted          password
+passwd     passwd/root-password                  password
+passwd     passwd/root-password-again            password
+passwd     passwd/user-password-again            password
+passwd     passwd/user-password                  password
+passwd     passwd/shadow                         boolean        true
+passwd     passwd/username-bad                   note
+passwd     passwd/password-mismatch              note
+passwd     passwd/username                       string
+passwd     passwd/make-user                      boolean        true
+passwd     passwd/md5                            boolean        false
+passwd     passwd/user-fullname                  string
+passwd     passwd/user-uid                       string
+passwd     passwd/password-empty                 note
+debconf    debconf/priority                      select         high
+debconf    debconf/frontend                      select         Noninteractive
+locales    locales/locales_to_be_generated       multiselect
+locales    locales/default_environment_locale    select         None
+EOF
+
+# Remove unnecessary setuid bits
+in_chroot "chmod a-s /usr/bin/wall /usr/bin/newgrp \
+    /usr/bin/chage /usr/bin/chfn /usr/bin/chsh /usr/bin/expiry \
+    /usr/bin/gpasswd /usr/bin/passwd \
+    /bin/su /bin/mount /bin/umount /sbin/unix_chkpwd" || true
+
+# Disable root account
+sed -i "s/^root::/root:*:/" "$CHROOTDIR/etc/shadow"
+
+# Create a file to test that in the judging environment no
+# access to group root readable files is available:
+echo "This file should not be readable inside the judging environment!" \
+    > "$CHROOTDIR/etc/root-permission-test.txt"
+chmod 0640 "$CHROOTDIR/etc/root-permission-test.txt"
+
+umount "$CHROOTDIR/dev/pts"
+umount "$CHROOTDIR/sys"
+umount "$CHROOTDIR/proc"
+
+echo "Done building chroot in $CHROOTDIR"
+exit 0
