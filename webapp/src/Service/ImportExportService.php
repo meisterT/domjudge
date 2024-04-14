@@ -325,7 +325,7 @@ class ImportExportService
             $problemExternal = $problemData['id'] ?? $problemData['short-name'] ?? $problemLabel ?? null;
             $problemLabel = $problemData['label'] ?? $problemData['letter'] ?? null;
 
-            $problem = $this->em->getRepository(Problem::class)->findOneBy(['externalid' => $problemName]) ?: new Problem();
+            $problem = $this->em->getRepository(Problem::class)->findOneBy(['externalid' => $problemExternal]) ?: new Problem();
             $problem
                 ->setName($problemName)
                 ->setTimelimit($problemData['time_limit'] ?? 10)
