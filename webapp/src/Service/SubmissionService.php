@@ -283,6 +283,14 @@ class SubmissionService
             ->andWhere($countQueryExtras['queued'])
             ->getQuery()
             ->getSingleScalarResult();
+        $counts['public'] = (clone $queryBuilder)
+            ->select('COUNT(s.submitid)')
+            ->join('s.contest', 'c')
+            ->join('t.category', 'cat')
+            ->andWhere("s.submittime BETWEEN c.starttime AND c.endtime")
+            ->andWhere("cat.visible = 1")
+            ->getQuery()
+            ->getSingleScalarResult();
 
         return [$submissions, $counts];
     }
