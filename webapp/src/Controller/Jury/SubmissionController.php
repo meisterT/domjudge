@@ -687,18 +687,8 @@ class SubmissionController extends BaseController
             throw new NotFoundHttpException("Cannot find the contest with the given external id.");
         }
 
-        $submission = $this->em->getRepository(Submission::class)
-            ->findOneBy([
-                'contest' => $this->dj->getCurrentContest(),
-                'externalid' => $externalId
-            ]);
-
-        if (!$submission) {
-            throw new NotFoundHttpException(sprintf('No submission found with external ID %s', $externalId));
-        }
-
-        $response = $this->redirectToRoute('jury_submission', [
-            'submitId' => $submission->getSubmitid(),
+        $response = $this->redirectToRoute('jury_submission_by_external_id', [
+            'externalId' => $externalId,
         ]);
         return $this->dj->setCookie('domjudge_cid', (string)$contest->getCid(), 0, null, '', false, false, $response);
     }
