@@ -683,3 +683,16 @@ blockquote {
     -o-transform:rotate(-35deg);
     transform:rotate(-35deg);
 }
+.mobile-pending   {
+    position: relative;
+    text-align: center;
+}
+.mobile-pending:before {
+    position: absolute;
+    content: "?";
+    left: 0;
+    right: 0;
+    color: #6666FF;
+    font-weight: 900;
+    font-size: 120%;
+}
