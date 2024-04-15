@@ -17,6 +17,7 @@ enum EventType: string
     case PERSONS = 'persons';
     case PROBLEMS = 'problems';
     case RUNS = 'runs';
+    case START_STATUS = 'start-status';
     case STATE = 'state';
     case SUBMISSIONS = 'submissions';
     case TEAMS = 'teams';
