@@ -26,6 +26,7 @@ use JMS\Serializer\Metadata\PropertyMetadata;
 use Metadata\MetadataFactoryInterface;
 use Nelmio\ApiDocBundle\Annotation\Model;
 use OpenApi\Attributes as OA;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\ExpressionLanguage\Expression;
 use Symfony\Component\HttpKernel\Attribute\MapQueryParameter;
@@ -63,6 +64,7 @@ class ContestController extends AbstractRestController
         ConfigurationService $config,
         EventLogService $eventLogService,
         protected readonly ImportExportService $importExportService,
+        protected readonly LoggerInterface $logger,
         protected readonly AssetUpdateService $assetUpdater
     ) {
         parent::__construct($entityManager, $dj, $config, $eventLogService);
@@ -651,7 +653,7 @@ class ContestController extends AbstractRestController
         $response->headers->set('Content-Type', 'application/x-ndjson');
         $response->setCallback(function () use ($format, $cid, $contest, $request, $since_id, $types, $strict, $stream, $metadataFactory, $kernel) {
             $lastUpdate = 0;
-            $lastIdSent = $since_id;
+            $lastIdSent = max(0, $since_id); // Don't try to look for event_id=0
             $typeFilter = false;
             if ($types) {
                 $typeFilter = explode(',', $types);
@@ -714,39 +716,60 @@ class ContestController extends AbstractRestController
             // Reload the contest as the above method will clear the entity manager.
             $contest = $this->getContestWithId($request, $cid);
 
+            $missingEventRetries = 0;
             while (true) {
                 // Add missing state events that should have happened already.
                 $this->eventLogService->addMissingStateEvents($contest);
 
-                $qb = $this->em->createQueryBuilder()
+                // We fetch *all* events after the last seen to check that
+                // we don't skip events that are committed out of order.
+                $q = $this->em->createQueryBuilder()
                     ->from(Event::class, 'e')
                     ->select('e')
                     ->andWhere('e.eventid > :lastIdSent')
                     ->setParameter('lastIdSent', $lastIdSent)
-                    ->andWhere('e.contest = :cid')
-                    ->setParameter('cid', $contest->getCid())
-                    ->orderBy('e.eventid', 'ASC');
-
-                if ($typeFilter !== false) {
-                    $qb = $qb
-                        ->andWhere('e.endpointtype IN (:types)')
-                        ->setParameter('types', $typeFilter);
-                }
-                if (!$canViewAll) {
-                    $restricted_types = ['judgements', 'runs', 'clarifications'];
-                    if ($contest->getStarttime() === null || Utils::now() < $contest->getStarttime()) {
-                        $restricted_types[] = 'problems';
-                    }
-                    $qb = $qb
-                        ->andWhere('e.endpointtype NOT IN (:restricted_types)')
-                        ->setParameter('restricted_types', $restricted_types);
-                }
-
-                $q = $qb->getQuery();
+                    ->orderBy('e.eventid', 'ASC')
+                    ->getQuery();
 
                 /** @var Event[] $events */
                 $events = $q->getResult();
+
+                // Look for any missing sequential events and wait for them to
+                // be committed if so.
+                $missingEvents = false;
+                $expectedId = $lastIdSent + 1;
                 foreach ($events as $event) {
+                    if ($event->getEventid() !== $expectedId) {
+                        $missingEvents = true;
+                        break;
+                    }
+                    $expectedId++;
+                }
+                if ($missingEvents) {
+                    if (++$missingEventRetries < 10) {
+                        usleep(100 * 1000);
+                        continue;
+                    }
+                    // We've waited too long for missing events not committed
+                    // in order. Skipping them now.
+                    $this->logger->warning('Waited too long for missing event %d, skipping', [$expectedId]);
+                }
+                $missingEventRetries = 0;
+
+                $numEventsSent = 0;
+                foreach ($events as $event) {
+                    // Filter out unwanted events
+                    if ($event->getContest()->getCid() !== $contest->getCid()) continue;
+                    if ($typeFilter !== false &&
+                        !in_array($event->getEndpointtype(), $typefilter)) continue;
+                    if (!$canViewAll) {
+                        $restricted_types = ['judgements', 'runs', 'clarifications'];
+                        if ($contest->getStarttime() === null || Utils::now() < $contest->getStarttime()) {
+                            $restricted_types[] = 'problems';
+                        }
+                        if (in_array($event->getEndpointtype(), $restricted_types)) continue;
+                    }
+
                     $data = $event->getContent();
                     // Filter fields with specific access restrictions.
                     if (!$canViewAll) {
@@ -814,9 +837,10 @@ class ContestController extends AbstractRestController
                     flush();
                     $lastUpdate = Utils::now();
                     $lastIdSent = $event->getEventid();
+                    $numEventsSent++;
                 }
 
-                if (count($events) == 0) {
+                if ($numEventsSent == 0) {
                     if (!$stream) {
                         break;
                     }
