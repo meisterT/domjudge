@@ -769,7 +769,7 @@ class ContestController extends AbstractRestController
                     // Filter out unwanted events
                     if ($event->getContest()->getCid() !== $contest->getCid()) continue;
                     if ($typeFilter !== false &&
-                        !in_array($event->getEndpointtype(), $typefilter)) continue;
+                        !in_array($event->getEndpointtype(), $typeFilter)) continue;
                     if (!$canViewAll) {
                         $restricted_types = ['judgements', 'runs', 'clarifications'];
                         if ($contest->getStarttime() === null || Utils::now() < $contest->getStarttime()) {
