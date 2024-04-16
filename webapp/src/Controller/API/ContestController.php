@@ -738,9 +738,11 @@ class ContestController extends AbstractRestController
                 // be committed if so.
                 $missingEvents = false;
                 $expectedId = $lastIdSent + 1;
+                $lastFoundId = null;
                 foreach ($events as $event) {
                     if ($event->getEventid() !== $expectedId) {
                         $missingEvents = true;
+                        $lastFoundId = $event->getEventid();
                         break;
                     }
                     $expectedId++;
@@ -750,9 +752,15 @@ class ContestController extends AbstractRestController
                         usleep(100 * 1000);
                         continue;
                     }
-                    // We've waited too long for missing events not committed
-                    // in order. Skipping them now.
-                    $this->logger->warning('Waited too long for missing event %d, skipping', [$expectedId]);
+
+                    // We've decided to permanently ignore these non-existing
+                    // events for this connection. The wait for any
+                    // non-committed events was long enough.
+                    //
+                    // There might be multiple non-existing events. Log the
+                    // first consecutive gap of non-existing events. A consecutive
+                    // gap is guaranteed since the events are ordered.
+                    $this->logger->warning('Waited too long for missing events %d ... %d, skipping', [$expectedId, $lastFoundId-1]);
                 }
                 $missingEventRetries = 0;
 
@@ -838,6 +846,13 @@ class ContestController extends AbstractRestController
                     $lastUpdate = Utils::now();
                     $lastIdSent = $event->getEventid();
                     $numEventsSent++;
+
+                    if ($missingEvents && $event->getEventid() >= $lastFoundId) {
+                        // The first event after the first gap has been emitted. Stop
+                        // emitting events and restart the gap detection logic to find
+                        // any potential gaps after this last emitted event.
+                        break;
+                    }
                 }
 
                 if ($numEventsSent == 0) {
