@@ -1113,10 +1113,10 @@ EOF;
             $foreground,
             $problem->getShortname()
         );
-        if (!$matrixItem->isCorrect && $matrixItem->numSubmissions > 0) {
+        if (!$matrixItem->isCorrect) {
             if ($matrixItem->numSubmissionsPending > 0) {
                 $ret = '<span><span class="mobile-pending">' . $ret . '</span></span>';
-            } else {
+            } else if ($matrixItem->numSubmissions > 0) {
                 $ret = '<span><span class="strike-diagonal">' . $ret . '</span></span>';
             }
         }
