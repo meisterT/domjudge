@@ -748,6 +748,12 @@ class ContestController extends AbstractRestController
                     $expectedId++;
                 }
                 if ($missingEvents) {
+                    if ($missingEventRetries==0) {
+                        $this->logger->info(
+                            'Detected missing events %d ... %d, waiting for these to appear',
+                            [$expectedId, $lastFoundId-1]
+                        );
+                    }
                     if (++$missingEventRetries < 10) {
                         usleep(100 * 1000);
                         continue;
@@ -760,7 +766,10 @@ class ContestController extends AbstractRestController
                     // There might be multiple non-existing events. Log the
                     // first consecutive gap of non-existing events. A consecutive
                     // gap is guaranteed since the events are ordered.
-                    $this->logger->warning('Waited too long for missing events %d ... %d, skipping', [$expectedId, $lastFoundId-1]);
+                    $this->logger->warning(
+                        'Waited too long for missing events %d ... %d, skipping',
+                        [$expectedId, $lastFoundId-1]
+                    );
                 }
                 $missingEventRetries = 0;
 
