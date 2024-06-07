@@ -103,7 +103,7 @@ build-scripts:
 build:             SUBDIRS=        lib           misc-tools
 domserver:         SUBDIRS=etc         sql       misc-tools webapp
 install-domserver: SUBDIRS=etc     lib sql       misc-tools webapp example_problems
-judgehost:         SUBDIRS=etc     lib     judge misc-tools
+judgehost:         SUBDIRS=etc             judge misc-tools
 install-judgehost: SUBDIRS=etc     lib     judge misc-tools
 docs:              SUBDIRS=    doc
 install-docs:      SUBDIRS=    doc
