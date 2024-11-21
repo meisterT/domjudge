@@ -9,7 +9,7 @@ MAINSOURCE="$1"
 
 # -static:         Static link with all libraries
 # -bargs -static:  Static link with all libraries
-gnatmake -static -o "$DEST" "$@" -bargs -static
+$DJ_COMPILER_COMMAND -o "$DEST" $DJ_COMPILER_PRE_FILES_ARGS "$@" $DJ_COMPILER_PRE_FILES_ARGS
 exitcode=$?
 
 # clean created files:

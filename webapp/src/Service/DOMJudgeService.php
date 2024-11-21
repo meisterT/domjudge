@@ -1466,15 +1466,22 @@ class DOMJudgeService
 
     public function getCompileConfig(Submission $submission): string
     {
-        $compileExecutable = $submission->getLanguage()->getCompileExecutable()->getImmutableExecutable();
+        $language = $submission->getLanguage();
+        $compileExecutable = $language->getCompileExecutable()->getImmutableExecutable();
         return $this->jsonEncode(
             [
                 'script_timelimit' => $this->config->get('script_timelimit'),
                 'script_memory_limit' => $this->config->get('script_memory_limit'),
                 'script_filesize_limit' => $this->config->get('script_filesize_limit'),
-                'language_extensions' => $submission->getLanguage()->getExtensions(),
-                'filter_compiler_files' => $submission->getLanguage()->getFilterCompilerFiles(),
+                'language_extensions' => $language->getExtensions(),
+                'filter_compiler_files' => $language->getFilterCompilerFiles(),
                 'hash' => $compileExecutable->getHash(),
+                'compiler' => $language->getCompilerCommand(),
+                'runner' => $language->getRunnerCommand(),
+                'compiler_pre_files_args' => $language->getCompilerPreFilesArgs(),
+                'compiler_post_files_args' => $language->getCompilerPostFilesArgs(),
+                'runner_pre_files_args' => $language->getRunnerPreFilesArgs(),
+                'runner_post_files_args' => $language->getRunnerPostFilesArgs(),
             ]
         );
     }

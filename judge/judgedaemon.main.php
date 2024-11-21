@@ -1205,10 +1205,18 @@ function compile(
     if (isset($error)) {
         return false;
     }
+    var_dump($compile_config);
 
     // Compile the program.
-    $compile_cmd = LIBJUDGEDIR . "/compile.sh $cpuset_opt " .
-        implode(' ', array_map('dj_escapeshellarg', array_merge([
+    $compile_cmd =
+        "DJ_COMPILER_CMD=" . dj_escapeshellarg($compile_config['compiler']) . " "
+        . "DJ_RUNNER_CMD=" . dj_escapeshellarg($compile_config['runner']) . " "
+        . "DJ_COMPILER_PRE_FILES_ARGS=" . dj_escapeshellarg($compile_config['compiler_pre_files_args']) . " "
+        . "DJ_COMPILER_POST_FILES_ARGS=" . dj_escapeshellarg($compile_config['compiler_post_files_args']) . " "
+        . "DJ_RUNNER_PRE_FILES_ARGS=" . dj_escapeshellarg($compile_config['runner_pre_files_args']) . " "
+        . "DJ_RUNNER_POST_FILES_ARGS=" . dj_escapeshellarg($compile_config['runner_post_files_args']) . " "
+        . LIBJUDGEDIR . "/compile.sh $cpuset_opt "
+        . implode(' ', array_map('dj_escapeshellarg', array_merge([
             $execrunpath,
             $workdir,
         ], $files)));

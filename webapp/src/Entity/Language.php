@@ -149,6 +149,22 @@ class Language extends BaseApiEntity implements
     #[Serializer\Exclude]
     private ?string $runnerVersionCommand = null;
 
+    #[ORM\Column(type: 'string', length: 255, nullable: true, options: ['comment' => 'Compiler command'])]
+    #[Serializer\Exclude]
+    private ?string $compilerCommand = null;
+
+    #[ORM\Column(type: 'string', length: 255, nullable: true, options: ['comment' => 'Compiler command arguments'])]
+    #[Serializer\Exclude]
+    private ?string $compilerCommandArguments = null;
+
+    #[ORM\Column(type: 'string', length: 255, nullable: true, options: ['comment' => 'Runner command'])]
+    #[Serializer\Exclude]
+    private ?string $runnerCommand = null;
+
+    #[ORM\Column(type: 'string', length: 255, nullable: true, options: ['comment' => 'Runner command arguments'])]
+    #[Serializer\Exclude]
+    private ?string $runnerCommandArguments = null;
+
     /**
      * @param Collection<int, Version> $versions
      */
@@ -418,5 +434,79 @@ class Language extends BaseApiEntity implements
             'rs' => 'rust',
             default => $this->getLangid(),
         };
+    }
+
+    public function getCompilerCommand(): ?string {
+        return $this->compilerCommand;
+    }
+
+    public function getCompilerArguments(): ?string {
+        return $this->compilerCommandArguments;
+    }
+
+    public function getRunnerCommand(): ?string {
+        return $this->runnerCommand;
+    }
+
+    public function getRunnerArguments(): ?string {
+        return $this->runnerCommandArguments;
+    }
+
+    public function getCompilerPreFilesArgs(): string {
+        if ($this->compilerCommandArguments === null) {
+            return '';
+        }
+        return explode(' {files} ', $this->compilerCommandArguments)[0];
+    }
+
+    public function getCompilerPostFilesArgs(): string {
+        if ($this->compilerCommandArguments === null) {
+            return '';
+        }
+        if (strpos($this->compilerCommandArguments, ' {files} ') === false) {
+            return '';
+        }
+        return explode(' {files} ', $this->compilerCommandArguments)[1];
+    }
+
+    public function getRunnerPreFilesArgs(): string {
+        if ($this->runnerCommandArguments === null) {
+            return '';
+        }
+        return explode(' {files} ', $this->runnerCommandArguments)[0];
+    }
+
+    public function getRunnerPostFilesArgs(): string {
+        if ($this->runnerCommandArguments === null) {
+            return '';
+        }
+        if (strpos($this->runnerCommandArguments, ' {files} ') === false) {
+            return '';
+        }
+        return explode(' {files} ', $this->runnerCommandArguments)[1];
+    }
+
+    public function setCompilerCommand(string $compilerCommand): Language
+    {
+        $this->compilerCommand = $compilerCommand;
+        return $this;
+    }
+
+    public function setCompilerCommandArguments(string $compilerCommandArguments): Language
+    {
+        $this->compilerCommandArguments = $compilerCommandArguments;
+        return $this;
+    }
+
+    public function setRunnerCommand(string $runnerCommand): Language
+    {
+        $this->runnerCommand = $runnerCommand;
+        return $this;
+    }
+
+    public function setRunnerCommandArguments(string $runnerCommandArguments): Language
+    {
+        $this->runnerCommandArguments = $runnerCommandArguments;
+        return $this;
     }
 }

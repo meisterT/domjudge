@@ -20,11 +20,21 @@
                             {% endfor %}
                         </h2>
                     </div>
+                    {% if lang.compilerCommand and lang.compilerArguments %}
+                        <h4>Compile with</h4>
+                        <pre class="output_text" style="background-color: rgba(0,121,54,.1);">$ {{ lang.compilerCommand }} {{ lang.compilerArguments }}</pre>
+                    {% endif %}
                     {% if lang.compilerVersion and lang.compilerVersionCommand %}
+                        <h4>Compiler Version</h4>
                         <pre class="output_text" style="background-color: rgba(0,121,54,.1);">$ {{ lang.compilerVersionCommand }}</pre>
                         <pre class="output_text">{{ lang.compilerVersion }}</pre>
                     {% endif %}
+                    {% if lang.runnerCommand and lang.runnerArguments %}
+                        <h4>Run with</h4>
+                        <pre class="output_text" style="background-color: rgba(0,121,54,.1);">$ {{ lang.runnerCommand }} {{ lang.runnerArguments }}</pre>
+                    {% endif %}
                     {% if lang.runnerVersion and lang.runnerVersionCommand %}
+                        <h4>Runner Version</h4>
                         <pre class="output_text" style="background-color: rgba(0,121,54,.1);">$ {{ lang.runnerVersionCommand }}</pre>
                         <pre class="output_text">{{ lang.runnerVersion }}</pre>
                     {% endif %}
