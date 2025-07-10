@@ -18,6 +18,7 @@ use App\Entity\QueueTask;
 use App\Entity\Rejudging;
 use App\Entity\Submission;
 use App\Entity\SubmissionFile;
+use App\Entity\TestcaseAggregationType;
 use App\Entity\TestcaseContent;
 use App\Entity\Version;
 use App\Service\BalloonService;
@@ -652,7 +653,8 @@ class JudgehostController extends AbstractFOSRestController
         $teamMessage  = $request->request->get('team_message');
         $metadata     = $request->request->get('metadata');
         $testcasedir  = $request->request->get('testcasedir');
-        $compareMeta = $request->request->get('compare_metadata');
+        $compareMeta  = $request->request->get('compare_metadata');
+        $score        = $request->request->get('score');
 
         $judgehost = $this->em->getRepository(Judgehost::class)->findOneBy(['hostname' => $hostname]);
         if (!$judgehost) {
@@ -660,7 +662,7 @@ class JudgehostController extends AbstractFOSRestController
         }
 
         $hasFinalResult = $this->addSingleJudgingRun($judgeTaskId, $hostname, $runResult, $runTime,
-            $outputSystem, $outputError, $outputDiff, $outputRun, $teamMessage, $metadata, $testcasedir, $compareMeta);
+            $outputSystem, $outputError, $outputDiff, $outputRun, $teamMessage, $metadata, $testcasedir, $compareMeta, $score);
         $judgehost = $this->em->getRepository(Judgehost::class)->findOneBy(['hostname' => $hostname]);
         $judgehost->setPolltime(Utils::now());
         $this->em->flush();
@@ -932,6 +934,7 @@ class JudgehostController extends AbstractFOSRestController
         string  $metadata,
         ?string $testcasedir,
         ?string $compareMeta,
+        ?string $score = null
     ): bool {
         $resultsRemap = $this->config->get('results_remap');
         $resultsPrio  = $this->config->get('results_prio');
@@ -953,7 +956,8 @@ class JudgehostController extends AbstractFOSRestController
             $teamMessage,
             $metadata,
             $testcasedir,
-            $compareMeta
+            $compareMeta,
+            $score
         ) {
             $judgingRun = $this->em->getRepository(JudgingRun::class)->findOneBy(
                 ['judgetaskid' => $judgeTaskId]);
@@ -981,6 +985,10 @@ class JudgehostController extends AbstractFOSRestController
 
             if ($teamMessage) {
                 $judgingRunOutput->setTeamMessage(base64_decode($teamMessage));
+            }
+
+            if ($score) {
+                $judgingRun->setScore(base64_decode($score));
             }
 
             $judging = $judgingRun->getJudging();
@@ -1019,112 +1027,139 @@ class JudgehostController extends AbstractFOSRestController
         $oldResult = $judging->getResult();
 
         $lazyEval = DOMJudgeService::EVAL_LAZY;
-        if (($result = SubmissionService::getFinalResult($runresults, $resultsPrio)) !== null) {
-            // Lookup global lazy evaluation of results setting and possible problem specific override.
-            $lazyEval    = $this->config->get('lazy_eval_results');
-            $problemLazy = $judging->getSubmission()->getContestProblem()->getLazyEvalResults();
-            if ($problemLazy !== DOMJudgeService::EVAL_DEFAULT) {
-                $lazyEval = $problemLazy;
-            }
-
-            $judging->setResult($result);
-
-            $hasNullResults = false;
-            foreach ($runresults as $runresult) {
-                if ($runresult === null) {
-                    $hasNullResults = true;
-                    break;
-                }
-            }
-            $sendJudgingEvent = false;
-            if (!$hasNullResults || $lazyEval !== DOMJudgeService::EVAL_FULL) {
-                // NOTE: setting endtime here determines in testcases_GET
-                // whether a next testcase will be handed out.
-                // We want to set the endtime and max runtime only once (once the verdict is known),
-                // so that the API doesn't update these values once they are set.
-                // We also don't want to send judging events after the verdict is known.
-                if (!$judging->getEndtime()) {
-                    $sendJudgingEvent = true;
-                    $judging->setEndtime(Utils::now());
-
-                    // Also calculate the max run time and set it
-                    $maxRunTime = $this->em->createQueryBuilder()
-                        ->from(Judging::class, 'j')
-                        ->select('MAX(jr.runtime) AS maxruntime')
-                        ->leftJoin('j.runs', 'jr')
-                        ->andWhere('j.judgingid = :judgingid')
-                        ->andWhere('jr.runtime IS NOT NULL')
-                        ->setParameter('judgingid', $judging->getJudgingid())
-                        ->getQuery()
-                        ->getSingleScalarResult();
-                    $judging->setMaxRuntimeForVerdict($maxRunTime);
-                }
-                $this->maybeUpdateActiveJudging($judging);
-            }
-            $this->em->flush();
-
-            // Only update if the current result is different from what we had before.
-            // This should only happen when the old result was NULL.
-            if ($oldResult !== $result) {
-                if ($oldResult === 'aborted') {
-                    // This judging was cancelled while we worked on it,
-                    // probably as part of a cancelled rejudging.
-                    // Throw away our work, and return that we're done.
-                    return false;
-                }
-                if ($oldResult !== null) {
-                    throw new BadMethodCallException('internal bug: the evaluated result changed during judging');
-                }
-
-                if ($lazyEval !== DOMJudgeService::EVAL_FULL) {
-                    // We don't want to continue on this problem, even if there's spare resources.
-                    $this->em->getConnection()->executeStatement(
-                        'UPDATE judgetask SET valid=0, priority=:priority'
-                        . ' WHERE jobid=:jobid',
-                        [
-                            'priority' => JudgeTask::PRIORITY_LOW,
-                            'jobid' => $judgingRun->getJudgingid(),
-                        ]
-                    );
-                } else {
-                    // Decrease priority of remaining unassigned judging runs.
-                    $this->em->getConnection()->executeStatement(
-                        'UPDATE judgetask SET priority=:priority'
-                        . ' WHERE jobid=:jobid'
-                        . ' AND judgehostid IS NULL',
-                        [
-                            'priority' => JudgeTask::PRIORITY_LOW,
-                            'jobid' => $judgingRun->getJudgingid(),
-                        ]
-                    );
-                }
+        $problem = $judging->getSubmission()->getProblem();
+        if ($problem->isScoringProblem()) {
+            // TODO: Allow for lazy evaluation of scoring problems.
+            $lazyEval = DOMJudgeService::EVAL_FULL;
+            $parentGroup = $problem->getParentTestcaseGroup();
+            $result = SubmissionService::maybeSetScoringResult(
+                // TODO: do not hardcode the aggregation type here.
+                TestcaseAggregationType::SUM,
+                [$parentGroup],
+                $judging
+            );
+            if ($result !== null) {
+                $judging->setResult($result);
+                $judging->setEndtime(Utils::now());
+                $this->em->flush();
 
                 $submission = $judging->getSubmission();
-                $contest    = $submission->getContest();
-                $team       = $submission->getTeam();
-                $problem    = $submission->getProblem();
+                $contest = $submission->getContest();
+                $team = $submission->getTeam();
                 $this->scoreboardService->calculateScoreRow($contest, $team, $problem);
 
-                // We call alert here before possible validation. Note that
-                // this means that these alert messages should be treated as
-                // confidential information.
-                $msg = sprintf("submission %s, judging %s: %s",
-                               $submission->getSubmitid(), $judging->getJudgingid(), $result);
-                $this->dj->alert($result === 'correct' ? 'accept' : 'reject', $msg);
-
-                // Potentially send a balloon, i.e. if no verification required (case of verification required is
-                // handled in jury/SubmissionController::verifyAction).
-                if (!$this->config->get('verification_required') && $judging->getValid()) {
-                    $this->balloonService->updateBalloons($contest, $submission, $judging);
+                // TODO: Do all the other minutiae like we do for normal problems, e.g. event logging, etc.
+                return false;
+            }
+            return true;
+        } else {
+            if (($result = SubmissionService::getFinalResult($runresults, $resultsPrio)) !== null) {
+                // Lookup global lazy evaluation of results setting and possible problem specific override.
+                $lazyEval = $this->config->get('lazy_eval_results');
+                $problemLazy = $judging->getSubmission()->getContestProblem()->getLazyEvalResults();
+                if ($problemLazy !== DOMJudgeService::EVAL_DEFAULT) {
+                    $lazyEval = $problemLazy;
                 }
 
-                $this->dj->auditlog('judging', $judging->getJudgingid(), 'judged', $result, $hostname);
-            }
+                $judging->setResult($result);
 
-            // Send an event for an endtime (and max runtime update).
-            if ($sendJudgingEvent && $judging->getValid()) {
-                $this->eventLogService->log('judging', $judging->getJudgingid(),
-                    EventLogService::ACTION_UPDATE, $judging->getContest()->getCid());
+                $hasNullResults = false;
+                foreach ($runresults as $runresult) {
+                    if ($runresult === null) {
+                        $hasNullResults = true;
+                        break;
+                    }
+                }
+                $sendJudgingEvent = false;
+                if (!$hasNullResults || $lazyEval !== DOMJudgeService::EVAL_FULL) {
+                    // NOTE: setting endtime here determines in testcases_GET
+                    // whether a next testcase will be handed out.
+                    // We want to set the endtime and max runtime only once (once the verdict is known),
+                    // so that the API doesn't update these values once they are set.
+                    // We also don't want to send judging events after the verdict is known.
+                    if (!$judging->getEndtime()) {
+                        $sendJudgingEvent = true;
+                        $judging->setEndtime(Utils::now());
+
+                        // Also calculate the max run time and set it
+                        $maxRunTime = $this->em->createQueryBuilder()
+                            ->from(Judging::class, 'j')
+                            ->select('MAX(jr.runtime) AS maxruntime')
+                            ->leftJoin('j.runs', 'jr')
+                            ->andWhere('j.judgingid = :judgingid')
+                            ->andWhere('jr.runtime IS NOT NULL')
+                            ->setParameter('judgingid', $judging->getJudgingid())
+                            ->getQuery()
+                            ->getSingleScalarResult();
+                        $judging->setMaxRuntimeForVerdict($maxRunTime);
+                    }
+                    $this->maybeUpdateActiveJudging($judging);
+                }
+                $this->em->flush();
+
+                // Only update if the current result is different from what we had before.
+                // This should only happen when the old result was NULL.
+                if ($oldResult !== $result) {
+                    if ($oldResult === 'aborted') {
+                        // This judging was cancelled while we worked on it,
+                        // probably as part of a cancelled rejudging.
+                        // Throw away our work, and return that we're done.
+                        return false;
+                    }
+                    if ($oldResult !== null) {
+                        throw new BadMethodCallException('internal bug: the evaluated result changed during judging');
+                    }
+
+                    if ($lazyEval !== DOMJudgeService::EVAL_FULL) {
+                        // We don't want to continue on this problem, even if there's spare resources.
+                        $this->em->getConnection()->executeStatement(
+                            'UPDATE judgetask SET valid=0, priority=:priority'
+                            . ' WHERE jobid=:jobid',
+                            [
+                                'priority' => JudgeTask::PRIORITY_LOW,
+                                'jobid' => $judgingRun->getJudgingid(),
+                            ]
+                        );
+                    } else {
+                        // Decrease priority of remaining unassigned judging runs.
+                        $this->em->getConnection()->executeStatement(
+                            'UPDATE judgetask SET priority=:priority'
+                            . ' WHERE jobid=:jobid'
+                            . ' AND judgehostid IS NULL',
+                            [
+                                'priority' => JudgeTask::PRIORITY_LOW,
+                                'jobid' => $judgingRun->getJudgingid(),
+                            ]
+                        );
+                    }
+
+                    $submission = $judging->getSubmission();
+                    $contest = $submission->getContest();
+                    $team = $submission->getTeam();
+                    $problem = $submission->getProblem();
+                    $this->scoreboardService->calculateScoreRow($contest, $team, $problem);
+
+                    // We call alert here before possible validation. Note that
+                    // this means that these alert messages should be treated as
+                    // confidential information.
+                    $msg = sprintf("submission %s, judging %s: %s",
+                        $submission->getSubmitid(), $judging->getJudgingid(), $result);
+                    $this->dj->alert($result === 'correct' ? 'accept' : 'reject', $msg);
+
+                    // Potentially send a balloon, i.e. if no verification required (case of verification required is
+                    // handled in jury/SubmissionController::verifyAction).
+                    if (!$this->config->get('verification_required') && $judging->getValid()) {
+                        $this->balloonService->updateBalloons($contest, $submission, $judging);
+                    }
+
+                    $this->dj->auditlog('judging', $judging->getJudgingid(), 'judged', $result, $hostname);
+                }
+
+                // Send an event for an endtime (and max runtime update).
+                if ($sendJudgingEvent && $judging->getValid()) {
+                    $this->eventLogService->log('judging', $judging->getJudgingid(),
+                        EventLogService::ACTION_UPDATE, $judging->getContest()->getCid());
+                }
             }
         }
 

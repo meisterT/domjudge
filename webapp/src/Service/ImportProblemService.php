@@ -14,7 +14,9 @@ use App\Entity\Submission;
 use App\Entity\SubmissionSource;
 use App\Entity\Team;
 use App\Entity\Testcase;
+use App\Entity\TestcaseAggregationType;
 use App\Entity\TestcaseContent;
+use App\Entity\TestcaseGroup;
 use App\Utils\Utils;
 use Doctrine\DBAL\Exception as DBALException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -32,6 +34,7 @@ use Symfony\Component\PropertyAccess\PropertyAccessor;
 use Symfony\Component\Validator\ConstraintViolationInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 use Symfony\Component\Yaml\Yaml;
+use ValueError;
 use ZipArchive;
 
 class ImportProblemService
@@ -339,6 +342,41 @@ class ImportProblemService
         $rank       = $startRank;
         $actualRank = 1;
 
+        // Now we need to parse metadata for test case groups so it can be referenced when dealing with test cases.
+        $testCaseGroups = [];
+        foreach (['', 'sample/', 'secret/'] as $type) {
+            for ($j = 0; $j < $zip->numFiles; $j++) {
+                $filename = $zip->getNameIndex($j);
+                foreach (['test_group.yaml', 'testdata.yaml'] as $metafile) {
+                    if (Utils::startsWith($filename, sprintf('data/%s', $type)) && Utils::endsWith($filename, sprintf('/%s', $metafile))) {
+                        $fileContent = $zip->getFromName($filename);
+                        if ($fileContent === false) {
+                            $messages['warning'][] = sprintf("Could not read test group metadata file '%s'.", $filename);
+                            continue;
+                        }
+                        try {
+                            $dir = dirname($filename);
+                            $testcaseGroup = $this->parseTestCaseGroupMeta($fileContent, $dir, $messages);
+                            if (!$testcaseGroup) {
+                                $messages['danger'][] = sprintf("Could not parse test group metadata file '%s'.", $filename);
+                                continue;
+                            }
+                            $testCaseGroups[$dir] = $testcaseGroup;
+                        } catch (Exception $e) {
+                            $messages['warning'][] = sprintf("Could not parse test group metadata file '%s': %s", $filename, $e->getMessage());
+                        }
+                    }
+                }
+            }
+        }
+        foreach ($testCaseGroups as $dir => $testCaseGroup) {
+            $parentDir = dirname($dir);
+            $messages['warning'][] = sprintf("Looking for %s in tc group %s", $parentDir, $dir);
+            if (isset($testCaseGroups[$parentDir])) {
+                $testCaseGroups[$dir]->setParent($testCaseGroups[$parentDir]);
+            }
+        }
+
         // First insert sample, then secret data in alphabetical order.
         foreach (['sample', 'secret'] as $type) {
             $numCases  = 0;
@@ -356,6 +394,8 @@ class ImportProblemService
                 }
             }
             asort($dataFiles, SORT_STRING);
+            $messages['info'][] = sprintf("Found %d %s testcase(s): {%s}.{in,ans}",
+                count($dataFiles), $type, join(',', $dataFiles));
 
             foreach ($dataFiles as $dataFile) {
                 $baseFileName = sprintf('data/%s/%s', $type, $dataFile);
@@ -408,6 +448,12 @@ class ImportProblemService
                 $md5in  = md5($testInput);
                 $md5out = md5($testOutput);
 
+                $testcaseGroup = null;
+                $dir = dirname($baseFileName);
+                if (isset($testCaseGroups[$dir])) {
+                    $testcaseGroup = $testCaseGroups[$dir];
+                }
+
                 // Check if we have an existing testcase with the same data.
                 $index = sprintf('%s-%s-%s', $md5in, $md5out, $dataFile);
                 $touchedTestcases[$index] = $index;
@@ -454,6 +500,9 @@ class ImportProblemService
                     $testcaseContent
                         ->setImage($imageFile)
                         ->setImageThumb($imageThumb);
+                }
+                if ($testcaseGroup) {
+                    $testcase->setTestcaseGroup($testcaseGroup);
                 }
                 $this->em->persist($testcase);
 
@@ -998,6 +1047,54 @@ class ImportProblemService
             $messages['info'][] = "Added output validator '$outputValidatorName'.";
         }
         return true;
+    }
+
+    public function parseTestCaseGroupMeta(string $fileContent, string $name, array &$messages): ?TestcaseGroup
+    {
+        $yamlData = Yaml::parse($fileContent);
+        if (empty($yamlData)) {
+            return null;
+        }
+        $testcaseGroup = new TestcaseGroup();
+        $testcaseGroup->setName($name);
+        if (isset($yamlData['accept_score'])) {
+           $value = $yamlData['accept_score'];
+           if (!is_numeric($value)) {
+               $messages['danger'][] = sprintf("Invalid accept_score '%s' in test group '%s'.", $value, $name);
+               return null;
+           }
+           $testcaseGroup = $testcaseGroup->setAcceptScore(Utils::numericToBcMath($yamlData['accept_score']));
+        }
+        if (isset($yamlData['range'])) {
+            $range = preg_split('/\s+/', $yamlData['range']);
+            if (count($range) != 2 || !is_numeric($range[0]) || !is_numeric($range[1])) {
+                $messages['danger'][] = sprintf("Invalid range '%s' in test group '%s'.", $yamlData['range'], $name);
+                return null;
+            }
+            $testcaseGroup->setRangeLowerBound(Utils::numericToBcMath($range[0]));
+            $testcaseGroup->setRangeUpperBound(Utils::numericToBcMath($range[1]));
+        }
+        if (isset($yamlData['grader_flags'])) {
+            $flags = preg_split('/\s+/', $yamlData['grader_flags']);
+            foreach ($flags as $flag) {
+                if (in_array($flag, ['sum', 'max', 'min', 'avg'])) {
+                    try {
+                        $aggregationType = TestcaseAggregationType::tryFrom($flag);
+                        $testcaseGroup->setAggregationType($aggregationType);
+                    } catch (ValueError $e) {
+                        $messages['danger'][] = sprintf("Invalid aggregation type '%s' in test group '%s'.", $flag, $name);
+                        return null;
+                    }
+                }
+                if ($flag === 'ignore_sample') {
+                    $testcaseGroup->setIgnoreSample(true);
+                }
+                // Silently ignore currently unused flags.
+                // TODO: add support for the remaining flags and error out on unknown flags.
+            }
+        }
+        $this->em->persist($testcaseGroup);
+        return $testcaseGroup;
     }
 
     /**

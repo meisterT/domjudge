@@ -13,6 +13,8 @@ use App\Entity\Submission;
 use App\Entity\SubmissionFile;
 use App\Entity\SubmissionSource;
 use App\Entity\Team;
+use App\Entity\TestcaseAggregationType;
+use App\Entity\TestcaseGroup;
 use App\Entity\User;
 use App\Utils\FreezeData;
 use App\Utils\Utils;
@@ -55,6 +57,55 @@ class SubmissionService
         protected readonly ScoreboardService $scoreboardService,
         protected readonly PaginatorInterface $paginator,
     ) {}
+
+    // TODO: Make this a single element
+    public static function maybeSetScoringResult(TestcaseAggregationType $testcaseAggregationType, TestcaseGroup $testcaseGroup, Judging $judging): ?string
+    {
+        if ($testcaseAggregationType !== TestcaseAggregationType::SUM) {
+            throw new BadRequestHttpException("testcase aggregation type " . $testcaseAggregationType->name . " not implemented yet");
+        }
+        $allResultsReady = true;
+        $results = [];
+
+        // TODO: check whether it is allowed to mix groups and directs. Assume for that this is not the case.
+        if (empty($testcaseGroup->getChildren())) {
+            // TODO: Is there a more elegant way to do this?
+            $judgingRuns = $judging->getRuns();
+            foreach ($judgingRuns as $run) {
+                $testcase = $run->getTestcase();
+                if ($testcase->getTestcaseGroup() === $testcaseGroup) {
+                    $results[] = $run->getScore();
+                }
+            }
+        } else {
+            foreach ($testcaseGroup->getChildren() as $childGroup) {
+                $results[] = self::maybeSetScoringResult(
+                    $childGroup->getAggregationType(),
+                    $childGroup,
+                    $judging
+                );
+            }
+        }
+
+        if ($testcaseAggregationType === TestcaseAggregationType::SUM) {
+            $score = "0";
+            foreach ($results as $result) {
+                if ($result === null) {
+                    $allResultsReady = false;
+                    break;
+                } else {
+                    // TODO: Make scale a constant.
+                    $score = bcadd($score, $result, 9);
+                }
+            }
+        }
+
+        // TODO: this is not lazy right now - be more lazy.
+        if ($allResultsReady) {
+            return $result;
+        }
+        return null;
+    }
 
     /**
      * Get a list of submissions that can be displayed in the interface using

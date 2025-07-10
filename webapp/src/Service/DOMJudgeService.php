@@ -1445,17 +1445,19 @@ class DOMJudgeService
         );
     }
 
-    public function getCompareConfig(ContestProblem $problem): string
+    public function getCompareConfig(ContestProblem $contestProblem): string
     {
-        $compareExecutable = $this->getImmutableCompareExecutable($problem);
+        $compareExecutable = $this->getImmutableCompareExecutable($contestProblem);
+        $problem = $contestProblem->getProblem();
         return Utils::jsonEncode(
             [
                 'script_timelimit' => $this->config->get('script_timelimit'),
                 'script_memory_limit' => $this->config->get('script_memory_limit'),
                 'script_filesize_limit' => $this->config->get('script_filesize_limit'),
-                'compare_args' => $problem->getProblem()->getSpecialCompareArgs(),
-                'combined_run_compare' => $problem->getProblem()->isInteractiveProblem(),
+                'compare_args' => $problem->getSpecialCompareArgs(),
+                'combined_run_compare' => $problem->isInteractiveProblem(),
                 'hash' => $compareExecutable->getHash(),
+                'is_scoring_problem' => $problem->isScoringProblem(),
             ]
         );
     }
@@ -1619,17 +1621,19 @@ class DOMJudgeService
         /** @var Testcase $testcase */
         foreach ($testcases as $testcase) {
             $judgetaskInsertParts[] = sprintf(
-                '(%s, :testcase_id%d, :testcase_hash%d)',
+                '(%s, :testcase_id%d, :testcase_hash%d, :isSample%d)',
                 implode(', ', $judgetaskDefaultParamNames),
+                $testcase->getTestcaseid(),
                 $testcase->getTestcaseid(),
                 $testcase->getTestcaseid()
             );
             $judgetaskInsertParams[':testcase_id' . $testcase->getTestcaseid()] = $testcase->getTestcaseid();
             $judgetaskInsertParams[':testcase_hash' . $testcase->getTestcaseid()] = $testcase->getTestcaseHash();
+            $judgetaskInsertParams[':isSample' . $testcase->getTestcaseid()] = $testcase->getSample() ? 1 : 0;
         }
         $judgetaskColumns = array_map(fn(string $column) => substr($column, 1), $judgetaskDefaultParamNames);
         $judgetaskInsertQuery = sprintf(
-            'INSERT INTO judgetask (%s, testcase_id, testcase_hash) VALUES %s',
+            'INSERT INTO judgetask (%s, testcase_id, testcase_hash, is_sample) VALUES %s',
             implode(', ', $judgetaskColumns),
             implode(', ', $judgetaskInsertParts)
         );
