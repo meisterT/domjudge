@@ -58,12 +58,10 @@ class SubmissionService
         protected readonly PaginatorInterface $paginator,
     ) {}
 
-    // TODO: Make this a single element
     public static function maybeSetScoringResult(TestcaseAggregationType $testcaseAggregationType, TestcaseGroup $testcaseGroup, Judging $judging): ?string
     {
-        if ($testcaseAggregationType !== TestcaseAggregationType::SUM) {
-            throw new BadRequestHttpException("testcase aggregation type " . $testcaseAggregationType->name . " not implemented yet");
-        }
+        // TODO: Where do we need to check the verdict?
+        // TODO: Ignore sample, where to check?
         $allResultsReady = true;
         $results = [];
 
@@ -87,7 +85,7 @@ class SubmissionService
             }
         }
 
-        if ($testcaseAggregationType === TestcaseAggregationType::SUM) {
+        if ($testcaseAggregationType === TestcaseAggregationType::SUM || $testcaseAggregationType === TestcaseAggregationType::AVG) {
             $score = "0";
             foreach ($results as $result) {
                 if ($result === null) {
@@ -98,11 +96,27 @@ class SubmissionService
                     $score = bcadd($score, $result, 9);
                 }
             }
+            if ($testcaseAggregationType === TestcaseAggregationType::AVG && count($results) > 0) {
+                $score = bcdiv($score, (string)count($results), 9);
+            }
+        } elseif ($testcaseAggregationType === TestcaseAggregationType::MIN) {
+            $score = null;
+            foreach ($results as $result) {
+                if ($result === null) {
+                    $allResultsReady = false;
+                    break;
+                } elseif ($score === null || bccomp($result, $score, 9) < 0) {
+                    $score = $result;
+                }
+            }
+        } else {
+            throw new InvalidArgumentException(sprintf("Unknown testcase aggregation type '%s'.",
+                $testcaseAggregationType->name));
         }
 
         // TODO: this is not lazy right now - be more lazy.
         if ($allResultsReady) {
-            return $result;
+            return $score;
         }
         return null;
     }

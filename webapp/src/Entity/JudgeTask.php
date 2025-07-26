@@ -107,10 +107,6 @@ class JudgeTask
     #[Serializer\Type('string')]
     private ?string $testcase_hash = null;
 
-    #[ORM\Column(nullable: true, options: ['comment' => 'Whether this is a sample testcase', 'default' => null])]
-    #[Serializer\Type('boolean')]
-    private ?bool $isSample = null;
-
     #[ORM\Column(
         type: 'text',
         nullable: true,
@@ -299,17 +295,6 @@ class JudgeTask
     public function getTestcaseHash(): ?string
     {
         return $this->testcase_hash;
-    }
-
-    public function setIsSample(?bool $isSample): JudgeTask
-    {
-        $this->isSample = $isSample;
-        return $this;
-    }
-
-    public function getIsSample(): ?bool
-    {
-        return $this->isSample;
     }
 
     public function setCompileConfig(string $compile_config): JudgeTask

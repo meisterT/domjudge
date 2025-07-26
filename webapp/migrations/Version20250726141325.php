@@ -10,23 +10,23 @@ use Doctrine\Migrations\AbstractMigration;
 /**
  * Auto-generated Migration: Please modify to your needs!
  */
-final class Version20250710194647 extends AbstractMigration
+final class Version20250726141325 extends AbstractMigration
 {
     public function getDescription(): string
     {
-        return 'Add sample field to judgetask';
+        return 'add output_validator_flags';
     }
 
     public function up(Schema $schema): void
     {
         // this up() migration is auto-generated, please modify it to your needs
-        $this->addSql('ALTER TABLE judgetask ADD is_sample TINYINT(1) DEFAULT NULL COMMENT \'Whether this is a sample testcase\'');
+        $this->addSql('ALTER TABLE testcase_group ADD output_validator_flags VARCHAR(255) DEFAULT NULL COMMENT \'Flags for output validation\'');
     }
 
     public function down(Schema $schema): void
     {
         // this down() migration is auto-generated, please modify it to your needs
-        $this->addSql('ALTER TABLE judgetask DROP is_sample');
+        $this->addSql('ALTER TABLE testcase_group DROP output_validator_flags');
     }
 
     public function isTransactional(): bool

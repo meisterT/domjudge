@@ -1462,9 +1462,6 @@ function judge(array $judgeTask): bool
         }
 
         $compare_args = $compare_config['compare_args'];
-        if ($compare_config['is_scoring_problem']) {
-            $compare_args = $judgeTask['is_sample'] ? "sample $compare_args" : "secret $compare_args";
-        }
         $test_run_cmd = LIBJUDGEDIR . "/testcase_run.sh $cpuset_opt " .
             implode(' ', array_map('dj_escapeshellarg', [
                 $input,
@@ -1556,7 +1553,7 @@ function judge(array $judgeTask): bool
     }
 
     $ret = true;
-    if ($result === 'correct') {
+    if ($result === 'correct' && false) {
         // Post result back asynchronously. PHP is lacking multi-threading, so
         // we just call ourselves again.
         $tmpfile = tempnam(TMPDIR, 'judging_run_');

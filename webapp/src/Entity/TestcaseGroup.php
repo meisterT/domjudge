@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
@@ -38,19 +39,23 @@ class TestcaseGroup
     #[ORM\Column(type: 'boolean', options: ['default' => false, 'comment' => 'Ignore the sample testcases when aggregating scores'])]
     private bool $ignoreSample = false;
 
+    #[ORM\Column(type: 'string', length: 255, nullable: true, options: ['comment' => 'Flags for output validation'])]
+    private string $outputValidatorFlags = '';
+
     #[ORM\ManyToOne(targetEntity: self::class, inversedBy: 'children')]
     #[ORM\JoinColumn(name: 'parent_id', referencedColumnName: 'testcase_group_id', nullable: true, onDelete: 'SET NULL')]
     private ?self $parent = null;
 
     #[ORM\OneToMany(targetEntity: self::class, mappedBy: 'parent')]
-    private $children;
+    private Collection $children;
 
     #[ORM\OneToMany(targetEntity: Testcase::class, mappedBy: 'testcaseGroup')]
-    private $testcases;
+    private Collection $testcases;
 
     public function __construct()
     {
         $this->children = new ArrayCollection();
+        $this->testcases = new ArrayCollection();
     }
 
     public function getTestcaseGroupId(): int
@@ -135,13 +140,24 @@ class TestcaseGroup
         return $this;
     }
 
-    public function getChildren(): ArrayCollection
+    public function getChildren(): Collection
     {
         return $this->children;
     }
 
-    public function getTestcases(): ArrayCollection
+    public function getTestcases(): Collection
     {
         return $this->testcases;
+    }
+
+    public function getOutputValidatorFlags(): string
+    {
+        return $this->outputValidatorFlags;
+    }
+
+    public function setOutputValidatorFlags(string $outputValidatorFlags): self
+    {
+        $this->outputValidatorFlags = $outputValidatorFlags;
+        return $this;
     }
 }

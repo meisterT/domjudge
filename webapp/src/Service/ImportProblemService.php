@@ -376,6 +376,9 @@ class ImportProblemService
                 $testCaseGroups[$dir]->setParent($testCaseGroups[$parentDir]);
             }
         }
+        if (isset($testcaseGroups['data'])) {
+            $problem->setParentTestcaseGroup($testcaseGroups['data']);
+        }
 
         // First insert sample, then secret data in alphabetical order.
         foreach (['sample', 'secret'] as $type) {
@@ -1092,6 +1095,9 @@ class ImportProblemService
                 // Silently ignore currently unused flags.
                 // TODO: add support for the remaining flags and error out on unknown flags.
             }
+        }
+        if (isset($yamlData['output_validator_flags'])) {
+            $testcaseGroup->setOutputValidatorFlags($yamlData['output_validator_flags']);
         }
         $this->em->persist($testcaseGroup);
         return $testcaseGroup;

@@ -1034,12 +1034,13 @@ class JudgehostController extends AbstractFOSRestController
             $parentGroup = $problem->getParentTestcaseGroup();
             $result = SubmissionService::maybeSetScoringResult(
                 // TODO: do not hardcode the aggregation type here.
-                TestcaseAggregationType::SUM,
-                [$parentGroup],
+                TestcaseAggregationType::MIN,
+                $parentGroup,
                 $judging
             );
             if ($result !== null) {
-                $judging->setResult($result);
+                $judging->setScore($result);
+                $judging->setResult("correct"); // TODO: use the "correct" result here.
                 $judging->setEndtime(Utils::now());
                 $this->em->flush();
 
