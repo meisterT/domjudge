@@ -65,10 +65,19 @@ class SubmissionService
         $allResultsReady = true;
         $results = [];
 
+        dump('tc children: ' . count($testcaseGroup->getChildren()) .
+            ', aggregation type: ' . $testcaseAggregationType->name .
+            ', testcase group: ' . $testcaseGroup->getName() .
+            ', judging: ' . $judging->getJudgingid() .
+            ', runs: ' . count($judging->getRuns()));
+
+        $ignoreSample = $testcaseGroup->isIgnoreSample();
+
         // TODO: check whether it is allowed to mix groups and directs. Assume for that this is not the case.
-        if (empty($testcaseGroup->getChildren())) {
+        if ($testcaseGroup->getChildren()->isEmpty()) {
             // TODO: Is there a more elegant way to do this?
             $judgingRuns = $judging->getRuns();
+            dump($judgingRuns);
             foreach ($judgingRuns as $run) {
                 $testcase = $run->getTestcase();
                 if ($testcase->getTestcaseGroup() === $testcaseGroup) {
@@ -77,6 +86,10 @@ class SubmissionService
             }
         } else {
             foreach ($testcaseGroup->getChildren() as $childGroup) {
+                if ($ignoreSample && $childGroup->getName() === 'data/sample') {
+                    dump('Ignoring sample group ' . $childGroup->getName());
+                    continue;
+                }
                 $results[] = self::maybeSetScoringResult(
                     $childGroup->getAggregationType(),
                     $childGroup,
@@ -84,6 +97,28 @@ class SubmissionService
                 );
             }
         }
+
+        dump('Results for group ' . $testcaseGroup->getName() . ': ' . implode(', ', $results));
+
+        // For debugging purposes, create a temporary file with the score, intermediate results and arguments to this function.
+        $filename = sprintf(
+            '/tmp/judging-%d-%d.txt',
+            $judging->getJudgingid(),
+            time()
+        );
+        $fileContent = sprintf(
+            "Testcase Group: %s\nAggregation Type: %s\nScore: %s\nResults: %s\nArguments: %s\n",
+            $testcaseGroup->getName(),
+            $testcaseAggregationType->name,
+            -1,
+            implode(', ', $results),
+            json_encode([
+                'testcaseGroupId' => $testcaseGroup->getTestcaseGroupId(),
+                'judgingId' => $judging->getJudgingid(),
+                'aggregationType' => $testcaseAggregationType->name
+            ])
+        );
+        file_put_contents($filename, $fileContent);
 
         if ($testcaseAggregationType === TestcaseAggregationType::SUM || $testcaseAggregationType === TestcaseAggregationType::AVG) {
             $score = "0";

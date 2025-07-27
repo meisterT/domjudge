@@ -22,7 +22,7 @@ class ProfilerDisableListener
         if ($this->profiler) {
             // Disable the profiler for users with the judgehost permission but not the admin one.
             if ($this->dj->checkrole('judgehost') && !$this->dj->checkrole('admin')) {
-                $this->profiler->disable();
+                //$this->profiler->disable();
             }
             // Disable the profiler if using the web API to import.
             if ($event->getRequest()->attributes->get('_route') == 'current_app_api_problem_addproblem') {

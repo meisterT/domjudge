@@ -376,8 +376,11 @@ class ImportProblemService
                 $testCaseGroups[$dir]->setParent($testCaseGroups[$parentDir]);
             }
         }
-        if (isset($testcaseGroups['data'])) {
-            $problem->setParentTestcaseGroup($testcaseGroups['data']);
+        $messages['warning'][] = 'Array keys: ' . join(', ', array_keys($testCaseGroups));
+        if (array_key_exists('data', $testCaseGroups)) {
+            $problem->setParentTestcaseGroup($testCaseGroups['data']);
+            $messages['info'][] = 'Set parent testcase group for problem to "data", with ID ' .
+                $testCaseGroups['data']->getTestcaseGroupId();
         }
 
         // First insert sample, then secret data in alphabetical order.
@@ -1100,6 +1103,7 @@ class ImportProblemService
             $testcaseGroup->setOutputValidatorFlags($yamlData['output_validator_flags']);
         }
         $this->em->persist($testcaseGroup);
+        $this->em->flush();
         return $testcaseGroup;
     }
 
