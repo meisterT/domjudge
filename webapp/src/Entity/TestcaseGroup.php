@@ -42,6 +42,9 @@ class TestcaseGroup
     #[ORM\Column(type: 'string', length: 255, nullable: true, options: ['comment' => 'Flags for output validation'])]
     private string $outputValidatorFlags = '';
 
+    #[ORM\Column(type: 'boolean', options: ['default' => false, 'comment' => 'Continue on reject'])]
+    private bool $onRejectContinue = false;
+
     #[ORM\ManyToOne(targetEntity: self::class, inversedBy: 'children')]
     #[ORM\JoinColumn(name: 'parent_id', referencedColumnName: 'testcase_group_id', nullable: true, onDelete: 'SET NULL')]
     private ?self $parent = null;
@@ -158,6 +161,17 @@ class TestcaseGroup
     public function setOutputValidatorFlags(string $outputValidatorFlags): self
     {
         $this->outputValidatorFlags = $outputValidatorFlags;
+        return $this;
+    }
+
+    public function isOnRejectContinue(): bool
+    {
+        return $this->onRejectContinue;
+    }
+
+    public function setOnRejectContinue(bool $onRejectContinue): self
+    {
+        $this->onRejectContinue = $onRejectContinue;
         return $this;
     }
 }

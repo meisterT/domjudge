@@ -1102,6 +1102,9 @@ class ImportProblemService
         if (isset($yamlData['output_validator_flags'])) {
             $testcaseGroup->setOutputValidatorFlags($yamlData['output_validator_flags']);
         }
+        if (isset($yamlData['on_reject'])) {
+            $testcaseGroup->setOnRejectContinue($yamlData['on_reject'] === 'continue');
+        }
         $this->em->persist($testcaseGroup);
         $this->em->flush();
         return $testcaseGroup;

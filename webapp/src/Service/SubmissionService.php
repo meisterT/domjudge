@@ -75,13 +75,36 @@ class SubmissionService
 
         // TODO: check whether it is allowed to mix groups and directs. Assume for that this is not the case.
         if ($testcaseGroup->getChildren()->isEmpty()) {
-            // TODO: Is there a more elegant way to do this?
-            $judgingRuns = $judging->getRuns();
-            dump($judgingRuns);
-            foreach ($judgingRuns as $run) {
-                $testcase = $run->getTestcase();
-                if ($testcase->getTestcaseGroup() === $testcaseGroup) {
-                    $results[] = $run->getScore();
+            if ($testcaseGroup->getAcceptScore() !== null) {
+                $acceptScore = $testcaseGroup->getAcceptScore();
+                $judgingRuns = $judging->getRuns();
+                // TODO: Is there a more elegant way to do this?
+                $relevantRuns = [];
+                $allCorrect = true;
+                foreach ($judgingRuns as $run) {
+                    $testcase = $run->getTestcase();
+                    if ($testcase->getTestcaseGroup() === $testcaseGroup) {
+                        $relevantRuns[] = $run;
+                        if ($run->getRunresult() !== 'correct') {
+                            $allCorrect = false;
+                        }
+                    }
+                }
+                if (count($relevantRuns) > 0) {
+                    if ($allCorrect) {
+                        $results[] = $acceptScore;
+                    } else {
+                        $results[] = 0;
+                    }
+                }
+            } else {
+                // TODO: Is there a more elegant way to do this?
+                $judgingRuns = $judging->getRuns();
+                foreach ($judgingRuns as $run) {
+                    $testcase = $run->getTestcase();
+                    if ($testcase->getTestcaseGroup() === $testcaseGroup) {
+                        $results[] = $run->getScore();
+                    }
                 }
             }
         } else {
@@ -151,6 +174,8 @@ class SubmissionService
 
         // TODO: this is not lazy right now - be more lazy.
         if ($allResultsReady) {
+            # convert to string with bcmath scale
+            $score = (string)bcadd((string)$score, '0', 9);
             return $score;
         }
         return null;
