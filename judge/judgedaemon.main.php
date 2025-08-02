@@ -1525,7 +1525,7 @@ function judge(array $judgeTask): bool
             $new_judging_run['team_message'] = rest_encode_file($passdir . '/feedback/teammessage.txt', $output_storage_limit);
         }
         $score = "";
-        if (file_exists($passdir . '/feedback/score.txt')) {
+        if ($result === 'correct' && file_exists($passdir . '/feedback/score.txt')) {
             $new_judging_run['score'] = rest_encode_file($passdir . '/feedback/score.txt');
             $score = ", score: " . trim(dj_file_get_contents($passdir . '/feedback/score.txt'));
         }
@@ -1553,7 +1553,7 @@ function judge(array $judgeTask): bool
     }
 
     $ret = true;
-    if ($result === 'correct' && false) {
+    if ($result === 'correct') {
         // Post result back asynchronously. PHP is lacking multi-threading, so
         // we just call ourselves again.
         $tmpfile = tempnam(TMPDIR, 'judging_run_');
