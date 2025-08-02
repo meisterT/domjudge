@@ -27,6 +27,7 @@ use InvalidArgumentException;
 use Knp\Component\Pager\Pagination\PaginationInterface;
 use Knp\Component\Pager\PaginatorInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\HttpFoundation\Exception\BadRequestException;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -58,18 +59,14 @@ class SubmissionService
         protected readonly PaginatorInterface $paginator,
     ) {}
 
-    public static function maybeSetScoringResult(TestcaseAggregationType $testcaseAggregationType, TestcaseGroup $testcaseGroup, Judging $judging): ?string
+    public static function maybeSetScoringResult(TestcaseAggregationType $testcaseAggregationType, TestcaseGroup $testcaseGroup, Judging $judging): array
     {
-        // TODO: Where do we need to check the verdict?
-        // TODO: Ignore sample, where to check?
         $allResultsReady = true;
+        $allCorrect = true;
+        $firstIncorrectVerdict = null;
         $results = [];
 
-        dump('tc children: ' . count($testcaseGroup->getChildren()) .
-            ', aggregation type: ' . $testcaseAggregationType->name .
-            ', testcase group: ' . $testcaseGroup->getName() .
-            ', judging: ' . $judging->getJudgingid() .
-            ', runs: ' . count($judging->getRuns()));
+        $logs = [];
 
         $ignoreSample = $testcaseGroup->isIgnoreSample();
 
@@ -80,14 +77,19 @@ class SubmissionService
                 $judgingRuns = $judging->getRuns();
                 // TODO: Is there a more elegant way to do this?
                 $relevantRuns = [];
-                $allCorrect = true;
                 foreach ($judgingRuns as $run) {
                     $testcase = $run->getTestcase();
                     if ($testcase->getTestcaseGroup() === $testcaseGroup) {
                         $relevantRuns[] = $run;
                         if ($run->getRunresult() !== 'correct') {
                             $allCorrect = false;
+                            if ($firstIncorrectVerdict === null) {
+                                $firstIncorrectVerdict = $run->getRunresult();
+                            }
                         }
+                        $logs[] = 'Run ID: ' . $run->getRunid() .
+                            ', Result: ' . $run->getRunresult() .
+                            ', Score: ' . $run->getScore();
                     }
                 }
                 if (count($relevantRuns) > 0) {
@@ -104,48 +106,44 @@ class SubmissionService
                     $testcase = $run->getTestcase();
                     if ($testcase->getTestcaseGroup() === $testcaseGroup) {
                         $results[] = $run->getScore();
+                        if ($run->getRunresult() !== 'correct') {
+                            $allCorrect = false;
+                            if ($firstIncorrectVerdict === null) {
+                                $firstIncorrectVerdict = $run->getRunresult();
+                            }
+                        }
+                        $logs[] = 'Run ID: ' . $run->getRunid() .
+                            ', Result: ' . $run->getRunresult() .
+                            ', Score: ' . $run->getScore();
                     }
                 }
             }
         } else {
             foreach ($testcaseGroup->getChildren() as $childGroup) {
                 if ($ignoreSample && $childGroup->getName() === 'data/sample') {
-                    dump('Ignoring sample group ' . $childGroup->getName());
                     continue;
                 }
-                $results[] = self::maybeSetScoringResult(
+                $childScoreAndResult = self::maybeSetScoringResult(
                     $childGroup->getAggregationType(),
                     $childGroup,
                     $judging
                 );
+                $childScore = $childScoreAndResult[0];
+                $childResult = $childScoreAndResult[1];
+                if ($childResult !== 'correct') {
+                    $allCorrect = false;
+                    if ($firstIncorrectVerdict === null) {
+                        $firstIncorrectVerdict = $childResult;
+                    }
+                } else {
+                    $results[] = $childScore;
+                }
             }
         }
 
-        dump('Results for group ' . $testcaseGroup->getName() . ': ' . implode(', ', $results));
-
-        // For debugging purposes, create a temporary file with the score, intermediate results and arguments to this function.
-        $filename = sprintf(
-            '/tmp/judging-%d-%d.txt',
-            $judging->getJudgingid(),
-            time()
-        );
-        $fileContent = sprintf(
-            "Testcase Group: %s\nAggregation Type: %s\nScore: %s\nResults: %s\nArguments: %s\n",
-            $testcaseGroup->getName(),
-            $testcaseAggregationType->name,
-            -1,
-            implode(', ', $results),
-            json_encode([
-                'testcaseGroupId' => $testcaseGroup->getTestcaseGroupId(),
-                'judgingId' => $judging->getJudgingid(),
-                'aggregationType' => $testcaseAggregationType->name
-            ])
-        );
-        file_put_contents($filename, $fileContent);
-
         if ($testcaseAggregationType === TestcaseAggregationType::SUM || $testcaseAggregationType === TestcaseAggregationType::AVG) {
             $score = "0";
-            foreach ($results as $result) {
+           foreach ($results as $result) {
                 if ($result === null) {
                     $allResultsReady = false;
                     break;
@@ -172,13 +170,34 @@ class SubmissionService
                 $testcaseAggregationType->name));
         }
 
-        // TODO: this is not lazy right now - be more lazy.
-        if ($allResultsReady) {
-            # convert to string with bcmath scale
+        // Log some data to a temporary file.
+        $logData = sprintf(
+            "Testcase Group: %s\nScore: %s\nAll Results Ready: %s\nAll Correct: %s\nFirst Incorrect Verdict: %s, results: %s, logs: %s, on reject cont %s, condition %s\n",
+            $testcaseGroup->getName(),
+            $score,
+            $allResultsReady ? 'true' : 'false',
+            $allCorrect ? 'true' : 'false',
+            $firstIncorrectVerdict ?? 'none',
+            json_encode($results),
+            json_encode($logs),
+            $testcaseGroup->isOnRejectContinue() ? 'true' : 'false',
+            (!$allCorrect && !$testcaseGroup->isOnRejectContinue()) ? 'true' : 'false'
+        );
+        $filename = sprintf(
+            'testcase_group_%d_%s.log',
+            $testcaseGroup->getTestcaseGroupId(),
+            date('Ymd_His')
+        );
+        $logFilePath = '/var/tmp/' . $filename;
+        file_put_contents($logFilePath, $logData);
+        dump($logData);
+
+        if ($allResultsReady || (!$allCorrect && !$testcaseGroup->isOnRejectContinue())) {
             $score = (string)bcadd((string)$score, '0', 9);
-            return $score;
+            $result = $allCorrect ? 'correct' : $firstIncorrectVerdict ?? 'judge-error';
+            return [$score, $result];
         }
-        return null;
+        return [null, null];
     }
 
     /**

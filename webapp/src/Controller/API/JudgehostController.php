@@ -1032,15 +1032,17 @@ class JudgehostController extends AbstractFOSRestController
             // TODO: Allow for lazy evaluation of scoring problems.
             $lazyEval = DOMJudgeService::EVAL_FULL;
             $parentGroup = $problem->getParentTestcaseGroup();
-            $result = SubmissionService::maybeSetScoringResult(
+            $scoreAndResult = SubmissionService::maybeSetScoringResult(
                 // TODO: do not hardcode the aggregation type here.
                 TestcaseAggregationType::MIN,
                 $parentGroup,
                 $judging
             );
-            if ($result !== null) {
-                $judging->setScore($result);
-                $judging->setResult("correct"); // TODO: use the "correct" result here.
+            $score = $scoreAndResult[0];
+            $result = $scoreAndResult[1];
+            if ($score !== null) {
+                $judging->setScore($score);
+                $judging->setResult($result);
                 $judging->setEndtime(Utils::now());
                 $this->em->flush();
 
