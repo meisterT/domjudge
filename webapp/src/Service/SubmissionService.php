@@ -65,9 +65,6 @@ class SubmissionService
         $allCorrect = true;
         $firstIncorrectVerdict = null;
         $results = [];
-
-        $logs = [];
-
         $ignoreSample = $testcaseGroup->isIgnoreSample();
 
         // TODO: check whether it is allowed to mix groups and directs. Assume for that this is not the case.
@@ -85,14 +82,10 @@ class SubmissionService
                             $allResultsReady = false;
                         } else if ($run->getRunresult() !== 'correct') {
                             $allCorrect = false;
-                            $logs[] = 'Now all correct is false, because of run result: ' . $run->getRunresult();
                             if ($firstIncorrectVerdict === null) {
                                 $firstIncorrectVerdict = $run->getRunresult();
                             }
                         }
-                        $logs[] = 'Run ID: ' . $run->getRunid() .
-                            ', Result: ' . $run->getRunresult() .
-                            ', Score: ' . $run->getScore();
                     }
                 }
                 if (count($relevantRuns) > 0) {
@@ -113,14 +106,10 @@ class SubmissionService
                             $allResultsReady = false;
                         } else if ($run->getRunresult() !== 'correct') {
                             $allCorrect = false;
-                            $logs[] = 'Now all correct is false, because of run result: ' . $run->getRunresult();
                             if ($firstIncorrectVerdict === null) {
                                 $firstIncorrectVerdict = $run->getRunresult();
                             }
                         }
-                        $logs[] = 'Run ID: ' . $run->getRunid() .
-                            ', Result: ' . $run->getRunresult() .
-                            ', Score: ' . $run->getScore();
                     }
                 }
             }
@@ -177,29 +166,6 @@ class SubmissionService
             throw new InvalidArgumentException(sprintf("Unknown testcase aggregation type '%s'.",
                 $testcaseAggregationType->name));
         }
-
-        // Log some data to a temporary file.
-        $logData = sprintf(
-            "Testcase Group: %s\nScore: %s\nAll Results Ready: %s\nAll Correct: %s\nFirst Incorrect Verdict: %s, results: %s, logs: %s, on reject cont %s, condition %s, cond2: %s\n",
-            $testcaseGroup->getName(),
-            $score,
-            $allResultsReady ? 'true' : 'false',
-            $allCorrect ? 'true' : 'false',
-            $firstIncorrectVerdict ?? 'none',
-            json_encode($results),
-            json_encode($logs),
-            $testcaseGroup->isOnRejectContinue() ? 'true' : 'false',
-            (!$allCorrect && !$testcaseGroup->isOnRejectContinue()) ? 'true' : 'false',
-            ($allResultsReady || (!$allCorrect && !$testcaseGroup->isOnRejectContinue())) ? 'true' : 'false'
-        );
-        $filename = sprintf(
-            'testcase_group_%d_%s.log',
-            $testcaseGroup->getTestcaseGroupId(),
-            date('Ymd_His')
-        );
-        $logFilePath = '/var/tmp/' . $filename;
-        file_put_contents($logFilePath, $logData);
-        dump($logData);
 
         if ($allResultsReady || (!$allCorrect && !$testcaseGroup->isOnRejectContinue())) {
             $score = (string)bcadd((string)$score, '0', 9);
