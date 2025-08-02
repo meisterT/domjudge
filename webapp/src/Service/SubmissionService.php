@@ -81,8 +81,11 @@ class SubmissionService
                     $testcase = $run->getTestcase();
                     if ($testcase->getTestcaseGroup() === $testcaseGroup) {
                         $relevantRuns[] = $run;
-                        if ($run->getRunresult() !== 'correct') {
+                        if ($run->getRunresult() === null || $run->getRunresult() === '') {
+                            $allResultsReady = false;
+                        } else if ($run->getRunresult() !== 'correct') {
                             $allCorrect = false;
+                            $logs[] = 'Now all correct is false, because of run result: ' . $run->getRunresult();
                             if ($firstIncorrectVerdict === null) {
                                 $firstIncorrectVerdict = $run->getRunresult();
                             }
@@ -106,8 +109,11 @@ class SubmissionService
                     $testcase = $run->getTestcase();
                     if ($testcase->getTestcaseGroup() === $testcaseGroup) {
                         $results[] = $run->getScore();
-                        if ($run->getRunresult() !== 'correct') {
+                        if ($run->getRunresult() === null || $run->getRunresult() === '') {
+                            $allResultsReady = false;
+                        } else if ($run->getRunresult() !== 'correct') {
                             $allCorrect = false;
+                            $logs[] = 'Now all correct is false, because of run result: ' . $run->getRunresult();
                             if ($firstIncorrectVerdict === null) {
                                 $firstIncorrectVerdict = $run->getRunresult();
                             }
@@ -130,7 +136,9 @@ class SubmissionService
                 );
                 $childScore = $childScoreAndResult[0];
                 $childResult = $childScoreAndResult[1];
-                if ($childResult !== 'correct') {
+                if ($childResult === null || $childResult === '') {
+                    $allResultsReady = false;
+                } else if ($childResult !== 'correct') {
                     $allCorrect = false;
                     if ($firstIncorrectVerdict === null) {
                         $firstIncorrectVerdict = $childResult;
@@ -172,7 +180,7 @@ class SubmissionService
 
         // Log some data to a temporary file.
         $logData = sprintf(
-            "Testcase Group: %s\nScore: %s\nAll Results Ready: %s\nAll Correct: %s\nFirst Incorrect Verdict: %s, results: %s, logs: %s, on reject cont %s, condition %s\n",
+            "Testcase Group: %s\nScore: %s\nAll Results Ready: %s\nAll Correct: %s\nFirst Incorrect Verdict: %s, results: %s, logs: %s, on reject cont %s, condition %s, cond2: %s\n",
             $testcaseGroup->getName(),
             $score,
             $allResultsReady ? 'true' : 'false',
@@ -181,7 +189,8 @@ class SubmissionService
             json_encode($results),
             json_encode($logs),
             $testcaseGroup->isOnRejectContinue() ? 'true' : 'false',
-            (!$allCorrect && !$testcaseGroup->isOnRejectContinue()) ? 'true' : 'false'
+            (!$allCorrect && !$testcaseGroup->isOnRejectContinue()) ? 'true' : 'false',
+            ($allResultsReady || (!$allCorrect && !$testcaseGroup->isOnRejectContinue())) ? 'true' : 'false'
         );
         $filename = sprintf(
             'testcase_group_%d_%s.log',

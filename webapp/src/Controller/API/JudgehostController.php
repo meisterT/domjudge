@@ -1028,7 +1028,7 @@ class JudgehostController extends AbstractFOSRestController
 
         $lazyEval = DOMJudgeService::EVAL_LAZY;
         $problem = $judging->getSubmission()->getProblem();
-        if ($problem->isScoringProblem()) {
+        if (false && $problem->isScoringProblem()) {
             // TODO: Allow for lazy evaluation of scoring problems.
             $lazyEval = DOMJudgeService::EVAL_FULL;
             $parentGroup = $problem->getParentTestcaseGroup();
@@ -1056,7 +1056,20 @@ class JudgehostController extends AbstractFOSRestController
             }
             return true;
         } else {
-            if (($result = SubmissionService::getFinalResult($runresults, $resultsPrio)) !== null) {
+            if ($problem->isScoringProblem()) {
+                $parentGroup = $problem->getParentTestcaseGroup();
+                $scoreAndResult = SubmissionService::maybeSetScoringResult(
+                // TODO: do not hardcode the aggregation type here.
+                    TestcaseAggregationType::MIN,
+                    $parentGroup,
+                    $judging
+                );
+                $score = $scoreAndResult[0];
+                $result = $scoreAndResult[1];
+            } else {
+                $result = SubmissionService::getFinalResult($runresults, $resultsPrio);
+            }
+            if ($result !== null) {
                 // Lookup global lazy evaluation of results setting and possible problem specific override.
                 $lazyEval = $this->config->get('lazy_eval_results');
                 $problemLazy = $judging->getSubmission()->getContestProblem()->getLazyEvalResults();
@@ -1065,6 +1078,9 @@ class JudgehostController extends AbstractFOSRestController
                 }
 
                 $judging->setResult($result);
+                if ($problem->isScoringProblem()) {
+                   $judging->setScore($score);
+                }
 
                 $hasNullResults = false;
                 foreach ($runresults as $runresult) {
