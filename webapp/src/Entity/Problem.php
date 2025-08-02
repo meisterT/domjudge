@@ -213,6 +213,7 @@ class Problem extends BaseApiEntity implements
 
     #[ORM\ManyToOne(inversedBy: 'problems')]
     #[ORM\JoinColumn(name: 'parent_testcase_group_id', referencedColumnName: 'testcase_group_id', nullable: true, onDelete: 'SET NULL')]
+    #[Serializer\Exclude]
     private ?TestcaseGroup $parentTestcaseGroup = null;
 
     public function setProbid(int $probid): Problem
