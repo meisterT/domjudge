@@ -164,7 +164,6 @@ class Scoreboard
 
             $contestProblem = $scoreCell->getContest()->getContestProblem($scoreCell->getProblem());
             if ($scoreCell->getProblem()->isScoringProblem()) {
-                // Using bcadd here, because bcround requires PHP 8.4.
                 $points = $scoreCell->getScore($this->restricted);
             } else {
                 $points = strval(

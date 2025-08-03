@@ -59,7 +59,7 @@ class SubmissionService
         protected readonly PaginatorInterface $paginator,
     ) {}
 
-    public static function maybeSetScoringResult(TestcaseAggregationType $testcaseAggregationType, TestcaseGroup $testcaseGroup, Judging $judging): array
+    public static function maybeSetScoringResult(TestcaseGroup $testcaseGroup, Judging $judging): array
     {
         $allResultsReady = true;
         $allCorrect = true;
@@ -72,7 +72,7 @@ class SubmissionService
             if ($testcaseGroup->getAcceptScore() !== null) {
                 $acceptScore = $testcaseGroup->getAcceptScore();
                 $judgingRuns = $judging->getRuns();
-                // TODO: Is there a more elegant way to do this?
+                // TODO: There is likely a more elegant way to get the runs for this testcase group.
                 $relevantRuns = [];
                 foreach ($judgingRuns as $run) {
                     $testcase = $run->getTestcase();
@@ -96,7 +96,7 @@ class SubmissionService
                     }
                 }
             } else {
-                // TODO: Is there a more elegant way to do this?
+                // TODO: Reduce code duplication with the code above/below.
                 $judgingRuns = $judging->getRuns();
                 foreach ($judgingRuns as $run) {
                     $testcase = $run->getTestcase();
@@ -119,12 +119,12 @@ class SubmissionService
                     continue;
                 }
                 $childScoreAndResult = self::maybeSetScoringResult(
-                    $childGroup->getAggregationType(),
                     $childGroup,
                     $judging
                 );
                 $childScore = $childScoreAndResult[0];
                 $childResult = $childScoreAndResult[1];
+                // TODO: Reduce code duplication with the code above.
                 if ($childResult === null || $childResult === '') {
                     $allResultsReady = false;
                 } else if ($childResult !== 'correct') {
@@ -138,28 +138,39 @@ class SubmissionService
             }
         }
 
-        if ($testcaseAggregationType === TestcaseAggregationType::SUM || $testcaseAggregationType === TestcaseAggregationType::AVG) {
+        $testcaseAggregationType = $testcaseGroup->getAggregationType();
+        if ($testcaseAggregationType === TestcaseAggregationType::SUM
+            || $testcaseAggregationType === TestcaseAggregationType::AVG) {
             $score = "0";
-           foreach ($results as $result) {
+            foreach ($results as $result) {
                 if ($result === null) {
                     $allResultsReady = false;
                     break;
                 } else {
-                    // TODO: Make scale a constant.
-                    $score = bcadd($score, $result, 9);
+                    $score = bcadd($score, $result, ScoreboardService::SCALE);
                 }
             }
             if ($testcaseAggregationType === TestcaseAggregationType::AVG && count($results) > 0) {
-                $score = bcdiv($score, (string)count($results), 9);
+                $score = bcdiv($score, (string)count($results), ScoreboardService::SCALE);
             }
-        } elseif ($testcaseAggregationType === TestcaseAggregationType::MIN) {
+        } elseif ($testcaseAggregationType === TestcaseAggregationType::MIN
+            || $testcaseAggregationType === TestcaseAggregationType::MAX) {
             $score = null;
             foreach ($results as $result) {
                 if ($result === null) {
                     $allResultsReady = false;
                     break;
-                } elseif ($score === null || bccomp($result, $score, 9) < 0) {
+                } elseif ($score === null) {
                     $score = $result;
+                } else {
+                    if ($testcaseAggregationType === TestcaseAggregationType::MIN
+                        && bccomp($result, $score, ScoreboardService::SCALE) < 0) {
+                        $score = $result;
+                    }
+                    if ($testcaseAggregationType === TestcaseAggregationType::MAX
+                        && bccomp($result, $score, ScoreboardService::SCALE) > 0) {
+                        $score = $result;
+                    }
                 }
             }
         } else {
@@ -168,7 +179,7 @@ class SubmissionService
         }
 
         if ($allResultsReady || (!$allCorrect && !$testcaseGroup->isOnRejectContinue())) {
-            $score = (string)bcadd((string)$score, '0', 9);
+            $score = (string)bcadd((string)$score, '0', ScoreboardService::SCALE);
             $result = $allCorrect ? 'correct' : $firstIncorrectVerdict ?? 'judge-error';
             return [$score, $result];
         }

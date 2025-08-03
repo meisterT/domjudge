@@ -273,12 +273,11 @@ class ScoreboardService
             if ($problem->isScoringProblem()) {
                 $score = $submission->getScore();
                 if ($score !== null) {
-                    // TODO: 9 --> where did we define this SCALE?
-                    if (bccomp($pointsJury, $score, scale: 9) < 0) {
+                    if (bccomp($pointsJury, $score, scale: self::SCALE) < 0) {
                         $pointsJury = $score;
                     }
                     if (!$submission->isAfterFreeze() &&
-                        bccomp($pointsPubl, $score, scale: 9) < 0) {
+                        bccomp($pointsPubl, $score, scale: self::SCALE) < 0) {
                         $pointsPubl = $score;
                     }
                 }
@@ -538,7 +537,7 @@ class ScoreboardService
                     $timeOfLastCorrect[$variant] = max($timeOfLastCorrect[$variant], $solveTimeForProblem);
                     $totalTime[$variant] += $solveTimeForProblem + $penalty;
                     $totalRuntime[$variant] += $scoreCacheCell->getRuntime($isRestricted);
-                    $score[$variant] = bcadd($score[$variant], $scoreCacheCell->getScore($isRestricted), 9);
+                    $score[$variant] = bcadd($score[$variant], $scoreCacheCell->getScore($isRestricted), self::SCALE);
                 }
             }
         }
