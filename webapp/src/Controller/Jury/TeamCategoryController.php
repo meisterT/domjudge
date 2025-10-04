@@ -65,6 +65,13 @@ class TeamCategoryController extends BaseController
             'allow_self_registration' => ['title' => 'self-registration', 'sort' => true],
         ];
 
+        if ($this->isGranted('ROLE_ADMIN')) {
+            $table_fields = array_merge(
+                ['checkbox' => ['title' => '<input type="checkbox" class="select-all" title="Select all categories">', 'sort' => false, 'search' => false, 'raw' => true]],
+                $table_fields
+            );
+        }
+
         $propertyAccessor      = PropertyAccess::createPropertyAccessor();
         $team_categories_table = [];
         foreach ($teamCategories as $teamCategoryData) {
@@ -72,6 +79,16 @@ class TeamCategoryController extends BaseController
             $teamCategory    = $teamCategoryData[0];
             $categorydata    = [];
             $categoryactions = [];
+
+            if ($this->isGranted('ROLE_ADMIN')) {
+                $categorydata['checkbox'] = [
+                    'value' => sprintf(
+                        '<input type="checkbox" name="ids[]" value="%s" class="category-checkbox">',
+                        $teamCategory->getCategoryid()
+                    )
+                ];
+            }
+
             // Get whatever fields we can from the category object itself.
             foreach ($table_fields as $k => $v) {
                 if ($propertyAccessor->isReadable($teamCategory, $k)) {
@@ -228,6 +245,20 @@ class TeamCategoryController extends BaseController
         return $this->render('jury/team_category_add.html.twig', [
             'form' => $form,
         ]);
+    }
+
+    #[IsGranted('ROLE_ADMIN')]
+    #[Route(path: '/delete-multiple', name: 'jury_team_category_delete_multiple', methods: ['GET', 'POST'])]
+    public function deleteMultipleAction(Request $request): Response
+    {
+        $ids = $request->query->all('ids');
+        if (empty($ids)) {
+            throw new BadRequestHttpException('No IDs specified for deletion');
+        }
+
+        $categories = $this->em->getRepository(TeamCategory::class)->findBy(['categoryid' => $ids]);
+
+        return $this->deleteEntities($request, $categories, $this->generateUrl('jury_team_categories'));
     }
 
     #[Route(path: '/{categoryId<\d+>}/request-remaining', name: 'jury_team_category_request_remaining')]
