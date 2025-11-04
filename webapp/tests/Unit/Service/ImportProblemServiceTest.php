@@ -6,12 +6,207 @@ use App\Entity\Problem;
 use App\Service\ImportProblemService;
 use App\Tests\Unit\BaseTestCase;
 use Symfony\Component\PropertyAccess\PropertyAccess;
+use App\Service\DOMJudgeService;
+use App\Service\ConfigurationService;
+use App\Service\EventLogService;
+use App\Service\SubmissionService;
+use Doctrine\ORM\EntityManager;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
+use ZipArchive;
+use App\Entity\User;
+use Symfony\Component\Validator\ConstraintViolationListInterface;
+use Doctrine\ORM\EntityRepository;
+use App\Entity\ImmutableExecutable;
 
 class ImportProblemServiceTest extends BaseTestCase
 {
+    private string $tempZipFile;
+
     protected function setUp(): void
     {
         self::bootKernel();
+        $this->tempZipFile = tempnam(sys_get_temp_dir(), 'testzip');
+    }
+
+    protected function tearDown(): void
+    {
+        unlink($this->tempZipFile);
+    }
+
+    private function createZipArchive(array $files = []): ZipArchive
+    {
+        // Delete the file created by tempnam before opening it with ZipArchive::CREATE
+        unlink($this->tempZipFile);
+        $zip = new ZipArchive();
+        $zip->open($this->tempZipFile, ZipArchive::CREATE);
+        foreach ($files as $name => $content) {
+            $zip->addFromString($name, $content);
+        }
+        $zip->close();
+
+        $zip = new ZipArchive();
+        $zip->open($this->tempZipFile);
+        return $zip;
+    }
+
+    private function createImportProblemService(
+        EntityManager $em,
+        DOMJudgeService $dj,
+        ConfigurationService $config,
+        LoggerInterface $logger,
+        ValidatorInterface $validator
+    ): ImportProblemService
+    {
+        return new ImportProblemService(
+            $em,
+            $logger,
+            $dj,
+            $config,
+            $this->createMock(EventLogService::class),
+            $this->createMock(SubmissionService::class),
+            $validator
+        );
+    }
+
+    public function testNoValidatorFilesDefaultMode(): void
+    {
+        $zip = $this->createZipArchive([
+            'problem.yaml' => 'name: test',
+        ]);
+
+        $em = $this->createMock(EntityManager::class);
+        $em->method('persist')->willReturn(null);
+        $em->method('flush')->willReturn(null);
+        $em->method('wrapInTransaction')->will($this->returnCallback(function ($callback) {
+            $callback();
+        }));
+
+        $dj = $this->createMock(DOMJudgeService::class);
+        $dj->method('getDomjudgeTmpDir')->willReturn(sys_get_temp_dir());
+        $dj->method('getUser')->willReturn($this->createMock(User::class));
+
+        $config = $this->createMock(ConfigurationService::class);
+        $logger = $this->createMock(LoggerInterface::class);
+        $validator = $this->createMock(ValidatorInterface::class);
+        $validator->method('validate')->willReturn($this->createMock(ConstraintViolationListInterface::class));
+
+        $service = $this->createImportProblemService($em, $dj, $config, $logger, $validator);
+
+        $messages = [];
+        $clientName = 'test_problem.zip';
+
+        $ret = $service->importZippedProblem($zip, $clientName, null, null, $messages);
+
+        $this->assertNotNull($ret);
+        $this->assertEmpty($messages['danger']);
+    }
+
+    public function testNoValidatorFilesNotDefaultMode(): void
+    {
+        $zip = $this->createZipArchive([
+            'problem.yaml' => "name: test\nvalidation: custom",
+        ]);
+
+        $em = $this->createMock(EntityManager::class);
+        $em->method('persist')->willReturn(null);
+        $em->method('flush')->willReturn(null);
+        $em->method('wrapInTransaction')->will($this->returnCallback(function ($callback) {
+            $callback();
+        }));
+
+        $dj = $this->createMock(DOMJudgeService::class);
+        $dj->method('getDomjudgeTmpDir')->willReturn(sys_get_temp_dir());
+        $dj->method('getUser')->willReturn($this->createMock(User::class));
+
+        $config = $this->createMock(ConfigurationService::class);
+        $logger = $this->createMock(LoggerInterface::class);
+        $validator = $this->createMock(ValidatorInterface::class);
+        $validator->method('validate')->willReturn($this->createMock(ConstraintViolationListInterface::class));
+
+        $service = $this->createImportProblemService($em, $dj, $config, $logger, $validator);
+
+        $messages = [];
+        $clientName = 'test_problem.zip';
+
+        $ret = $service->importZippedProblem($zip, $clientName, null, null, $messages);
+
+        $this->assertNull($ret);
+        $this->assertStringContainsString('Custom validator specified but not found', $messages['danger'][0]);
+    }
+
+    public function testValidatorFilesFound(): void
+    {
+        $zip = $this->createZipArchive([
+            'problem.yaml' => "name: test\nvalidation: custom",
+            'output_validators/validator.py' => 'print("hello")',
+        ]);
+
+        $executableRepo = $this->createMock(EntityRepository::class);
+        $executableRepo->method('find')->willReturn(null);
+
+        $em = $this->createMock(EntityManager::class);
+        $em->method('persist')->willReturn(null);
+        $em->method('flush')->willReturn(null);
+        $em->method('wrapInTransaction')->will($this->returnCallback(function ($callback) {
+            $callback();
+        }));
+        $em->method('getRepository')->willReturn($executableRepo);
+
+        $dj = $this->createMock(DOMJudgeService::class);
+        $dj->method('getDomjudgeTmpDir')->willReturn(sys_get_temp_dir());
+        $dj->method('getUser')->willReturn($this->createMock(User::class));
+        $dj->method('createImmutableExecutable')->willReturn($this->createMock(ImmutableExecutable::class));
+
+        $config = $this->createMock(ConfigurationService::class);
+        $logger = $this->createMock(LoggerInterface::class);
+        $validator = $this->createMock(ValidatorInterface::class);
+        $validator->method('validate')->willReturn($this->createMock(ConstraintViolationListInterface::class));
+
+        $service = $this->createImportProblemService($em, $dj, $config, $logger, $validator);
+
+        $messages = [];
+        $clientName = 'test_problem.zip';
+
+        $ret = $service->importZippedProblem($zip, $clientName, null, null, $messages);
+
+        $this->assertNotNull($ret);
+        $this->assertNotNull($ret->getCompareExecutable());
+    }
+
+    public function testMultipleValidatorFiles(): void
+    {
+        $zip = $this->createZipArchive([
+            'problem.yaml' => "name: test\nvalidation: custom",
+            'output_validators/validator.py' => 'print("hello")',
+            'output_validator/validator.sh' => 'echo "hello"',
+        ]);
+
+        $em = $this->createMock(EntityManager::class);
+        $em->method('persist')->willReturn(null);
+        $em->method('flush')->willReturn(null);
+        $em->method('wrapInTransaction')->will($this->returnCallback(function ($callback) {
+            $callback();
+        }));
+
+        $dj = $this->createMock(DOMJudgeService::class);
+        $dj->method('getDomjudgeTmpDir')->willReturn(sys_get_temp_dir());
+        $dj->method('getUser')->willReturn($this->createMock(User::class));
+
+        $config = $this->createMock(ConfigurationService::class);
+        $logger = $this->createMock(LoggerInterface::class);
+        $validator = $this->createMock(ValidatorInterface::class);
+        $validator->method('validate')->willReturn($this->createMock(ConstraintViolationListInterface::class));
+
+        $service = $this->createImportProblemService($em, $dj, $config, $logger, $validator);
+
+        $messages = [];
+        $clientName = 'test_problem.zip';
+
+        $ret = $service->importZippedProblem($zip, $clientName, null, null, $messages);
+
+        $this->assertNull($ret);
+        $this->assertStringContainsString('Found multiple custom output validators', $messages['danger'][0]);
     }
 
     public function testEmptyYaml(): void
