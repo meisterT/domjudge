@@ -1044,6 +1044,10 @@ class ImportProblemService
 
         $validationMode = 'default';
         if (isset($yamlData['type'])) {
+            if (!is_string($yamlData['type'])) {
+                $messages['danger'][] = 'Error: problem.type: must be a string.';
+                return false;
+            }
             $types = explode(' ', $yamlData['type']);
             // Validation happens later when we set the properties.
             $yamlProblemProperties['typesAsString'] = $types;

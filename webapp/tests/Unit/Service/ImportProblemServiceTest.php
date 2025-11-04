@@ -302,4 +302,117 @@ YAML;
         $this->assertEquals(null, $problem->getMemlimit());
         $this->assertEquals(null, $problem->getOutputlimit());
     }
+
+    public function testMultipleLanguagesNoEnglish(): void
+    {
+        $yaml = <<<YAML
+name:
+    de: deutsch
+    sv: svenska
+YAML;
+        $messages = [];
+        $validationMode = 'xxx';
+        $problem = new Problem();
+
+        $ret = ImportProblemService::parseYaml($yaml, $messages, $validationMode, PropertyAccess::createPropertyAccessor(), $problem);
+        $this->assertTrue($ret);
+        $this->assertEmpty($messages);
+        $this->assertEquals('deutsch', $problem->getName());
+    }
+
+    public function testEmptyNameArray(): void
+    {
+        $yaml = <<<YAML
+name: []
+YAML;
+        $messages = [];
+        $validationMode = 'xxx';
+        $problem = new Problem();
+
+        $ret = ImportProblemService::parseYaml($yaml, $messages, $validationMode, PropertyAccess::createPropertyAccessor(), $problem);
+        $this->assertFalse($ret);
+        $this->assertStringContainsString('problem.name', $messages['danger'][0]);
+    }
+
+    public function testInvalidType(): void
+    {
+        $yaml = <<<YAML
+name: test
+type: 123
+YAML;
+        $messages = [];
+        $validationMode = 'xxx';
+        $problem = new Problem();
+
+        $ret = ImportProblemService::parseYaml($yaml, $messages, $validationMode, PropertyAccess::createPropertyAccessor(), $problem);
+        $this->assertFalse($ret);
+        $this->assertStringContainsString('must be a string', $messages['danger'][0]);
+    }
+
+    public function testInvalidValidatorFlags(): void
+    {
+        $yaml = <<<YAML
+name: test
+validator_flags: ['foo', 'bar']
+YAML;
+        $messages = [];
+        $validationMode = 'xxx';
+        $problem = new Problem();
+
+        $ret = ImportProblemService::parseYaml($yaml, $messages, $validationMode, PropertyAccess::createPropertyAccessor(), $problem);
+        $this->assertFalse($ret);
+        $this->assertStringContainsString('problem.special_compare_args', $messages['danger'][0]);
+    }
+
+    public function testInvalidValidation(): void
+    {
+        $yaml = <<<YAML
+name: test
+validation: invalid
+YAML;
+        $messages = [];
+        $validationMode = 'xxx';
+        $problem = new Problem();
+
+        $ret = ImportProblemService::parseYaml($yaml, $messages, $validationMode, PropertyAccess::createPropertyAccessor(), $problem);
+        $this->assertTrue($ret);
+        $this->assertEmpty($messages);
+        $this->assertEquals('default', $validationMode);
+    }
+
+    public function testInvalidLimits(): void
+    {
+        $yaml = <<<YAML
+name: test
+limits: 123
+YAML;
+        $messages = [];
+        $validationMode = 'xxx';
+        $problem = new Problem();
+
+        $ret = ImportProblemService::parseYaml($yaml, $messages, $validationMode, PropertyAccess::createPropertyAccessor(), $problem);
+        $this->assertTrue($ret);
+        $this->assertEmpty($messages);
+        $this->assertNull($problem->getMemlimit());
+        $this->assertNull($problem->getOutputlimit());
+    }
+
+    public function testUnknownKeysInLimits(): void
+    {
+        $yaml = <<<YAML
+name: test
+limits:
+  memory: 123
+  unknown: 456
+YAML;
+        $messages = [];
+        $validationMode = 'xxx';
+        $problem = new Problem();
+
+        $ret = ImportProblemService::parseYaml($yaml, $messages, $validationMode, PropertyAccess::createPropertyAccessor(), $problem);
+        $this->assertTrue($ret);
+        $this->assertEmpty($messages);
+        $this->assertEquals(123 * 1024, $problem->getMemlimit());
+        $this->assertNull($problem->getOutputlimit());
+    }
 }
