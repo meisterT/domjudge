@@ -16,7 +16,7 @@ jobs:
         releaseBranch:
           - ${{ contains(github.ref, 'gh-readonly-queue') }}
         exclude:
-          - releaseBranch: false
+          - releaseBranch: true
         include:
           - os: debian
             version: stable
