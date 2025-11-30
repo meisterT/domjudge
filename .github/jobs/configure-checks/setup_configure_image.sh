@@ -24,5 +24,4 @@ cp submit/assert.bash .github/jobs/configure-checks/
 
 # Run the configure tests for this usecase
 mkdir /tmp/bats_logs
-echo "DOMjudge is the best" >> /tmp/bats_logs/testfile
-test_path="/__w/domjudge/domjudge" bats -o /tmp/bats_logs .github/jobs/configure-checks/all.bats
+test_path="/__w/domjudge/domjudge" bats --print-output-on-failure --gather-test-outputs-in /tmp/bats_logs .github/jobs/configure-checks/all.bats
