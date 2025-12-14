@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+         bootstrap="bootstrap.php"
+         colors="true"
+         verbose="true"
+         failOnRisky="true"
+         failOnWarning="true"
+>
+    <testsuites>
+        <testsuite name="Unit Tests">
+            <directory>Unit</directory>
+        </testsuite>
+    </testsuites>
+
+    <coverage processUncoveredFiles="true">
+        <include>
+            <directory suffix=".php">../</directory>
+        </include>
+        <exclude>
+            <directory>../tests</directory>
+        </exclude>
+    </coverage>
+
+    <php>
+        <ini name="error_reporting" value="-1"/>
+        <ini name="display_errors" value="1"/>
+        <ini name="display_startup_errors" value="1"/>
+        <!-- Set environment variables needed by judgedaemon -->
+        <env name="PROCLIMIT" value="64"/>
+        <env name="MEMLIMIT" value="2097152"/>
+        <env name="FILELIMIT" value="65536"/>
+        <env name="RUNUSER" value="domjudge-run"/>
+        <env name="RUNGROUP" value="domjudge-run"/>
+        <env name="SCRIPTTIMELIMIT" value="30"/>
+        <env name="SCRIPTMEMLIMIT" value="2097152"/>
+        <env name="SCRIPTFILELIMIT" value="65536"/>
+    </php>
+</phpunit>
