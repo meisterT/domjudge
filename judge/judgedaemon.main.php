@@ -892,28 +892,57 @@ class JudgeDaemon
             return false;
         }
 
-        $command = implode(' ', array_map(dj_escapeshellarg(...), $command_parts));
-        if ($stdin_source !== null) {
-            $command .= ' < ' . dj_escapeshellarg($stdin_source);
-        }
+        // Use proc_open for secure process execution with proper I/O redirection
+        $descriptorspec = [
+            STDIN => ['pipe', 'r'],  // stdin - read from pipe
+            STDOUT => ['pipe', 'w'],  // stdout - write to pipe
+            STDERR => ['pipe', 'w'],  // stderr - write to pipe
+        ];
+
+        // Override stdout/stderr if targets specified
         if ($stdout_target !== null) {
-            $command .= ' > ' . dj_escapeshellarg($stdout_target);
+            $descriptorspec[STDOUT] = ['file', $stdout_target, 'w'];
         }
         if ($stderr_target !== null) {
-            $command .= ' 2> ' . dj_escapeshellarg($stderr_target);
-        } else {
-            $command .= ' 2>&1';
+            $descriptorspec[STDERR] = ['file', $stderr_target, 'w'];
         }
 
-        logmsg(LOG_DEBUG, "Executing command: $command");
-        system($command, $retval_local);
+        // For proc_open, we need to pass the command as a string for security
+        $command_string = implode(' ', array_map(dj_escapeshellarg(...), $command_parts));
+
+        logmsg(LOG_DEBUG, "Executing command: $command_string");
+
+        $process = proc_open($command_string, $descriptorspec, $pipes);
+        if (!is_resource($process)) {
+            logmsg(LOG_ERR, "Failed to start process: $command_string");
+            $retval = -1;
+            return false;
+        }
+
+        // Handle stdin if provided
+        if ($stdin_source !== null && isset($pipes[STDIN])) {
+            $stdin_data = file_get_contents($stdin_source);
+            if ($stdin_data !== false) {
+                fwrite($pipes[STDIN], $stdin_data);
+            }
+            fclose($pipes[STDIN]);
+        }
+
+        // Close pipes and wait for process (only if they exist and are resources)
+        foreach ($pipes as $pipe) {
+            if (is_resource($pipe)) {
+                fclose($pipe);
+            }
+        }
+
+        $retval_local = proc_close($process);
         if ($retval !== DONT_CARE) {
             $retval = $retval_local;
         } // phpcs:ignore Generic.ControlStructures.InlineControlStructure.NotAllowed
 
         if ($retval_local !== 0) {
             if ($log_nonzero_exitcode) {
-                logmsg(LOG_WARNING, "Command failed with exit code $retval_local: $command");
+                logmsg(LOG_WARNING, "Command failed with exit code $retval_local: $command_string");
             }
             return false;
         }
@@ -1924,7 +1953,8 @@ class JudgeDaemon
 
             return $verdict;
         } finally {
-            if ($realWorkdir) {
+            // Restore environment state safely, handling all error conditions
+            if ($realWorkdir !== null && is_dir($realWorkdir)) {
                 if ($resourceInfo !== null) {
                     appendToFile("$realWorkdir/system.out", $resourceInfo);
                 }
@@ -1941,31 +1971,40 @@ class JudgeDaemon
 
                 if (file_exists("$realWorkdir/testdata.in")) {
                     unlink("$realWorkdir/testdata.in");
-                    symlink($input, "$realWorkdir/testdata.in");
+                    if ($input !== null && is_readable($input)) {
+                        symlink($input, "$realWorkdir/testdata.in");
+                    }
                 }
 
                 if (file_exists("$realWorkdir/testdata.out")) {
                     unlink("$realWorkdir/testdata.out");
-                    symlink($output, "$realWorkdir/testdata.out");
+                    if ($output !== null && is_readable($output)) {
+                        symlink($output, "$realWorkdir/testdata.out");
+                    }
                 }
 
                 // Remove access to workdir for next runs
                 chmod($realWorkdir, 0700);
             }
 
+            // Restore TMPDIR environment variable
             if ($oldTmpDir === false) {
                 putenv('TMPDIR');
-            } else {
+            } elseif ($oldTmpDir !== null) {
                 putenv("TMPDIR=$oldTmpDir");
             }
 
+            // Restore VERBOSE environment variable
             if ($oldVerbose === false) {
                 putenv('VERBOSE');
-            } else {
+            } elseif ($oldVerbose !== null) {
                 putenv("VERBOSE=$oldVerbose");
             }
 
-            chdir($oldCwd);
+            // Restore working directory
+            if ($oldCwd !== null && is_dir($oldCwd)) {
+                chdir($oldCwd);
+            }
         }
     }
 
