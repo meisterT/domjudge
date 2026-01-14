@@ -133,6 +133,10 @@ class VerdictInput
 
 class JudgeDaemon
 {
+    private const FD_STDIN = 0;
+    private const FD_STDOUT = 1;
+    private const FD_STDERR = 2;
+
     // Exit codes from compare scripts
     private const COMPARE_EXITCODE_CORRECT = 42;
     private const COMPARE_EXITCODE_WRONG_ANSWER = 43;
@@ -979,19 +983,23 @@ class JudgeDaemon
             return false;
         }
 
-        // Use proc_open for secure process execution with proper I/O redirection
+        // Use proc_open for secure process execution with proper I/O redirection.
+        // We use file redirection instead of pipes to avoid deadlocks when the
+        // pipe buffer fills up and we are not reading from it.
         $descriptorspec = [
-            STDIN => ['pipe', 'r'],  // stdin - read from pipe
-            STDOUT => ['pipe', 'w'],  // stdout - write to pipe
-            STDERR => ['pipe', 'w'],  // stderr - write to pipe
+            self::FD_STDIN  => ['file', '/dev/null', 'r'],
+            self::FD_STDOUT => ['file', '/dev/null', 'w'],
+            self::FD_STDERR => ['file', '/dev/null', 'w'],
         ];
 
-        // Override stdout/stderr if targets specified
+        if ($stdin_source !== null) {
+            $descriptorspec[self::FD_STDIN] = ['file', $stdin_source, 'r'];
+        }
         if ($stdout_target !== null) {
-            $descriptorspec[STDOUT] = ['file', $stdout_target, 'w'];
+            $descriptorspec[self::FD_STDOUT] = ['file', $stdout_target, 'w'];
         }
         if ($stderr_target !== null) {
-            $descriptorspec[STDERR] = ['file', $stderr_target, 'w'];
+            $descriptorspec[self::FD_STDERR] = ['file', $stderr_target, 'w'];
         }
 
         // For proc_open, we need to pass the command as a string for security
@@ -1004,22 +1012,6 @@ class JudgeDaemon
             logmsg(LOG_ERR, "Failed to start process: $command_string");
             $retval = -1;
             return false;
-        }
-
-        // Handle stdin if provided
-        if ($stdin_source !== null && isset($pipes[STDIN])) {
-            $stdin_data = file_get_contents($stdin_source);
-            if ($stdin_data !== false) {
-                fwrite($pipes[STDIN], $stdin_data);
-            }
-            fclose($pipes[STDIN]);
-        }
-
-        // Close pipes and wait for process (only if they exist and are resources)
-        foreach ($pipes as $pipe) {
-            if (is_resource($pipe)) {
-                fclose($pipe);
-            }
         }
 
         $retval_local = proc_close($process);
@@ -1818,9 +1810,9 @@ class JudgeDaemon
             $wall_limit = implode(':', $timelimit['wall']);
 
             // TODO: Clean this up in a follow-up change, and pass it more directly.
-            $proclimit = getenv('PROCLIMIT');
-            $memlimit = getenv('MEMLIMIT');
-            $filelimit = getenv('FILELIMIT');
+            $proclimit = (int)getenv('PROCLIMIT');
+            $memlimit = (int)getenv('MEMLIMIT');
+            $filelimit = (int)getenv('FILELIMIT');
             $debug = getenv('DEBUG');
             $runuser = getenv('RUNUSER');
             $rungroup = getenv('RUNGROUP');
