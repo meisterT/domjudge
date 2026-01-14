@@ -33,13 +33,96 @@ enum Verdict
 }
 
 /**
+ * Represents program execution metadata with validated fields.
+ */
+class ProgramMetadata
+{
+    public function __construct(
+        public readonly string $exitcode,
+        public readonly string $cpuTime,
+        public readonly string $wallTime,
+        public readonly string $memoryBytes,
+        public readonly string $timeResult,
+        public readonly string $stdoutBytes,
+        public readonly string $stderrBytes,
+        public readonly string $outputTruncated,
+    ) {
+    }
+
+    /**
+     * Create from raw metadata array with validation.
+     */
+    public static function fromArray(array $meta): self
+    {
+        return new self(
+            exitcode: $meta['exitcode'] ?? '0',
+            cpuTime: $meta['cpu-time'] ?? '0',
+            wallTime: $meta['wall-time'] ?? '0',
+            memoryBytes: $meta['memory-bytes'] ?? '0',
+            timeResult: $meta['time-result'] ?? 'pass',
+            stdoutBytes: $meta['stdout-bytes'] ?? '0',
+            stderrBytes: $meta['stderr-bytes'] ?? '0',
+            outputTruncated: $meta['output-truncated'] ?? '',
+        );
+    }
+
+    /**
+     * Check if program exceeded time limit.
+     */
+    public function hasTimelimitExceeded(): bool
+    {
+        return str_contains($this->timeResult, 'timelimit');
+    }
+
+    /**
+     * Check if program had a non-zero exit code.
+     */
+    public function hasRunError(): bool
+    {
+        return $this->exitcode !== '0';
+    }
+
+    /**
+     * Check if stdout was truncated.
+     */
+    public function hasStdoutTruncated(): bool
+    {
+        return str_contains($this->outputTruncated, 'stdout');
+    }
+}
+
+/**
+ * Represents compare script execution metadata with validated fields.
+ */
+class CompareMetadata
+{
+    public function __construct(
+        public readonly string $exitcode,
+        public readonly bool $validatorExitedFirst,
+    ) {
+    }
+
+    /**
+     * Create from raw metadata array with validation.
+     */
+    public static function fromArray(array $meta): self
+    {
+        return new self(
+            exitcode: $meta['exitcode'] ?? '0',
+            validatorExitedFirst: ($meta['validator-exited-first'] ?? '') === 'true',
+        );
+    }
+}
+
+/**
  * Input data for verdict determination, extracted from metadata files.
+ * Uses proper value objects instead of raw arrays for type safety and validation.
  */
 class VerdictInput
 {
     public function __construct(
-        public readonly array $programMeta,
-        public readonly array $compareMeta,
+        public readonly ProgramMetadata $programMeta,
+        public readonly CompareMetadata $compareMeta,
         public readonly int $compareExitcode,
         public readonly bool $combinedRunCompare,
         public readonly int $programOutSize,
@@ -50,6 +133,10 @@ class VerdictInput
 
 class JudgeDaemon
 {
+    // Exit codes from compare scripts
+    private const COMPARE_EXITCODE_CORRECT = 42;
+    private const COMPARE_EXITCODE_WRONG_ANSWER = 43;
+    
     private const EXTERNAL_IDENTIFIER_REGEX = '/^[a-zA-Z0-9_.-]+$/';
 
     private static ?JudgeDaemon $instance = null;
@@ -1520,44 +1607,39 @@ class JudgeDaemon
         }
 
         // Validate compare script returned a valid exitcode
-        if ($input->compareExitcode !== 42 && $input->compareExitcode !== 43) {
+        if ($input->compareExitcode !== self::COMPARE_EXITCODE_CORRECT && $input->compareExitcode !== self::COMPARE_EXITCODE_WRONG_ANSWER) {
             return Verdict::COMPARE_ERROR;
         }
-
-        $programMeta = $input->programMeta;
-        $compareMeta = $input->compareMeta;
 
         // For interactive problems with combined run/compare scripts, a WA from the
         // validator may override TLE and RTE if the validator exited first.
         if ($input->combinedRunCompare
-            && ($compareMeta['validator-exited-first'] ?? '') === 'true'
-            && ($compareMeta['exitcode'] ?? '') === '43') {
+            && $input->compareMeta->validatorExitedFirst
+            && $input->compareMeta->exitcode === (string)self::COMPARE_EXITCODE_WRONG_ANSWER) {
             return Verdict::WRONG_ANSWER;
         }
 
         // Check for timelimit
-        if (preg_match('/.*timelimit.*/', $programMeta['time-result'] ?? '')) {
+        if ($input->programMeta->hasTimelimitExceeded()) {
             return Verdict::TIMELIMIT;
         }
 
         // Check for non-zero exit code (run error)
-        if (($programMeta['exitcode'] ?? '0') !== '0') {
+        if ($input->programMeta->hasRunError()) {
             return Verdict::RUN_ERROR;
         }
 
         // Check for output limit exceeded
-        $outputTruncated = $programMeta['output-truncated'] ?? '';
-        $truncatedStreams = explode(',', $outputTruncated);
-        if (in_array('stdout', $truncatedStreams, true)) {
+        if ($input->programMeta->hasStdoutTruncated()) {
             return Verdict::OUTPUT_LIMIT;
         }
 
         // Check compare script result
-        if ($input->compareExitcode === 42) {
+        if ($input->compareExitcode === self::COMPARE_EXITCODE_CORRECT) {
             return Verdict::CORRECT;
         }
 
-        // exitcode === 43 means wrong answer
+        // exitcode === COMPARE_EXITCODE_WRONG_ANSWER means wrong answer
         if (!$input->combinedRunCompare && $input->programOutSize === 0) {
             return Verdict::NO_OUTPUT;
         }
@@ -1569,8 +1651,8 @@ class JudgeDaemon
      */
     private function logVerdictMessage(
         Verdict $verdict,
-        array $programMeta,
-        array $compareMeta,
+        ProgramMetadata $programMeta,
+        CompareMetadata $compareMeta,
         bool $combinedRunCompare,
         int $filelimit
     ): void {
@@ -1578,8 +1660,8 @@ class JudgeDaemon
             Verdict::CORRECT => "Correct!",
             Verdict::WRONG_ANSWER => $this->getWrongAnswerMessage($programMeta, $compareMeta, $combinedRunCompare),
             Verdict::TIMELIMIT => "Timelimit exceeded.",
-            Verdict::RUN_ERROR => "Non-zero exitcode " . $programMeta['exitcode'],
-            Verdict::OUTPUT_LIMIT => "Output limit exceeded: " . ($programMeta['stdout-bytes'] ?? '?')
+            Verdict::RUN_ERROR => "Non-zero exitcode " . $programMeta->exitcode,
+            Verdict::OUTPUT_LIMIT => "Output limit exceeded: " . $programMeta->stdoutBytes
                 . " bytes more than the limit of " . ($filelimit * 1024) . " bytes",
             Verdict::NO_OUTPUT => "Program produced no output.",
             default => null,
@@ -1593,14 +1675,14 @@ class JudgeDaemon
     /**
      * Get appropriate message for wrong answer verdict, including any override info.
      */
-    private function getWrongAnswerMessage(array $programMeta, array $compareMeta, bool $combinedRunCompare): string
+    private function getWrongAnswerMessage(ProgramMetadata $programMeta, CompareMetadata $compareMeta, bool $combinedRunCompare): string
     {
         $prefix = '';
-        if ($combinedRunCompare && ($compareMeta['validator-exited-first'] ?? '') === 'true') {
-            if (preg_match('/.*timelimit.*/', $programMeta['time-result'] ?? '')) {
+        if ($combinedRunCompare && $compareMeta->validatorExitedFirst) {
+            if ($programMeta->hasTimelimitExceeded()) {
                 $prefix = "Timelimit exceeded, but validator exited first with WA.";
-            } elseif (($programMeta['exitcode'] ?? '0') !== '0') {
-                $prefix = "Non-zero exitcode " . $programMeta['exitcode'] . ", but validator exited first with WA.";
+            } elseif ($programMeta->hasRunError()) {
+                $prefix = "Non-zero exitcode " . $programMeta->exitcode . ", but validator exited first with WA.";
             }
         }
         return $prefix . "Wrong answer!";
@@ -1932,9 +2014,12 @@ class JudgeDaemon
             logmsg(LOG_DEBUG, "parsed compare meta: " . var_export($compare_meta_ini, true));
 
             $programOutSize = filesize("program.out");
+            $programMeta = ProgramMetadata::fromArray($program_meta_ini);
+            $compareMeta = CompareMetadata::fromArray($compare_meta_ini);
+            
             $verdictInput = new VerdictInput(
-                programMeta: $program_meta_ini,
-                compareMeta: $compare_meta_ini,
+                programMeta: $programMeta,
+                compareMeta: $compareMeta,
                 compareExitcode: $exitcode,
                 combinedRunCompare: $combined_run_compare,
                 programOutSize: $programOutSize === false ? 0 : $programOutSize,
@@ -1943,7 +2028,7 @@ class JudgeDaemon
             $verdict = $this->determineVerdict($verdictInput);
 
             // Log appropriate message based on verdict
-            $this->logVerdictMessage($verdict, $program_meta_ini, $compare_meta_ini, $combined_run_compare, $filelimit);
+            $this->logVerdictMessage($verdict, $programMeta, $compareMeta, $combined_run_compare, $filelimit);
 
             // Log compare errors
             if ($verdict === Verdict::COMPARE_ERROR && !$compareTimedOut) {

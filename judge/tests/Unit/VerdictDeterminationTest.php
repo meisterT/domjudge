@@ -5,6 +5,8 @@ namespace DOMjudge\Tests\Unit;
 use DOMjudge\JudgeDaemon;
 use DOMjudge\Verdict;
 use DOMjudge\VerdictInput;
+use DOMjudge\ProgramMetadata;
+use DOMjudge\CompareMetadata;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -32,14 +34,21 @@ class VerdictDeterminationTest extends TestCase
             'memory-bytes' => '1048576',
             'exitcode' => '0',
             'time-result' => 'pass',
+            'stdout-bytes' => '0',
+            'stderr-bytes' => '0',
+            'output-truncated' => '',
         ];
         $defaultCompareMeta = [
             'exitcode' => (string)$compareExitcode,
+            'validator-exited-first' => 'false',
         ];
 
+        $programMetadata = ProgramMetadata::fromArray(array_merge($defaultProgramMeta, $programMeta));
+        $compareMetadata = CompareMetadata::fromArray(array_merge($defaultCompareMeta, $compareMeta));
+
         return new VerdictInput(
-            programMeta: array_merge($defaultProgramMeta, $programMeta),
-            compareMeta: array_merge($defaultCompareMeta, $compareMeta),
+            programMeta: $programMetadata,
+            compareMeta: $compareMetadata,
             compareExitcode: $compareExitcode,
             combinedRunCompare: $combinedRunCompare,
             programOutSize: $programOutSize,

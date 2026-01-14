@@ -3,6 +3,8 @@
 namespace DOMjudge\Tests\Unit;
 
 use DOMjudge\JudgeDaemon;
+use DOMjudge\ProgramMetadata;
+use DOMjudge\CompareMetadata;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -31,7 +33,9 @@ class WrongAnswerMessageTest extends TestCase
         array $compareMeta,
         bool $combinedRunCompare
     ): string {
-        return $this->method->invoke($this->daemon, $programMeta, $compareMeta, $combinedRunCompare);
+        $programMetadata = ProgramMetadata::fromArray($programMeta);
+        $compareMetadata = CompareMetadata::fromArray($compareMeta);
+        return $this->method->invoke($this->daemon, $programMetadata, $compareMetadata, $combinedRunCompare);
     }
 
     // ==================== Basic Wrong Answer Messages ====================
