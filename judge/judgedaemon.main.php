@@ -1597,6 +1597,11 @@ class JudgeDaemon
         if ($input->compareTimedOut) {
             return Verdict::COMPARE_ERROR;
         }
+        $score = "";
+        if ($result === 'correct' && file_exists($passdir . '/feedback/score.txt')) {
+            $new_judging_run['score'] = rest_encode_file($passdir . '/feedback/score.txt');
+            $score = ", score: " . trim(dj_file_get_contents($passdir . '/feedback/score.txt'));
+        }
 
         // Validate compare script returned a valid exitcode
         if ($input->compareExitcode !== self::COMPARE_EXITCODE_CORRECT && $input->compareExitcode !== self::COMPARE_EXITCODE_WRONG_ANSWER) {
@@ -2287,7 +2292,7 @@ class JudgeDaemon
         if ($passLimit == 1) {
             $walltime = $metadata['wall-time'] ?? '?';
             logmsg(LOG_INFO, ' ' . ($result === 'correct' ? " \033[0;32m✔\033[0m" : " \033[1;31m✗\033[0m")
-                . '  ...done in ' . $walltime . 's (CPU: ' . $runtime . 's), result: ' . $result);
+                . '  ...done in ' . $walltime . 's (CPU: ' . $runtime . 's), result: ' . $result . $score);
         }
 
         // done!
