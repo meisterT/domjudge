@@ -540,7 +540,17 @@ class ScoreboardService
         foreach ($scoreCacheCells as $scoreCacheCell) {
             foreach ($variants as $variant => $isRestricted) {
                 $probId = $scoreCacheCell->getProblem()->getProbid();
-                if (isset($contestProblems[$probId]) && $scoreCacheCell->getIsCorrect($isRestricted)) {
+                if (!isset($contestProblems[$probId])) {
+                    continue;
+                }
+
+                // For scoring contests, add the score even if not fully correct (partial scores)
+                if ($contest->getScoreboardType() === ScoreboardType::SCORE) {
+                    $score[$variant] = bcadd($score[$variant], $scoreCacheCell->getScore($isRestricted), self::SCALE);
+                }
+
+                // For pass-fail contests (and correct submissions in scoring contests), add points/time
+                if ($scoreCacheCell->getIsCorrect($isRestricted)) {
                     $penalty = Utils::calcPenaltyTime($scoreCacheCell->getIsCorrect($isRestricted),
                                                       $scoreCacheCell->getSubmissions($isRestricted),
                                                       $penaltyTime, $scoreIsInSeconds);
@@ -553,7 +563,10 @@ class ScoreboardService
                     $timeOfLastCorrect[$variant] = max($timeOfLastCorrect[$variant], $solveTimeForProblem);
                     $totalTime[$variant] += $solveTimeForProblem + $penalty;
                     $totalRuntime[$variant] += $scoreCacheCell->getRuntime($isRestricted);
-                    $score[$variant] = bcadd($score[$variant], $scoreCacheCell->getScore($isRestricted), self::SCALE);
+                    // For pass-fail contests, also add the score here (even though it's not really used)
+                    if ($contest->getScoreboardType() !== ScoreboardType::SCORE) {
+                        $score[$variant] = bcadd($score[$variant], $scoreCacheCell->getScore($isRestricted), self::SCALE);
+                    }
                 }
             }
         }

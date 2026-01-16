@@ -98,7 +98,7 @@ class SubmissionService
                     if ($allCorrect) {
                         $results[] = $acceptScore;
                     } else {
-                        $results[] = 0;
+                        $results[] = '0';
                     }
                 }
             } else {
