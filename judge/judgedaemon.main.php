@@ -1158,7 +1158,7 @@ class JudgeDaemon
                             $buildscript .= "gcc -Wall -O2 -std=gnu11 $source -o run -lm\n";
                             break;
                         case 'cpp':
-                            $buildscript .= "g++ -Wall -O2 -std=gnu++20 $source -o run\n";
+                            $buildscript .= "g++ -Wall -g -std=gnu++20 $source -o run\n";
                             break;
                         case 'java':
                             $buildscript .= "javac -cp . -d . $source\n";
@@ -2026,8 +2026,8 @@ class JudgeDaemon
 
             // Log compare errors
             if ($verdict === Verdict::COMPARE_ERROR && !$compareTimedOut) {
-                logmsg(LOG_ERR, "Comparing failed with exitcode %d, compare script output:\n%s",
-                    $exitcode, file_get_contents("$realWorkdir/feedback/judgemessage.txt"));
+                logmsg(LOG_ERR, sprintf("Comparing failed with exitcode %d, compare script output:\n%s",
+                    $exitcode, file_get_contents("$realWorkdir/feedback/judgemessage.txt")));
             }
 
             return $verdict;
