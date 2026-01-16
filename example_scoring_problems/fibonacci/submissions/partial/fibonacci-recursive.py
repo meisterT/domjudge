@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+# Partial solution - naive recursion, only works for very small n
+import sys
+sys.setrecursionlimit(100)
+
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
+
+n = int(input())
+print(fibonacci(n))

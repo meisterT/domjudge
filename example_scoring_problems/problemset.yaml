@@ -1,0 +1,6 @@
+name: Scoring Demo Contest Problem Set
+problems:
+- id: addone
+  label: A
+- id: fibonacci
+  label: B
