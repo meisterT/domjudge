@@ -133,13 +133,15 @@ class SubmissionService
                 // TODO: Reduce code duplication with the code above.
                 if ($childResult === null || $childResult === '') {
                     $allResultsReady = false;
-                } else if ($childResult !== 'correct') {
-                    $allCorrect = false;
-                    if ($firstIncorrectVerdict === null) {
-                        $firstIncorrectVerdict = $childResult;
-                    }
                 } else {
+                    // Always add the child score for aggregation (partial scoring)
                     $results[] = $childScore;
+                    if ($childResult !== 'correct') {
+                        $allCorrect = false;
+                        if ($firstIncorrectVerdict === null) {
+                            $firstIncorrectVerdict = $childResult;
+                        }
+                    }
                 }
             }
         }
