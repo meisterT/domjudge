@@ -875,27 +875,42 @@ class SubmissionService
 
         $this->logger->info('Submission input verified');
 
-        // First look up any expected results in all submission files to minimize the
+        // First look up any expected results/score in all submission files to minimize the
         // SQL transaction time below.
         // Only do this for problem import submissions, as we do not want this for re-submitted submissions nor
         // submissions that come through the API, e.g. when doing a replay of an old contest.
+        $expectedResults = null;
+        $expectedScore = null;
         if ($this->dj->checkrole('jury') && $source === SubmissionSource::PROBLEM_IMPORT) {
-            $results = null;
+            $annotation = null;
             foreach ($files as $file) {
-                $fileResult = self::getExpectedResults(file_get_contents($file->getRealPath()),
-                    $this->config->get('results_remap'));
-                if ($fileResult === false) {
-                        $message = sprintf("Found more than one @EXPECTED_RESULTS@ in file '%s'.",
-                            $file->getClientOriginalName());
-                        return null;
+                $fileAnnotation = self::parseExpectedAnnotation(
+                    file_get_contents($file->getRealPath()),
+                    $this->config->get('results_remap')
+                );
+                if ($fileAnnotation === false) {
+                    $message = sprintf(
+                        "Found more than one @EXPECTED_RESULTS@/@EXPECTED_SCORE@ in file '%s'.",
+                        $file->getClientOriginalName()
+                    );
+                    return null;
                 }
-                if ($fileResult !== null) {
-                    if ($results !== null) {
-                        $message = sprintf("Found more than one file with @EXPECTED_RESULTS@, e.g. in '%s'.",
-                            $file->getClientOriginalName());
+                if ($fileAnnotation !== null) {
+                    if ($annotation !== null) {
+                        $message = sprintf(
+                            "Found more than one file with @EXPECTED_RESULTS@/@EXPECTED_SCORE@, e.g. in '%s'.",
+                            $file->getClientOriginalName()
+                        );
                         return null;
                     }
-                    $results = $fileResult;
+                    $annotation = $fileAnnotation;
+                }
+            }
+            if ($annotation !== null) {
+                if ($annotation['type'] === 'score') {
+                    $expectedScore = $annotation['value'];
+                } else {
+                    $expectedResults = $annotation['value'];
                 }
             }
         }
@@ -915,10 +930,15 @@ class SubmissionService
             ->setImportError($importError)
             ->setSource($source);
 
-        // Add expected results from source. We only do this for jury submissions
+        // Add expected results/score from source. We only do this for jury submissions
         // to prevent accidental auto-verification of team submissions.
-        if ($this->dj->checkrole('jury') && !empty($results)) {
-            $submission->setExpectedResults($results);
+        if ($this->dj->checkrole('jury')) {
+            if (!empty($expectedResults)) {
+                $submission->setExpectedResults($expectedResults);
+            }
+            if ($expectedScore !== null) {
+                $submission->setExpectedScore($expectedScore);
+            }
         }
         $this->em->persist($submission);
 
@@ -1052,6 +1072,71 @@ class SubmissionService
             return self::PROBLEM_RESULT_REMAP[$result];
         }
         return $result;
+    }
+
+    /**
+     * Parse expected annotation from source file, returning structured data.
+     *
+     * Returns an array with:
+     *   - 'type': 'score' if @EXPECTED_SCORE@ with numeric value, 'results' otherwise
+     *   - 'value': numeric score (for type=score) or array of result names (for type=results)
+     * Returns false if multiple annotations found, null if no annotation found.
+     *
+     * @param array<string, string> $resultsRemap
+     * @return array{type: string, value: string|float|string[]}|false|null
+     */
+    public static function parseExpectedAnnotation(string $source, array $resultsRemap): array|false|null
+    {
+        $matchstring = null;
+        $pos = false;
+        foreach (self::PROBLEM_RESULT_MATCHSTRING as $pattern) {
+            $currentPos = mb_stripos($source, $pattern);
+            if ($currentPos !== false) {
+                // Check if we find another match after the first one, since
+                // that is not allowed.
+                if (mb_stripos($source, $pattern, $currentPos + 1) !== false) {
+                    return false;
+                }
+                // Check that another pattern did not give a match already.
+                if ($pos !== false) {
+                    return false;
+                }
+                $pos = $currentPos;
+                $matchstring = $pattern;
+            }
+        }
+
+        if ($pos === false) {
+            return null;
+        }
+
+        $beginpos = $pos + mb_strlen($matchstring);
+        $endpos = mb_strpos($source, "\n", $beginpos);
+        $str = trim(mb_substr($source, $beginpos, $endpos - $beginpos));
+
+        // If @EXPECTED_SCORE@ is used with a numeric value, treat it as an expected score
+        if ($matchstring === '@EXPECTED_SCORE@: ' && is_numeric($str)) {
+            return [
+                'type' => 'score',
+                'value' => (float)$str,
+            ];
+        }
+
+        // Otherwise, treat as expected results (list of result names)
+        $results = explode(',', mb_strtoupper($str));
+        foreach ($results as $key => $val) {
+            $result = self::normalizeExpectedResult($val);
+            $lowerResult = mb_strtolower($result);
+            if (isset($resultsRemap[$lowerResult])) {
+                $result = mb_strtoupper($resultsRemap[$lowerResult]);
+            }
+            $results[$key] = $result;
+        }
+
+        return [
+            'type' => 'results',
+            'value' => $results,
+        ];
     }
 
     /**

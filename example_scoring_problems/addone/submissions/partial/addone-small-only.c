@@ -1,4 +1,6 @@
-/* Partial solution - only handles small numbers (int overflow for large) */
+/* Partial solution - only handles small numbers (int overflow for large)
+ * @EXPECTED_SCORE@: 30
+ */
 #include <stdio.h>
 
 int main() {

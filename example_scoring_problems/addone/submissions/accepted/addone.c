@@ -1,4 +1,6 @@
-/* Correct solution using long long for large numbers */
+/* Correct solution using long long for large numbers
+ * @EXPECTED_SCORE@: 60
+ */
 #include <stdio.h>
 
 int main() {

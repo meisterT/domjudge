@@ -325,6 +325,128 @@ class SubmissionServiceTest extends KernelTestCase
     }
 
     // =========================================================================
+    // Tests for parseExpectedAnnotation
+    // =========================================================================
+
+    /**
+     * Test parsing @EXPECTED_RESULTS@ tag with a single result.
+     */
+    public function testParseExpectedAnnotationWithExpectedResults(): void
+    {
+        $source = "// @EXPECTED_RESULTS@: CORRECT\nint main() {}";
+        $result = SubmissionService::parseExpectedAnnotation($source, []);
+
+        self::assertNotNull($result);
+        self::assertNotFalse($result);
+        self::assertEquals('results', $result['type']);
+        self::assertEquals(['CORRECT'], $result['value']);
+    }
+
+    /**
+     * Test parsing @EXPECTED_RESULTS@ tag with multiple results.
+     */
+    public function testParseExpectedAnnotationWithMultipleResults(): void
+    {
+        $source = "// @EXPECTED_RESULTS@: CORRECT, WRONG-ANSWER\nint main() {}";
+        $result = SubmissionService::parseExpectedAnnotation($source, []);
+
+        self::assertNotNull($result);
+        self::assertNotFalse($result);
+        self::assertEquals('results', $result['type']);
+        self::assertEquals(['CORRECT', 'WRONG-ANSWER'], $result['value']);
+    }
+
+    /**
+     * Test parsing @EXPECTED_SCORE@ tag with a result name (backwards compatible).
+     */
+    public function testParseExpectedAnnotationWithExpectedScoreResultName(): void
+    {
+        $source = "// @EXPECTED_SCORE@: CORRECT\nint main() {}";
+        $result = SubmissionService::parseExpectedAnnotation($source, []);
+
+        self::assertNotNull($result);
+        self::assertNotFalse($result);
+        self::assertEquals('results', $result['type']);
+        self::assertEquals(['CORRECT'], $result['value']);
+    }
+
+    /**
+     * Test parsing @EXPECTED_SCORE@ tag with a numeric score.
+     */
+    public function testParseExpectedAnnotationWithNumericScore(): void
+    {
+        $source = "// @EXPECTED_SCORE@: 60\nint main() {}";
+        $result = SubmissionService::parseExpectedAnnotation($source, []);
+
+        self::assertNotNull($result);
+        self::assertNotFalse($result);
+        self::assertEquals('score', $result['type']);
+        self::assertEquals(60.0, $result['value']);
+    }
+
+    /**
+     * Test parsing @EXPECTED_SCORE@ tag with a decimal score.
+     */
+    public function testParseExpectedAnnotationWithDecimalScore(): void
+    {
+        $source = "// @EXPECTED_SCORE@: 75.5\nint main() {}";
+        $result = SubmissionService::parseExpectedAnnotation($source, []);
+
+        self::assertNotNull($result);
+        self::assertNotFalse($result);
+        self::assertEquals('score', $result['type']);
+        self::assertEquals(75.5, $result['value']);
+    }
+
+    /**
+     * Test parsing with no annotation returns null.
+     */
+    public function testParseExpectedAnnotationNoAnnotation(): void
+    {
+        $source = "int main() { return 0; }";
+        $result = SubmissionService::parseExpectedAnnotation($source, []);
+
+        self::assertNull($result);
+    }
+
+    /**
+     * Test parsing with duplicate annotations returns false.
+     */
+    public function testParseExpectedAnnotationDuplicate(): void
+    {
+        $source = "// @EXPECTED_RESULTS@: CORRECT\n// @EXPECTED_RESULTS@: WRONG-ANSWER\nint main() {}";
+        $result = SubmissionService::parseExpectedAnnotation($source, []);
+
+        self::assertFalse($result);
+    }
+
+    /**
+     * Test parsing with both annotation types returns false.
+     */
+    public function testParseExpectedAnnotationMixedTags(): void
+    {
+        $source = "// @EXPECTED_RESULTS@: CORRECT\n// @EXPECTED_SCORE@: 60\nint main() {}";
+        $result = SubmissionService::parseExpectedAnnotation($source, []);
+
+        self::assertFalse($result);
+    }
+
+    /**
+     * Test that results remap is applied.
+     */
+    public function testParseExpectedAnnotationWithRemap(): void
+    {
+        $source = "// @EXPECTED_RESULTS@: accepted\nint main() {}";
+        $remap = ['accepted' => 'CORRECT'];
+        $result = SubmissionService::parseExpectedAnnotation($source, $remap);
+
+        self::assertNotNull($result);
+        self::assertNotFalse($result);
+        self::assertEquals('results', $result['type']);
+        self::assertEquals(['CORRECT'], $result['value']);
+    }
+
+    // =========================================================================
     // Helper methods for creating test entities
     // =========================================================================
 
