@@ -47,7 +47,19 @@
         </div>
     {% endif %}
 
-    {% if selectedJudging is not null and selectedJudging.result is not empty and submission.expectedResults %}
+    {% if selectedJudging is not null and selectedJudging.result is not empty and submission.expectedScore is not null %}
+        {# Expected score comparison for scoring problems #}
+        {% if selectedJudging.score == submission.expectedScore %}
+            <div class="alert alert-success">
+                Actual score matches the expected score ({{ selectedJudging.score }}).
+            </div>
+        {% else %}
+            <div class="alert alert-danger">
+                Actual score {{ selectedJudging.score }} does NOT match expected score: {{ submission.expectedScore }}.
+            </div>
+        {% endif %}
+    {% elseif selectedJudging is not null and selectedJudging.result is not empty and submission.expectedResults %}
+        {# Expected verdict comparison for pass/fail problems #}
         {% if selectedJudging.result|upper not in submission.expectedResults %}
             <div class="alert alert-danger">
                 Actual result {{ selectedJudging.result | printValidJuryResult }} does NOT match expected result(s):

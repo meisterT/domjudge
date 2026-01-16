@@ -374,12 +374,10 @@ class ImportProblemService
         }
         foreach ($testCaseGroups as $dir => $testCaseGroup) {
             $parentDir = dirname($dir);
-            $messages['warning'][] = sprintf("Looking for %s in tc group %s", $parentDir, $dir);
             if (isset($testCaseGroups[$parentDir])) {
                 $testCaseGroups[$dir]->setParent($testCaseGroups[$parentDir]);
             }
         }
-        $messages['warning'][] = 'Array keys: ' . join(', ', array_keys($testCaseGroups));
         if (array_key_exists('data', $testCaseGroups)) {
             $problem->setParentTestcaseGroup($testCaseGroups['data']);
             $messages['info'][] = 'Set parent testcase group for problem to "data", with ID ' .
@@ -752,14 +750,14 @@ class ImportProblemService
                     $subs_with_unknown_lang[] = "'" . $path . "'";
                 } else {
                     $expectedResult = SubmissionService::normalizeExpectedResult($pathComponents[1]);
-                    $results        = null;
+                    $annotation     = null;
                     $totalSize      = 0;
                     $filesToSubmit  = [];
                     $tempFiles      = [];
                     for ($k = 0; $k < count($files); $k++) {
                         $source = $zip->getFromIndex($indices[$k]);
-                        if ($results === null) {
-                            $results = SubmissionService::getExpectedResults($source,
+                        if ($annotation === null) {
+                            $annotation = SubmissionService::parseExpectedAnnotation($source,
                                 $this->config->get('results_remap'));
                         }
                         if (!($tempFileName = tempnam($tmpDir, 'ref_solution-'))) {
@@ -776,21 +774,36 @@ class ImportProblemService
                         $totalSize       += filesize($tempFileName);
                         $tempFiles[]     = $tempFileName;
                     }
-                    if ($results === false || $results === null) {
-                        $results = [$expectedResult];
-                    } elseif (!in_array($expectedResult, $results)) {
-                        $messages['danger'][] = sprintf(
-                            "Annotated result '%s' does not match directory for %s",
-                            implode(', ', $results), $path
-                        );
-                    } elseif (!empty($expectedResult)) {
-                        if (count($results) > 1) {
-                            $messages['warning'][] = sprintf(
-                                "Annotated results '%s' restricted to match directory for %s",
+                    // Parse annotation into expected results or expected score
+                    $expectedResults = null;
+                    $expectedScore = null;
+                    if ($annotation === false) {
+                        // Multiple annotations found - error already reported
+                        $expectedResults = [$expectedResult];
+                    } elseif ($annotation === null) {
+                        // No annotation found - use directory-based expected result
+                        $expectedResults = [$expectedResult];
+                    } elseif ($annotation['type'] === 'score') {
+                        // Numeric score annotation
+                        $expectedScore = $annotation['value'];
+                    } else {
+                        // Result-based annotation
+                        $results = $annotation['value'];
+                        if (!in_array($expectedResult, $results)) {
+                            $messages['danger'][] = sprintf(
+                                "Annotated result '%s' does not match directory for %s",
                                 implode(', ', $results), $path
                             );
+                        } elseif (!empty($expectedResult)) {
+                            if (count($results) > 1) {
+                                $messages['warning'][] = sprintf(
+                                    "Annotated results '%s' restricted to match directory for %s",
+                                    implode(', ', $results), $path
+                                );
+                            }
+                            $results = [$expectedResult];
                         }
-                        $results = [$expectedResult];
+                        $expectedResults = $results;
                     }
                     $jury_team_id = $this->dj->getUser()->getTeam()->getTeamid();
                     $jury_user = $this->dj->getUser();
@@ -832,7 +845,12 @@ class ImportProblemService
                             }
                         } else {
                             $submission = $this->em->getRepository(Submission::class)->find($submission->getSubmitid());
-                            $submission->setExpectedResults($results);
+                            if ($expectedResults !== null) {
+                                $submission->setExpectedResults($expectedResults);
+                            }
+                            if ($expectedScore !== null) {
+                                $submission->setExpectedScore($expectedScore);
+                            }
                             // Flush changes to submission.
                             $this->em->flush();
 

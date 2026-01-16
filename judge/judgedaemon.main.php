@@ -1597,11 +1597,6 @@ class JudgeDaemon
         if ($input->compareTimedOut) {
             return Verdict::COMPARE_ERROR;
         }
-        $score = "";
-        if ($result === 'correct' && file_exists($passdir . '/feedback/score.txt')) {
-            $new_judging_run['score'] = rest_encode_file($passdir . '/feedback/score.txt');
-            $score = ", score: " . trim(dj_file_get_contents($passdir . '/feedback/score.txt'));
-        }
 
         // Validate compare script returned a valid exitcode
         if ($input->compareExitcode !== self::COMPARE_EXITCODE_CORRECT && $input->compareExitcode !== self::COMPARE_EXITCODE_WRONG_ANSWER) {
@@ -2254,6 +2249,12 @@ class JudgeDaemon
 
             if (file_exists($passdir . '/feedback/teammessage.txt')) {
                 $new_judging_run['team_message'] = $this->restEncodeFile($passdir . '/feedback/teammessage.txt', $output_storage_limit);
+            }
+
+            $score = "";
+            if ($result === 'correct' && file_exists($passdir . '/feedback/score.txt')) {
+                $new_judging_run['score'] = $this->restEncodeFile($passdir . '/feedback/score.txt', false);
+                $score = ", score: " . trim(dj_file_get_contents($passdir . '/feedback/score.txt'));
             }
 
             if ($passLimit > 1) {
