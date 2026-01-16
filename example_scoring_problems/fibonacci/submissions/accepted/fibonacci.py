@@ -6,11 +6,19 @@
 
 MOD = 10**9 + 7
 
+
 def matrix_mult(A, B, mod):
     return [
-        [(A[0][0]*B[0][0] + A[0][1]*B[1][0]) % mod, (A[0][0]*B[0][1] + A[0][1]*B[1][1]) % mod],
-        [(A[1][0]*B[0][0] + A[1][1]*B[1][0]) % mod, (A[1][0]*B[0][1] + A[1][1]*B[1][1]) % mod]
+        [
+            (A[0][0] * B[0][0] + A[0][1] * B[1][0]) % mod,
+            (A[0][0] * B[0][1] + A[0][1] * B[1][1]) % mod,
+        ],
+        [
+            (A[1][0] * B[0][0] + A[1][1] * B[1][0]) % mod,
+            (A[1][0] * B[0][1] + A[1][1] * B[1][1]) % mod,
+        ],
     ]
+
 
 def matrix_pow(M, n, mod):
     result = [[1, 0], [0, 1]]  # Identity matrix
@@ -21,20 +29,22 @@ def matrix_pow(M, n, mod):
         n //= 2
     return result
 
+
 def fibonacci(n):
     if n <= 1:
         return n
     if n <= 90:
-        # Simple iteration for small n (no overflow issues)
+        # Simple iteration for small n
         a, b = 0, 1
         for _ in range(n - 1):
-            a, b = b, a + b
+            a, b = b, (a + b) % MOD
         return b
     else:
         # Matrix exponentiation for large n, with modulo
         M = [[1, 1], [1, 0]]
         result = matrix_pow(M, n, MOD)
         return result[0][1]
+
 
 n = int(input())
 print(fibonacci(n))
