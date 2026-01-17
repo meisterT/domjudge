@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
-# O(n^2) solution - handles basic and efficiency/small, but TLE on medium/large
-# Also handles robustness (edge cases)
-# basic (20) + efficiency avg of (small=15, medium=0, large=0) = 20 + 5 = 25
-# But robustness uses MIN, so we need to pass all robustness cases to get points there
-# With correct edge case handling: basic (20) + small (5 from avg) + robustness (50) = 75
-# Actually: efficiency is AVG(15, 0, 0) = 5, so 20 + 5 + 50 = 75
+# Handles basic and efficiency/small correctly
+# Intentionally produces wrong answers for n > 200
+# basic (20) + efficiency avg(15, 0, 0) = 5 + robustness min(50, 50, 50) = 50
 # @EXPECTED_SCORE@: 75
 
-def quadratic(arr):
-    """Find maximum sum using O(n^2)"""
-    n = len(arr)
+def kadane(arr):
     max_sum = arr[0]
-    for i in range(n):
-        curr_sum = 0
-        for j in range(i, n):
-            curr_sum += arr[j]
-            max_sum = max(max_sum, curr_sum)
+    curr_sum = arr[0]
+    for i in range(1, len(arr)):
+        curr_sum = max(arr[i], curr_sum + arr[i])
+        max_sum = max(max_sum, curr_sum)
     return max_sum
 
 n = int(input())
 arr = list(map(int, input().split()))
-print(quadratic(arr))
+
+if n > 200:
+    # Wrong answer for medium and large inputs
+    print(0)
+else:
+    print(kadane(arr))

@@ -1135,6 +1135,18 @@ class ImportProblemService
         if (isset($yamlData['on_reject'])) {
             $testcaseGroup->setOnRejectContinue($yamlData['on_reject'] === 'continue');
         }
+        if (isset($yamlData['grading'])) {
+            $grading = $yamlData['grading'];
+            if (in_array($grading, ['sum', 'max', 'min', 'avg'])) {
+                $aggregationType = TestcaseAggregationType::tryFrom($grading);
+                if ($aggregationType !== null) {
+                    $testcaseGroup->setAggregationType($aggregationType);
+                }
+            } else {
+                $messages['danger'][] = sprintf("Invalid grading type '%s' in test group '%s'.", $grading, $name);
+                return null;
+            }
+        }
         $this->em->persist($testcaseGroup);
         $this->em->flush();
         return $testcaseGroup;

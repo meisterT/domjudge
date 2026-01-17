@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-# O(n^3) brute force - only works for basic (small inputs)
-# Times out on efficiency tests, may also fail robustness due to performance
-# @EXPECTED_SCORE@: 20
+# Only handles basic tests correctly (small arrays)
+# Intentionally produces wrong answers for n > 50
+# basic (20) + efficiency avg(0, 0, 0) = 0 + robustness min(50, 50, 50) = 50
+# @EXPECTED_SCORE@: 70
 
-def brute_force(arr):
-    """Find maximum sum using O(n^3) brute force"""
-    n = len(arr)
+def kadane(arr):
     max_sum = arr[0]
-    for i in range(n):
-        for j in range(i, n):
-            curr_sum = 0
-            for k in range(i, j + 1):
-                curr_sum += arr[k]
-            max_sum = max(max_sum, curr_sum)
+    curr_sum = arr[0]
+    for i in range(1, len(arr)):
+        curr_sum = max(arr[i], curr_sum + arr[i])
+        max_sum = max(max_sum, curr_sum)
     return max_sum
 
 n = int(input())
 arr = list(map(int, input().split()))
-print(brute_force(arr))
+
+if n > 50:
+    # Wrong answer for larger inputs
+    print(0)
+else:
+    print(kadane(arr))
