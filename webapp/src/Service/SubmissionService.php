@@ -63,34 +63,38 @@ class SubmissionService
      * Returns a two-element array:
      *   - The score for the testcase group, or null if not all results are ready.
      *   - The result for the testcase group, or null if not all results are ready.
+     * @param array<int, JudgingRun[]>|null $runsByGroup
      * @return array{string|null, string|null}
      */
-    public static function maybeSetScoringResult(TestcaseGroup $testcaseGroup, Judging $judging): array
+    public static function maybeSetScoringResult(TestcaseGroup $testcaseGroup, Judging $judging, ?array $runsByGroup = null): array
     {
+        if ($runsByGroup === null) {
+            $runsByGroup = [];
+            foreach ($judging->getRuns() as $run) {
+                $group = $run->getTestcase()->getTestcaseGroup();
+                if ($group !== null) {
+                    $runsByGroup[$group->getTestcaseGroupId()][] = $run;
+                }
+            }
+        }
+
         $allResultsReady = true;
         $allCorrect = true;
         $firstIncorrectVerdict = null;
         $results = [];
         $ignoreSample = $testcaseGroup->isIgnoreSample();
 
-        // TODO: check whether it is allowed to mix groups and directs. Assume for that this is not the case.
         if ($testcaseGroup->getChildren()->isEmpty()) {
+            $relevantRuns = $runsByGroup[$testcaseGroup->getTestcaseGroupId()] ?? [];
             if ($testcaseGroup->getAcceptScore() !== null) {
                 $acceptScore = $testcaseGroup->getAcceptScore();
-                $judgingRuns = $judging->getRuns();
-                // TODO: There is likely a more elegant way to get the runs for this testcase group.
-                $relevantRuns = [];
-                foreach ($judgingRuns as $run) {
-                    $testcase = $run->getTestcase();
-                    if ($testcase->getTestcaseGroup() === $testcaseGroup) {
-                        $relevantRuns[] = $run;
-                        if ($run->getRunresult() === null || $run->getRunresult() === '') {
-                            $allResultsReady = false;
-                        } else if ($run->getRunresult() !== 'correct') {
-                            $allCorrect = false;
-                            if ($firstIncorrectVerdict === null) {
-                                $firstIncorrectVerdict = $run->getRunresult();
-                            }
+                foreach ($relevantRuns as $run) {
+                    if ($run->getRunresult() === null || $run->getRunresult() === '') {
+                        $allResultsReady = false;
+                    } else if ($run->getRunresult() !== 'correct') {
+                        $allCorrect = false;
+                        if ($firstIncorrectVerdict === null) {
+                            $firstIncorrectVerdict = $run->getRunresult();
                         }
                     }
                 }
@@ -102,19 +106,14 @@ class SubmissionService
                     }
                 }
             } else {
-                // TODO: Reduce code duplication with the code above/below.
-                $judgingRuns = $judging->getRuns();
-                foreach ($judgingRuns as $run) {
-                    $testcase = $run->getTestcase();
-                    if ($testcase->getTestcaseGroup() === $testcaseGroup) {
-                        $results[] = $run->getScore();
-                        if ($run->getRunresult() === null || $run->getRunresult() === '') {
-                            $allResultsReady = false;
-                        } else if ($run->getRunresult() !== 'correct') {
-                            $allCorrect = false;
-                            if ($firstIncorrectVerdict === null) {
-                                $firstIncorrectVerdict = $run->getRunresult();
-                            }
+                foreach ($relevantRuns as $run) {
+                    $results[] = $run->getScore();
+                    if ($run->getRunresult() === null || $run->getRunresult() === '') {
+                        $allResultsReady = false;
+                    } else if ($run->getRunresult() !== 'correct') {
+                        $allCorrect = false;
+                        if ($firstIncorrectVerdict === null) {
+                            $firstIncorrectVerdict = $run->getRunresult();
                         }
                     }
                 }
@@ -126,11 +125,11 @@ class SubmissionService
                 }
                 $childScoreAndResult = self::maybeSetScoringResult(
                     $childGroup,
-                    $judging
+                    $judging,
+                    $runsByGroup
                 );
                 $childScore = $childScoreAndResult[0];
                 $childResult = $childScoreAndResult[1];
-                // TODO: Reduce code duplication with the code above.
                 if ($childResult === null || $childResult === '') {
                     $allResultsReady = false;
                 } else {
@@ -207,13 +206,22 @@ class SubmissionService
             return null;
         }
 
-        return $this->getScoringHierarchyForGroup($parentGroup, $judging);
+        $runsByGroup = [];
+        foreach ($judging->getRuns() as $run) {
+            $group = $run->getTestcase()->getTestcaseGroup();
+            if ($group !== null) {
+                $runsByGroup[$group->getTestcaseGroupId()][] = $run;
+            }
+        }
+
+        return $this->getScoringHierarchyForGroup($parentGroup, $judging, null, $runsByGroup);
     }
 
     /**
      * Get the scoring hierarchy for the given group and judging.
+     * @param array<int, JudgingRun[]>|null $runsByGroup
      */
-    private function getScoringHierarchyForGroup(TestcaseGroup $group, Judging $judging, ?string $parentName = null): array
+    private function getScoringHierarchyForGroup(TestcaseGroup $group, Judging $judging, ?string $parentName = null, ?array $runsByGroup = null): array
     {
         $name = $group->getName();
         $displayName = $name;
@@ -233,7 +241,7 @@ class SubmissionService
             'child_scores' => [],
         ];
 
-        [$score, $result] = self::maybeSetScoringResult($group, $judging);
+        [$score, $result] = self::maybeSetScoringResult($group, $judging, $runsByGroup);
         $hierarchy['score'] = $score;
         $hierarchy['result'] = $result;
 
@@ -249,26 +257,25 @@ class SubmissionService
                 }
             }
 
-            foreach ($judging->getRuns() as $run) {
-                if ($run->getTestcase()->getTestcaseGroup() === $group) {
-                    $tc_score = (string)bcadd((string)$run->getScore(), '0', ScoreboardService::SCALE);
-                    $tc_name = $run->getTestcase()->getOrigInputFilename();
-                    if ($tc_name !== null) {
-                        $lastSlash = strrpos($tc_name, '/');
-                        if ($lastSlash !== false) {
-                            $tc_name = substr($tc_name, $lastSlash + 1);
-                        }
+            $relevantRuns = $runsByGroup[$group->getTestcaseGroupId()] ?? [];
+            foreach ($relevantRuns as $run) {
+                $tc_score = (string)bcadd((string)$run->getScore(), '0', ScoreboardService::SCALE);
+                $tc_name = $run->getTestcase()->getOrigInputFilename();
+                if ($tc_name !== null) {
+                    $lastSlash = strrpos($tc_name, '/');
+                    if ($lastSlash !== false) {
+                        $tc_name = substr($tc_name, $lastSlash + 1);
                     }
-                    $hierarchy['testcases'][] = [
-                        'rank' => $run->getTestcase()->getRank(),
-                        'result' => $run->getRunresult(),
-                        'score' => $tc_score,
-                        'orig_input_filename' => $run->getTestcase()->getOrigInputFilename(),
-                        'display_name' => $tc_name,
-                    ];
-                    if ($group->getAcceptScore() === null) {
-                        $hierarchy['child_scores'][] = $tc_score;
-                    }
+                }
+                $hierarchy['testcases'][] = [
+                    'rank' => $run->getTestcase()->getRank(),
+                    'result' => $run->getRunresult(),
+                    'score' => $tc_score,
+                    'orig_input_filename' => $run->getTestcase()->getOrigInputFilename(),
+                    'display_name' => $tc_name,
+                ];
+                if ($group->getAcceptScore() === null) {
+                    $hierarchy['child_scores'][] = $tc_score;
                 }
             }
             // Sort testcases by rank
@@ -278,7 +285,7 @@ class SubmissionService
                 if ($group->isIgnoreSample() && $childGroup->getName() === 'data/sample') {
                     continue;
                 }
-                $child_hierarchy = $this->getScoringHierarchyForGroup($childGroup, $judging, $name);
+                $child_hierarchy = $this->getScoringHierarchyForGroup($childGroup, $judging, $name, $runsByGroup);
                 $hierarchy['children'][] = $child_hierarchy;
                 if ($child_hierarchy['score'] !== null) {
                     $hierarchy['child_scores'][] = $child_hierarchy['score'];
