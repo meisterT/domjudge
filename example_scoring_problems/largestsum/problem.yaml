@@ -1,9 +1,2 @@
 name: Largest Sum
-scoring_mode: max
-limits:
-    time_multiplier: 5.0
-
-# This problem demonstrates complex testdata group structures:
-# - basic: 20 pts using accept_score
-# - efficiency: 30 pts using AVG aggregation (small=15, medium=30, large=45)
-# - robustness: 50 pts using MIN aggregation (all children at 50)
+type: scoring
