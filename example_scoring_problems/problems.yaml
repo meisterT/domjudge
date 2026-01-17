@@ -13,3 +13,8 @@
   ordinal: 3
   rgb: '#FF9800'
   time_limit: 5
+- id: knapsack
+  label: D
+  ordinal: 4
+  rgb: '#9C27B0'
+  time_limit: 5

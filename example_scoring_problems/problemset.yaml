@@ -6,3 +6,5 @@ problems:
   label: B
 - id: largestsum
   label: C
+- id: knapsack
+  label: D
