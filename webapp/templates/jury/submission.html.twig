@@ -45,7 +45,14 @@
                         {{ group.result == 'correct' ? '✓' : (group.result ? group.result|slice(0,1) : '?') }}
                     </span>
                     <span class="text-dark">
-                        <strong>{{ group.score is not null ? ("%.2f" | format(group.score)) : '?' }}</strong>
+                        <strong title="{{ group.score is not null ? 'Full score: ' ~ group.score : '' }}">
+                            {% if group.score is not null %}
+                                <span class="rounded-precision">{{ "%.2f" | format(group.score) }}</span>
+                                <span class="full-precision">{{ group.score }}</span>
+                            {% else %}
+                                ?
+                            {% endif %}
+                        </strong>
                         {% if group.child_scores is not empty and (group.child_scores | length > 1 or group.child_scores[0] != group.score) %}
                             <span class="text-muted ms-1 scoring-equation">
                                 =
@@ -53,7 +60,9 @@
                                     {{ group.aggregation == 'avg' ? '(' : group.aggregation ~ '(' -}}
                                 {%- endif %}
                                 {%- for s in group.child_scores -%}
-                                    {{ "%.2f" | format(s) }}{{ not loop.last ? (group.aggregation == 'min' or group.aggregation == 'max' ? ', ' : ' + ') : '' }}
+                                    <span class="rounded-precision">{{ "%.2f" | format(s) }}</span>
+                                    <span class="full-precision">{{ s }}</span>
+                                    {{- not loop.last ? (group.aggregation == 'min' or group.aggregation == 'max' ? ', ' : ' + ') : '' -}}
                                 {%- endfor %}
                                 {%- if group.aggregation == 'avg' %}) / {{ group.child_scores | length }}{% elseif group.aggregation == 'min' or group.aggregation == 'max' %}){% endif %}
                             </span>
@@ -88,7 +97,14 @@
                                         {{ tc.result | displayScoringTestcaseResult(tc.rank) }}
                                     </span>
                                     {% if group.accept_score is null %}
-                                        <span class="ms-1 scoring-testcase-score text-muted">{{ tc.score is not null ? ("%.2f" | format(tc.score)) : '-' }}</span>
+                                        <span class="ms-1 scoring-testcase-score text-muted" title="{{ tc.score is not null ? 'Full score: ' ~ tc.score : '' }}">
+                                            {% if tc.score is not null %}
+                                                <span class="rounded-precision">{{ "%.2f" | format(tc.score) }}</span>
+                                                <span class="full-precision">{{ tc.score }}</span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </span>
                                     {% endif %}
                                 </li>
                             {% endfor %}
@@ -679,15 +695,33 @@
                 </button>
                 <div class="collapse mt-2" id="collapseScoringDetails">
                     <div class="card">
-                        <div class="card-header">
-                            Scoring Details
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Scoring Details</span>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="precisionToggle">
+                                <label class="form-check-label small text-muted" for="precisionToggle">Full precision</label>
+                            </div>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body scoring-details-container rounded-precision">
                             {{ _self.render_scoring_group(scoringHierarchy, 0) }}
                         </div>
                     </div>
                 </div>
             </div>
+
+            <style>
+                .scoring-details-container .full-precision { display: none; }
+                .scoring-details-container.show-full .rounded-precision { display: none; }
+                .scoring-details-container.show-full .full-precision { display: inline; }
+            </style>
+
+            <script>
+                $(function() {
+                    $('#precisionToggle').on('change', function() {
+                        $('.scoring-details-container').toggleClass('show-full', this.checked);
+                    });
+                });
+            </script>
         {% endif %}
 
         {# Show verify info, but only when a result is known #}
