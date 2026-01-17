@@ -29,6 +29,76 @@
 
 {% block content %}
 
+    {% macro render_scoring_group(group, depth) %}
+        <div class="scoring-group mb-1 {{ depth > 0 ? 'scoring-group-indent' : 'scoring-group-root' }}">
+            <div class="scoring-group-header mb-1 d-flex align-items-center flex-wrap">
+                <i class="fas {{ depth == 0 ? 'fa-sitemap' : 'fa-folder-open' }} me-2 text-muted"></i>
+                <strong title="{{ group.name }}">{{ group.display_name }}</strong>
+                <span class="badge ms-2 scoring-agg-pill scoring-agg-{{ group.aggregation }}">{{ group.aggregation | upper }}</span>
+                {% if group.accept_score is not null %}
+                    <span class="badge badge-info ms-2 scoring-accept-pill">Accept score: {{ group.accept_score }}</span>
+                {% endif %}
+            </div>
+            <div class="text-muted mb-1 scoring-info">
+                <div class="d-flex align-items-center flex-wrap">
+                    <span class="badge {{ group.result == 'correct' ? 'badge-success' : 'badge-danger' }} me-2">
+                        {{ group.result | printValidJuryResult }}
+                    </span>
+                    <span class="text-dark">
+                        Score: <strong>{{ group.score is not null ? ("%.2f" | format(group.score)) : '?' }}</strong>
+                        {% if group.child_scores is not empty and (group.child_scores | length > 1 or group.child_scores[0] != group.score) %}
+                            <span class="text-muted ms-1 scoring-equation">
+                                =
+                                {% if group.aggregation == 'avg' or group.aggregation == 'min' or group.aggregation == 'max' -%}
+                                    {{ group.aggregation == 'avg' ? '(' : group.aggregation ~ '(' -}}
+                                {%- endif %}
+                                {%- for s in group.child_scores -%}
+                                    {{ "%.2f" | format(s) }}{{ not loop.last ? (group.aggregation == 'min' or group.aggregation == 'max' ? ', ' : ' + ') : '' }}
+                                {%- endfor %}
+                                {%- if group.aggregation == 'avg' %}) / {{ group.child_scores | length }}{% elseif group.aggregation == 'min' or group.aggregation == 'max' %}){% endif %}
+                            </span>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <div>
+                {% if group.children is not empty %}
+                    <div>
+                        {% for child in group.children %}
+                            {{ _self.render_scoring_group(child, depth + 1) }}
+                        {% endfor %}
+                    </div>
+                {% elseif group.testcases is not empty %}
+                    <div class="ms-2">
+                        <ul class="list-unstyled mb-0 scoring-testcase-list">
+                            {% for tc in group.testcases %}
+                                <li class="d-flex align-items-center mb-0">
+                                    <i class="far fa-file me-1 text-muted scoring-testcase-icon"></i>
+                                    <span class="scoring-testcase-name">
+                                        <a href="#run-{{ tc.rank }}" title="{{ tc.orig_input_filename }}">
+                                            {% if tc.display_name is not empty %}
+                                                {{ tc.display_name }}
+                                            {% else %}
+                                                #{{ tc.rank }}
+                                            {% endif %}
+                                        </a>
+                                    </span>
+                                    <span class="badge {{ tc.result == 'correct' ? 'text-success' : 'text-danger' }} ms-1 scoring-testcase-result">
+                                        {{ tc.result | printValidJuryResult }}
+                                    </span>
+                                    {% if group.accept_score is null %}
+                                        <span class="ms-1">Score: <span class="scoring-testcase-score">{{ tc.score is not null ? ("%.2f" | format(tc.score)) : '-' }}</span></span>
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    {% endmacro %}
+
     {% if submission.externalJudgements.empty %}
         {% set externalJudgement = null %}
     {% else %}
@@ -601,6 +671,24 @@
 
             {% endif %}
         </div>
+
+        {% if scoringHierarchy is defined and scoringHierarchy is not empty %}
+            <div class="mb-3">
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseScoringDetails" aria-expanded="false" aria-controls="collapseScoringDetails">
+                    <i class="fas fa-list-ol mr-1"></i> Show Scoring Details
+                </button>
+                <div class="collapse mt-2" id="collapseScoringDetails">
+                    <div class="card">
+                        <div class="card-header">
+                            Scoring Details
+                        </div>
+                        <div class="card-body">
+                            {{ _self.render_scoring_group(scoringHierarchy, 0) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
 
         {# Show verify info, but only when a result is known #}
         {% if selectedJudging is not null and selectedJudging.result is not empty %}

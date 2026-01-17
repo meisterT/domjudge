@@ -198,6 +198,98 @@ class SubmissionService
     }
 
     /**
+     * Get the scoring hierarchy for the given problem and judging.
+     */
+    public function getScoringHierarchy(Problem $problem, Judging $judging): ?array
+    {
+        $parentGroup = $problem->getParentTestcaseGroup();
+        if ($parentGroup === null) {
+            return null;
+        }
+
+        return $this->getScoringHierarchyForGroup($parentGroup, $judging);
+    }
+
+    /**
+     * Get the scoring hierarchy for the given group and judging.
+     */
+    private function getScoringHierarchyForGroup(TestcaseGroup $group, Judging $judging, ?string $parentName = null): array
+    {
+        $name = $group->getName();
+        $displayName = $name;
+        if ($parentName !== null && str_starts_with($name, $parentName)) {
+            $displayName = ltrim(substr($name, strlen($parentName)), '/');
+        }
+
+        $hierarchy = [
+            'name' => $name,
+            'display_name' => $displayName,
+            'aggregation' => $group->getAggregationType()->value,
+            'accept_score' => $group->getAcceptScore(),
+            'on_reject_continue' => $group->isOnRejectContinue(),
+            'ignore_sample' => $group->isIgnoreSample(),
+            'children' => [],
+            'testcases' => [],
+            'child_scores' => [],
+        ];
+
+        [$score, $result] = self::maybeSetScoringResult($group, $judging);
+        $hierarchy['score'] = $score;
+        $hierarchy['result'] = $result;
+
+        if ($group->getChildren()->isEmpty()) {
+            if ($group->getAcceptScore() !== null) {
+                // Leaf group with accept score
+                if ($result !== null) {
+                    if ($result === 'correct') {
+                        $hierarchy['child_scores'][] = (string)bcadd($group->getAcceptScore(), '0', ScoreboardService::SCALE);
+                    } else {
+                        $hierarchy['child_scores'][] = (string)bcadd('0', '0', ScoreboardService::SCALE);
+                    }
+                }
+            }
+
+            foreach ($judging->getRuns() as $run) {
+                if ($run->getTestcase()->getTestcaseGroup() === $group) {
+                    $tc_score = (string)bcadd((string)$run->getScore(), '0', ScoreboardService::SCALE);
+                    $tc_name = $run->getTestcase()->getOrigInputFilename();
+                    if ($tc_name !== null) {
+                        $lastSlash = strrpos($tc_name, '/');
+                        if ($lastSlash !== false) {
+                            $tc_name = substr($tc_name, $lastSlash + 1);
+                        }
+                    }
+                    $hierarchy['testcases'][] = [
+                        'rank' => $run->getTestcase()->getRank(),
+                        'result' => $run->getRunresult(),
+                        'score' => $tc_score,
+                        'orig_input_filename' => $run->getTestcase()->getOrigInputFilename(),
+                        'display_name' => $tc_name,
+                    ];
+                    if ($group->getAcceptScore() === null) {
+                        $hierarchy['child_scores'][] = $tc_score;
+                    }
+                }
+            }
+            // Sort testcases by rank
+            usort($hierarchy['testcases'], fn($a, $b) => $a['rank'] <=> $b['rank']);
+        } else {
+            foreach ($group->getChildren() as $childGroup) {
+                if ($group->isIgnoreSample() && $childGroup->getName() === 'data/sample') {
+                    continue;
+                }
+                $child_hierarchy = $this->getScoringHierarchyForGroup($childGroup, $judging, $name);
+                $hierarchy['children'][] = $child_hierarchy;
+                if ($child_hierarchy['score'] !== null) {
+                    $hierarchy['child_scores'][] = $child_hierarchy['score'];
+                }
+            }
+        }
+
+        return $hierarchy;
+    }
+
+    /**
      * Get a list of submissions that can be displayed in the interface using
      * the submission_list partial.
      *
