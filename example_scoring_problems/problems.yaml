@@ -8,3 +8,8 @@
   ordinal: 2
   rgb: '#2196F3'
   time_limit: 2
+- id: largestsum
+  label: C
+  ordinal: 3
+  rgb: '#FF9800'
+  time_limit: 5

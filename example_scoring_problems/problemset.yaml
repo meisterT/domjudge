@@ -4,3 +4,5 @@ problems:
   label: A
 - id: fibonacci
   label: B
+- id: largestsum
+  label: C
