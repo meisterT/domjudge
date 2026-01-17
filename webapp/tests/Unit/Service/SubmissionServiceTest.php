@@ -324,6 +324,88 @@ class SubmissionServiceTest extends KernelTestCase
         self::assertEquals('wrong-answer', $result);
     }
 
+    /**
+     * Test getting the full scoring hierarchy.
+     */
+    public function testGetScoringHierarchy(): void
+    {
+        // Parent group with SUM aggregation
+        $parentGroup = $this->createTestcaseGroup('parent', TestcaseAggregationType::SUM);
+
+        // Child group 1 with accept score of 30
+        $childGroup1 = $this->createTestcaseGroup('child1', TestcaseAggregationType::SUM, acceptScore: '30');
+        $childGroup1->setParent($parentGroup);
+        $parentGroup->getChildren()->add($childGroup1);
+
+        $problem = new Problem();
+        $problem->setTimelimit(1)->setName('test');
+        $problem->setParentTestcaseGroup($parentGroup);
+
+        $tc1 = $this->createTestcase($problem, $childGroup1, 1);
+        $tc1->setOrigInputFilename('test-input');
+
+        $judging = $this->createJudging();
+        $this->addJudgingRun($judging, $tc1, 'correct', '30');
+
+        $submissionService = new SubmissionService(
+            $this->createMock(\Doctrine\ORM\EntityManagerInterface::class),
+            $this->createMock(\Psr\Log\LoggerInterface::class),
+            $this->createMock(\App\Service\DOMJudgeService::class),
+            $this->createMock(\App\Service\ConfigurationService::class),
+            $this->createMock(\App\Service\EventLogService::class),
+            $this->createMock(\App\Service\ScoreboardService::class),
+            $this->createMock(\Knp\Component\Pager\PaginatorInterface::class)
+        );
+
+        $hierarchy = $submissionService->getScoringHierarchy($problem, $judging);
+
+        self::assertNotNull($hierarchy);
+        self::assertEquals('parent', $hierarchy['name']);
+        self::assertEquals('30.000000000', $hierarchy['score']);
+        self::assertCount(1, $hierarchy['children']);
+        self::assertEquals('child1', $hierarchy['children'][0]['name']);
+        self::assertEquals('30.000000000', $hierarchy['children'][0]['score']);
+        self::assertCount(1, $hierarchy['children'][0]['testcases']);
+        self::assertEquals(1, $hierarchy['children'][0]['testcases'][0]['rank']);
+        self::assertEquals('test-input', $hierarchy['children'][0]['testcases'][0]['orig_input_filename']);
+    }
+
+    /**
+     * Test getting the scoring hierarchy for a group with accept_score.
+     */
+    public function testGetScoringHierarchyWithAcceptScore(): void
+    {
+        $group = $this->createTestcaseGroup('group1', TestcaseAggregationType::SUM, acceptScore: '20');
+        $problem = new Problem();
+        $problem->setTimelimit(1)->setName('test');
+        $problem->setParentTestcaseGroup($group);
+
+        $tc1 = $this->createTestcase($problem, $group, 1);
+        $tc2 = $this->createTestcase($problem, $group, 2);
+
+        $judging = $this->createJudging();
+        // Individual testcase scores are 0, but group has accept_score 20
+        $this->addJudgingRun($judging, $tc1, 'correct', '0');
+        $this->addJudgingRun($judging, $tc2, 'correct', '0');
+
+        $submissionService = new SubmissionService(
+            $this->createMock(\Doctrine\ORM\EntityManagerInterface::class),
+            $this->createMock(\Psr\Log\LoggerInterface::class),
+            $this->createMock(\App\Service\DOMJudgeService::class),
+            $this->createMock(\App\Service\ConfigurationService::class),
+            $this->createMock(\App\Service\EventLogService::class),
+            $this->createMock(\App\Service\ScoreboardService::class),
+            $this->createMock(\Knp\Component\Pager\PaginatorInterface::class)
+        );
+
+        $hierarchy = $submissionService->getScoringHierarchy($problem, $judging);
+
+        self::assertNotNull($hierarchy);
+        self::assertEquals('20.000000000', $hierarchy['score']);
+        self::assertEquals(['20.000000000'], $hierarchy['child_scores']);
+        self::assertCount(2, $hierarchy['testcases']);
+    }
+
     // =========================================================================
     // Tests for parseExpectedAnnotation
     // =========================================================================
