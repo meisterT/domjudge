@@ -303,10 +303,11 @@ class ImportExportService
             $contest->setDeactivatetimeString($deactivateTimeIsRelative ? $deactivateRelativeTime : date_format($deactivateTime, 'Y-m-d H:i:s e'));
         }
 
-        if (isset($data['scoreboard_type'])) {
-            $scoreboardType = ScoreboardType::tryFrom($data['scoreboard_type']);
+        $scoreboardTypeData = $data['scoreboard_type'] ?? $data['scoreboard-type'] ?? null;
+        if ($scoreboardTypeData !== null) {
+            $scoreboardType = ScoreboardType::tryFrom($scoreboardTypeData);
             if (!$scoreboardType) {
-                $errorMessage = sprintf('Scoreboard type %s is not valid.', $data['scoreboard_type']);
+                $errorMessage = sprintf('Scoreboard type %s is not valid.', $scoreboardTypeData);
                 return false;
             }
 
