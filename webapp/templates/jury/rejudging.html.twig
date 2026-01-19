@@ -8,6 +8,9 @@
     {{ macros.table_extrahead() }}
     {{ macros.select2_extrahead() }}
     {{ knp_pagination_rel_links(submissions) }}
+    {% if hasScoringProblems is defined and hasScoringProblems and scoreChanges | length > 0 %}
+        <script src="{{ asset('js/d3.min.js') }}"></script>
+    {% endif %}
 {% endblock %}
 
 {% block content %}
@@ -137,6 +140,12 @@
     <div data-rejudging-matrix>
         {% include 'jury/partials/rejudging_matrix.html.twig' %}
     </div>
+
+    {% if hasScoringProblems and scoreChanges | length > 0 %}
+        <div data-rejudging-score-matrix>
+            {% include 'jury/partials/rejudging_score_matrix.html.twig' %}
+        </div>
+    {% endif %}
 
     {% if stats %}
         <h2>Statistics over repeated rejudgings</h2>
@@ -293,6 +302,383 @@
                     $todo.closest('tr').removeClass('d-none');
                 }
             }
+
+            {% if hasScoringProblems and scoreChanges | length > 0 %}
+            // Score changes heatmap and filtering
+            initScoreChangesVisualization();
+            {% endif %}
         });
+
+        {% if hasScoringProblems and scoreChanges | length > 0 %}
+        function initScoreChangesVisualization() {
+            var scoreChangesData = JSON.parse(document.getElementById('score-changes-data').textContent);
+            var maxScore = JSON.parse(document.getElementById('max-score-data').textContent);
+
+            // Initialize the heatmap
+            createScoreHeatmap(scoreChangesData, maxScore);
+
+            // Initialize the slider filter
+            initDeltaFilter(scoreChangesData);
+
+            // Initialize table sorting
+            initTableSorting();
+        }
+
+        function createScoreHeatmap(data, maxScore) {
+            var container = document.getElementById('score-heatmap');
+            var width = container.clientWidth || 600;
+            var height = 400;
+            var margin = {top: 40, right: 80, bottom: 60, left: 60};
+            var plotWidth = width - margin.left - margin.right;
+            var plotHeight = height - margin.top - margin.bottom;
+
+            // Clear any existing content
+            d3.select('#score-heatmap').selectAll('*').remove();
+
+            var svg = d3.select('#score-heatmap')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .style('background', '#fff');
+
+            var g = svg.append('g')
+                .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+            // If maxScore is 0 or data is empty, show a message
+            if (maxScore <= 0 || data.length === 0) {
+                g.append('text')
+                    .attr('x', plotWidth / 2)
+                    .attr('y', plotHeight / 2)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '14px')
+                    .attr('fill', '#6c757d')
+                    .text('No score data available');
+                return;
+            }
+
+            // Create bins for the heatmap
+            var numBins = 20;
+            var binSize = maxScore / numBins;
+
+            // Create a 2D array for bin counts
+            var bins = [];
+            for (var i = 0; i < numBins; i++) {
+                bins[i] = [];
+                for (var j = 0; j < numBins; j++) {
+                    bins[i][j] = {
+                        oldBin: i,
+                        newBin: j,
+                        count: 0,
+                        submissions: [],
+                        oldRange: [i * binSize, (i + 1) * binSize],
+                        newRange: [j * binSize, (j + 1) * binSize]
+                    };
+                }
+            }
+
+            // Populate bins
+            data.forEach(function(d) {
+                var oldBin = Math.min(Math.floor(d.oldScore / binSize), numBins - 1);
+                var newBin = Math.min(Math.floor(d.newScore / binSize), numBins - 1);
+                if (oldBin >= 0 && newBin >= 0) {
+                    bins[oldBin][newBin].count++;
+                    bins[oldBin][newBin].submissions.push(d);
+                }
+            });
+
+            // Find max count for color scale
+            var maxCount = d3.max(bins, function(row) {
+                return d3.max(row, function(d) { return d.count; });
+            }) || 1;
+
+            // Scales
+            var xScale = d3.scale.linear()
+                .domain([0, maxScore])
+                .range([0, plotWidth]);
+
+            var yScale = d3.scale.linear()
+                .domain([0, maxScore])
+                .range([plotHeight, 0]);
+
+            var cellWidth = plotWidth / numBins;
+            var cellHeight = plotHeight / numBins;
+            var cellPadding = 1;
+
+            // Draw background
+            g.append('rect')
+                .attr('x', 0)
+                .attr('y', 0)
+                .attr('width', plotWidth)
+                .attr('height', plotHeight)
+                .attr('fill', '#f8f9fa');
+
+            // Draw diagonal line (y = x, no change)
+            g.append('line')
+                .attr('x1', 0)
+                .attr('y1', plotHeight)
+                .attr('x2', plotWidth)
+                .attr('y2', 0)
+                .attr('stroke', '#6c757d')
+                .attr('stroke-width', 2)
+                .attr('stroke-dasharray', '6,4');
+
+            // Flatten bins for D3
+            var flatBins = [];
+            bins.forEach(function(row) {
+                row.forEach(function(cell) {
+                    flatBins.push(cell);
+                });
+            });
+
+            // Simple color scale
+            var colorScale = function(count, isImproved, isDegraded) {
+                if (count === 0) return 'transparent';
+                var t = Math.min(count / maxCount, 1);
+                if (isImproved) {
+                    // Green scale
+                    return d3.interpolateRgb('#c8e6c9', '#2e7d32')(t);
+                } else if (isDegraded) {
+                    // Red scale
+                    return d3.interpolateRgb('#ffcdd2', '#c62828')(t);
+                } else {
+                    // Blue/gray for diagonal
+                    return d3.interpolateRgb('#bbdefb', '#1565c0')(t);
+                }
+            };
+
+            // Create tooltip div
+            var tooltip = d3.select('#score-heatmap')
+                .append('div')
+                .style('position', 'absolute')
+                .style('visibility', 'hidden')
+                .style('background', '#212529')
+                .style('color', '#fff')
+                .style('padding', '8px 12px')
+                .style('border-radius', '4px')
+                .style('font-size', '12px')
+                .style('pointer-events', 'none')
+                .style('z-index', '1000');
+
+            // Draw cells
+            g.selectAll('.heatmap-cell')
+                .data(flatBins)
+                .enter()
+                .append('rect')
+                .attr('class', 'heatmap-cell')
+                .attr('x', function(d) { return d.oldBin * cellWidth + cellPadding; })
+                .attr('y', function(d) { return plotHeight - (d.newBin + 1) * cellHeight + cellPadding; })
+                .attr('width', cellWidth - cellPadding * 2)
+                .attr('height', cellHeight - cellPadding * 2)
+                .attr('rx', 3)
+                .attr('fill', function(d) {
+                    var isImproved = d.newBin > d.oldBin;
+                    var isDegraded = d.newBin < d.oldBin;
+                    return colorScale(d.count, isImproved, isDegraded);
+                })
+                .attr('stroke', function(d) {
+                    return d.count === 0 ? 'transparent' : '#fff';
+                })
+                .attr('stroke-width', 1)
+                .style('cursor', function(d) { return d.count > 0 ? 'pointer' : 'default'; })
+                .on('mouseover', function(d) {
+                    if (d.count > 0) {
+                        d3.select(this).attr('stroke', '#000').attr('stroke-width', 2);
+                        var label = d.newBin > d.oldBin ? 'Improved' : (d.newBin < d.oldBin ? 'Degraded' : 'Unchanged');
+                        tooltip.html(
+                            '<strong>' + label + '</strong><br>' +
+                            'Old: ' + d.oldRange[0].toFixed(1) + '-' + d.oldRange[1].toFixed(1) + '<br>' +
+                            'New: ' + d.newRange[0].toFixed(1) + '-' + d.newRange[1].toFixed(1) + '<br>' +
+                            d.count + ' submission(s)'
+                        ).style('visibility', 'visible');
+                    }
+                })
+                .on('mousemove', function() {
+                    var coords = d3.mouse(container);
+                    tooltip.style('top', (coords[1] + 10) + 'px').style('left', (coords[0] + 10) + 'px');
+                })
+                .on('mouseout', function() {
+                    d3.select(this).attr('stroke', '#fff').attr('stroke-width', 1);
+                    tooltip.style('visibility', 'hidden');
+                })
+                .on('click', function(d) {
+                    if (d.count > 0) {
+                        highlightTableRows(d.submissions);
+                        document.getElementById('score-changes-table').scrollIntoView({ behavior: 'smooth' });
+                    }
+                });
+
+            // Add count labels
+            g.selectAll('.cell-label')
+                .data(flatBins.filter(function(d) { return d.count > 0; }))
+                .enter()
+                .append('text')
+                .attr('x', function(d) { return d.oldBin * cellWidth + cellWidth / 2; })
+                .attr('y', function(d) { return plotHeight - (d.newBin + 1) * cellHeight + cellHeight / 2; })
+                .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'middle')
+                .attr('font-size', '11px')
+                .attr('font-weight', 'bold')
+                .attr('fill', function(d) { return d.count / maxCount > 0.5 ? '#fff' : '#333'; })
+                .attr('pointer-events', 'none')
+                .text(function(d) { return d.count; });
+
+            // X axis
+            var xAxis = d3.svg.axis().scale(xScale).orient('bottom').ticks(5);
+            g.append('g')
+                .attr('transform', 'translate(0,' + plotHeight + ')')
+                .call(xAxis)
+                .selectAll('text').attr('fill', '#333');
+
+            g.append('text')
+                .attr('x', plotWidth / 2)
+                .attr('y', plotHeight + 45)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '12px')
+                .attr('font-weight', 'bold')
+                .attr('fill', '#333')
+                .text('Old Score');
+
+            // Y axis
+            var yAxis = d3.svg.axis().scale(yScale).orient('left').ticks(5);
+            g.append('g')
+                .call(yAxis)
+                .selectAll('text').attr('fill', '#333');
+
+            g.append('text')
+                .attr('transform', 'rotate(-90)')
+                .attr('x', -plotHeight / 2)
+                .attr('y', -45)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '12px')
+                .attr('font-weight', 'bold')
+                .attr('fill', '#333')
+                .text('New Score');
+        }
+
+        function highlightTableRows(submissions) {
+            // Remove existing highlights
+            $('#score-changes-tbody tr').removeClass('table-warning');
+
+            // Highlight matching rows
+            var submitIds = submissions.map(function(s) { return s.submitId; });
+            $('#score-changes-tbody tr').each(function() {
+                var row = $(this);
+                var submitId = parseInt(row.find('a:first').text().replace('s', ''));
+                if (submitIds.indexOf(submitId) !== -1) {
+                    row.addClass('table-warning');
+                }
+            });
+        }
+
+        function initDeltaFilter(data) {
+            var slider = document.getElementById('delta-threshold');
+            var valueDisplay = document.getElementById('delta-threshold-value');
+            var countDisplay = document.getElementById('filtered-count');
+            var totalCount = data.length;
+
+            // Find max delta for slider max value
+            var maxDelta = Math.max.apply(null, data.map(function(d) { return d.absDelta; }));
+            slider.max = Math.ceil(maxDelta);
+
+            slider.addEventListener('input', function() {
+                var threshold = parseFloat(this.value);
+                valueDisplay.textContent = threshold.toFixed(1);
+
+                var visibleCount = 0;
+                $('#score-changes-tbody .score-change-row').each(function() {
+                    var absDelta = parseFloat($(this).data('abs-delta'));
+                    if (absDelta >= threshold) {
+                        $(this).show();
+                        visibleCount++;
+                    } else {
+                        $(this).hide();
+                    }
+                });
+
+                countDisplay.textContent = '(showing ' + visibleCount + ' of ' + totalCount + ')';
+            });
+        }
+
+        function initTableSorting() {
+            var currentSort = { column: null, ascending: true };
+
+            $('#score-changes-table thead th.sortable').on('click', function() {
+                var column = $(this).data('sort');
+
+                // Toggle sort direction if same column
+                if (currentSort.column === column) {
+                    currentSort.ascending = !currentSort.ascending;
+                } else {
+                    currentSort.column = column;
+                    currentSort.ascending = true;
+                }
+
+                // Update header indicators
+                $('#score-changes-table thead th').removeClass('sorted-asc sorted-desc');
+                $(this).addClass(currentSort.ascending ? 'sorted-asc' : 'sorted-desc');
+
+                // Sort the table
+                var tbody = $('#score-changes-tbody');
+                var rows = tbody.find('tr').get();
+
+                rows.sort(function(a, b) {
+                    var aVal, bVal;
+
+                    switch(column) {
+                        case 'submitId':
+                            aVal = parseInt($(a).find('td:eq(0) a').text().replace('s', ''));
+                            bVal = parseInt($(b).find('td:eq(0) a').text().replace('s', ''));
+                            break;
+                        case 'teamName':
+                            aVal = $(a).find('td:eq(1)').text().toLowerCase();
+                            bVal = $(b).find('td:eq(1)').text().toLowerCase();
+                            break;
+                        case 'problemName':
+                            aVal = $(a).find('td:eq(2)').text().toLowerCase();
+                            bVal = $(b).find('td:eq(2)').text().toLowerCase();
+                            break;
+                        case 'oldScore':
+                            aVal = parseFloat($(a).find('td:eq(3)').text());
+                            bVal = parseFloat($(b).find('td:eq(3)').text());
+                            break;
+                        case 'newScore':
+                            aVal = parseFloat($(a).find('td:eq(4)').text());
+                            bVal = parseFloat($(b).find('td:eq(4)').text());
+                            break;
+                        case 'delta':
+                            aVal = parseFloat($(a).find('td:eq(5)').text());
+                            bVal = parseFloat($(b).find('td:eq(5)').text());
+                            break;
+                    }
+
+                    if (typeof aVal === 'string') {
+                        return currentSort.ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                    }
+                    return currentSort.ascending ? aVal - bVal : bVal - aVal;
+                });
+
+                $.each(rows, function(idx, row) {
+                    tbody.append(row);
+                });
+            });
+        }
+        {% endif %}
     </script>
+    <style>
+        #score-changes-table thead th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+        #score-changes-table thead th.sortable:hover {
+            background-color: #e9ecef;
+        }
+        #score-changes-table thead th.sorted-asc::after {
+            content: ' \25B2';
+            font-size: 0.7em;
+        }
+        #score-changes-table thead th.sorted-desc::after {
+            content: ' \25BC';
+            font-size: 0.7em;
+        }
+    </style>
 {% endblock %}

@@ -1,0 +1,146 @@
+<div class="mt-4 mb-4">
+
+    {# Summary statistics - calculate in Twig #}
+    {% set improved = 0 %}
+    {% set degraded = 0 %}
+    {% set unchanged = 0 %}
+    {% set totalImprovement = 0 %}
+    {% set totalDegradation = 0 %}
+    {% for change in scoreChanges %}
+        {% if change.delta > 0 %}
+            {% set improved = improved + 1 %}
+            {% set totalImprovement = totalImprovement + change.delta %}
+        {% elseif change.delta < 0 %}
+            {% set degraded = degraded + 1 %}
+            {% set totalDegradation = totalDegradation + change.delta %}
+        {% else %}
+            {% set unchanged = unchanged + 1 %}
+        {% endif %}
+    {% endfor %}
+    {% set avgImprovement = improved > 0 ? (totalImprovement / improved) : 0 %}
+    {% set avgDegradation = degraded > 0 ? (totalDegradation / degraded) : 0 %}
+
+    {# Heatmap #}
+    <div class="card border-0 shadow-sm mb-4">
+        <h2>Score Changes</h2>
+        <div class="card-body">
+            <div id="score-heatmap" style="width: 100%; min-height: 420px; position: relative;"></div>
+        </div>
+    </div>
+
+    {# Slider filter #}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom" style="padding: 1rem 1.25rem;">
+            <h5 class="mb-0" style="font-weight: 600; color: #212529;">
+                Filter by Score Change
+            </h5>
+        </div>
+        <div class="card-body" style="padding: 1.25rem;">
+            <div class="row align-items-center g-3">
+                <div class="col-auto">
+                    <label for="delta-threshold" class="form-label mb-0" style="font-weight: 500; color: #495057;">
+                        Minimum absolute delta:
+                    </label>
+                </div>
+                <div class="col-md-5">
+                    <div class="d-flex align-items-center gap-3">
+                        <input type="range" class="form-range flex-grow-1" id="delta-threshold" min="0" max="{{ maxScore }}" value="0" step="0.1" style="accent-color: #6366f1;">
+                        <span id="delta-threshold-value" class="badge" style="background: #6366f1; font-size: 14px; padding: 8px 16px; min-width: 60px;">0</span>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <span id="filtered-count" class="text-muted" style="font-size: 14px;">
+                        <i class="fas fa-eye me-1"></i> showing <strong>{{ scoreChanges | length }}</strong> of {{ scoreChanges | length }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Submissions table #}
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-bottom" style="padding: 1rem 1.25rem;">
+            <h5 class="mb-0" style="font-weight: 600; color: #212529;">
+                Submissions with Score Changes
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="score-changes-table">
+                    <thead style="background: #f8f9fa;">
+                        <tr>
+                            <th class="sortable" data-sort="submitId" style="padding: 12px 16px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">
+                                <i class="fas fa-hashtag me-1 text-muted"></i> Submission
+                            </th>
+                            <th class="sortable" data-sort="teamName" style="padding: 12px 16px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">
+                                <i class="fas fa-users me-1 text-muted"></i> Team
+                            </th>
+                            <th class="sortable" data-sort="problemName" style="padding: 12px 16px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">
+                                <i class="fas fa-puzzle-piece me-1 text-muted"></i> Problem
+                            </th>
+                            <th class="sortable text-end" data-sort="oldScore" style="padding: 12px 16px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">
+                                Old Score
+                            </th>
+                            <th class="sortable text-end" data-sort="newScore" style="padding: 12px 16px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">
+                                New Score
+                            </th>
+                            <th class="sortable text-end" data-sort="delta" style="padding: 12px 16px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">
+                                <i class="fas fa-exchange-alt me-1 text-muted"></i> Delta
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="score-changes-tbody">
+                        {% for change in scoreChanges %}
+                            <tr data-abs-delta="{{ change.absDelta }}" class="score-change-row" style="transition: background-color 0.2s ease;">
+                                <td style="padding: 10px 16px; vertical-align: middle;">
+                                    <a href="{{ path('jury_submission', {submitId: change.submitId}) }}" class="fw-semibold" style="color: #6366f1; text-decoration: none;">
+                                        s{{ change.submitId }}
+                                    </a>
+                                </td>
+                                <td style="padding: 10px 16px; vertical-align: middle;">
+                                    <a href="{{ path('jury_team', {teamId: change.teamId}) }}" style="color: #212529; text-decoration: none;">
+                                        {{ change.teamName }}
+                                    </a>
+                                </td>
+                                <td style="padding: 10px 16px; vertical-align: middle;">
+                                    <a href="{{ path('jury_problem', {probId: change.problemId}) }}" style="color: #212529; text-decoration: none;">
+                                        {{ change.problemName }}
+                                    </a>
+                                </td>
+                                <td class="text-end" style="padding: 10px 16px; vertical-align: middle; font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; font-size: 13px;">
+                                    {{ change.oldScore | number_format(2) }}
+                                </td>
+                                <td class="text-end" style="padding: 10px 16px; vertical-align: middle; font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; font-size: 13px;">
+                                    {{ change.newScore | number_format(2) }}
+                                </td>
+                                <td class="text-end" style="padding: 10px 16px; vertical-align: middle;">
+                                    {% if change.delta > 0 %}
+                                        <span class="badge" style="background: linear-gradient(135deg, #d4edda, #28a745); color: #155724; font-size: 12px; padding: 5px 10px; font-weight: 600;">
+                                            <i class="fas fa-arrow-up me-1"></i>+{{ change.delta | number_format(2) }}
+                                        </span>
+                                    {% elseif change.delta < 0 %}
+                                        <span class="badge" style="background: linear-gradient(135deg, #f8d7da, #dc3545); color: #721c24; font-size: 12px; padding: 5px 10px; font-weight: 600;">
+                                            <i class="fas fa-arrow-down me-1"></i>{{ change.delta | number_format(2) }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge" style="background: #e9ecef; color: #6c757d; font-size: 12px; padding: 5px 10px; font-weight: 600;">
+                                            <i class="fas fa-equals me-1"></i>0.00
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Pass data to JavaScript #}
+<script id="score-changes-data" type="application/json">
+    {{ scoreChanges | json_encode | raw }}
+</script>
+<script id="max-score-data" type="application/json">
+    {{ maxScore | json_encode | raw }}
+</script>
