@@ -3,7 +3,7 @@ TOPDIR=..
 endif
 include $(TOPDIR)/Makefile.global
 
-TARGETS = runguard runpipe evict
+TARGETS = runguard runpipe runguard2 evict
 
 SUBST_FILES = judgedaemon chroot-startstop.sh create_cgroups \
               create-cgroups.service domjudge-judgedaemon@.service
@@ -19,6 +19,9 @@ evict: evict.cc $(LIBOBJECTS)
 runguard: runguard.cc $(LIBOBJECTS) $(TOPDIR)/etc/runguard-config.h
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LIBOBJECTS) $(LIBCGROUP)
 
+runguard2: runguard2.cc runguard_common.h $(LIBOBJECTS) $(TOPDIR)/etc/runguard-config.h
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LIBOBJECTS) $(LIBCGROUP)
+
 runpipe: runpipe.cc $(LIBOBJECTS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -static -o $@ $< $(LIBOBJECTS)
 
@@ -29,7 +32,7 @@ install-judgehost:
 	$(INSTALL_DATA) -t $(DESTDIR)$(judgehost_libjudgedir) \
 		judgedaemon.main.php run-interactive.sh
 	$(INSTALL_PROG) -t $(DESTDIR)$(judgehost_bindir) \
-		judgedaemon runguard runpipe create_cgroups
+		judgedaemon runguard runguard2 runpipe create_cgroups
 
 clean-l:
 	-rm -f $(TARGETS) $(TARGETS:%=%$(OBJEXT))

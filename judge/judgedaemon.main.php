@@ -1201,11 +1201,11 @@ class JudgeDaemon
                 return [null, "Invalid build file, must produce an executable file 'run'.", null];
             }
             if ($combined_run_compare) {
-                # For combined run and compare (i.e. for interactive problems), we
-                # need to wrap the jury provided 'run' script with 'runpipe' to
-                # handle the bidirectional communication.  First 'run' is renamed to
-                # 'runjury', and then replaced by the script below, which runs the
-                # team submission and runjury programs and connects their pipes.
+                # For combined run and compare (i.e. for interactive problems), the
+                # jury provided 'run' script (validator) is renamed to 'runjury'.
+                # With runguard2 in interactive mode, 'runjury' is called directly.
+                # The run-interactive.sh is kept for backward compatibility with the
+                # legacy runguard+runpipe flow.
                 $runscript = file_get_contents(LIBJUDGEDIR . '/run-interactive.sh');
                 if (rename($execrunpath, $execrunjurypath) === false) {
                     $this->disable('judgehost', 'hostname', $this->myhost, "Could not move file 'run' to 'runjury' in $execbuilddir");
@@ -1596,27 +1596,40 @@ class JudgeDaemon
             return Verdict::COMPARE_ERROR;
         }
 
+        // For interactive problems with combined run/compare scripts, check timelimit
+        // BEFORE checking validator exit code, since both processes get killed on TLE
+        // and the validator will have a non-standard exit code (e.g., 143 = SIGTERM).
+        if ($input->combinedRunCompare) {
+            // A WA from the validator may override TLE and RTE if the validator exited first.
+            if ($input->compareMeta->validatorExitedFirst
+                && $input->compareMeta->exitcode === (string)self::COMPARE_EXITCODE_WRONG_ANSWER) {
+                return Verdict::WRONG_ANSWER;
+            }
+
+            // Check for timelimit before checking validator exit code
+            if ($input->programMeta->hasTimelimitExceeded()) {
+                return Verdict::TIMELIMIT;
+            }
+
+            // Check for run error before checking validator exit code
+            if ($input->programMeta->hasRunError()) {
+                return Verdict::RUN_ERROR;
+            }
+        }
+
         // Validate compare script returned a valid exitcode
         if ($input->compareExitcode !== self::COMPARE_EXITCODE_CORRECT && $input->compareExitcode !== self::COMPARE_EXITCODE_WRONG_ANSWER) {
             return Verdict::COMPARE_ERROR;
         }
 
-        // For interactive problems with combined run/compare scripts, a WA from the
-        // validator may override TLE and RTE if the validator exited first.
-        if ($input->combinedRunCompare
-            && $input->compareMeta->validatorExitedFirst
-            && $input->compareMeta->exitcode === (string)self::COMPARE_EXITCODE_WRONG_ANSWER) {
-            return Verdict::WRONG_ANSWER;
-        }
-
-        // Check for timelimit
-        if ($input->programMeta->hasTimelimitExceeded()) {
-            return Verdict::TIMELIMIT;
-        }
-
-        // Check for non-zero exit code (run error)
-        if ($input->programMeta->hasRunError()) {
-            return Verdict::RUN_ERROR;
+        // For non-interactive problems, check timelimit and run error after validating compare exitcode
+        if (!$input->combinedRunCompare) {
+            if ($input->programMeta->hasTimelimitExceeded()) {
+                return Verdict::TIMELIMIT;
+            }
+            if ($input->programMeta->hasRunError()) {
+                return Verdict::RUN_ERROR;
+            }
         }
 
         // Check for output limit exceeded
@@ -1764,18 +1777,6 @@ class JudgeDaemon
                 }
             }
 
-            // Support for interactive problems
-            if ($combined_run_compare) {
-                if (!copy(BINDIR . '/runpipe', "../../dj-bin/runpipe")) {
-                    logmsg(LOG_WARNING, "Could not copy 'runpipe' to '../../dj-bin/runpipe'.");
-                    return Verdict::INTERNAL_ERROR;
-                }
-                if (!chmod("../../dj-bin/runpipe", 0755)) {
-                    logmsg(LOG_WARNING, "Could not chmod '../../dj-bin/runpipe' to 0755.");
-                    return Verdict::INTERNAL_ERROR;
-                }
-            }
-
             // If we need to create a writable temp directory, do so
             if (CREATE_WRITABLE_TEMP_DIR) {
                 putenv("TMPDIR=$prefix/write_tmp");
@@ -1788,17 +1789,6 @@ class JudgeDaemon
             }
 
             logmsg(LOG_DEBUG, "Running program");
-            $run_args = [
-                $run_runpath,
-                'testdata.in', 'program.out'
-            ];
-            if ($combined_run_compare) {
-                // A combined run and compare script may now already need the
-                // feedback directory, and perhaps access to the test answers (but
-                // only the original that lives outside the chroot).
-                mkdir('feedback', 0755, true);
-                array_push($run_args, "$output", 'compare.meta', 'feedback');
-            }
 
             $cpu_limit = implode(':', $timelimit['cpu']);
             $wall_limit = implode(':', $timelimit['wall']);
@@ -1818,39 +1808,109 @@ class JudgeDaemon
             $gainroot = ['sudo', '-n'];
             $cpuset = is_null($this->daemonid) ? [] : ['-P', $this->daemonid];
 
-            $runguard_args = [BINDIR . "/runguard"];
-            if (CREATE_WRITABLE_TEMP_DIR) {
-                $runguard_args[] = '-V';
-                $runguard_args[] = "TMPDIR=$prefix/write_tmp";
-            }
-            if ($debug) {
-                $runguard_args[] = '-v';
-                $runguard_args[] = '-V';
-                $runguard_args[] = "DEBUG=$debug";
-            }
+            if ($combined_run_compare) {
+                // For interactive problems, use runguard2 which handles both program
+                // and validator orchestration internally, eliminating the need for runpipe.
+                // This means both program AND validator run with the same resource restrictions.
+                mkdir('feedback', 0755, true);
 
-            $run_args = array_merge(
-                $run_args,
-                $gainroot,
-                $runguard_args,
-                $cpuset,
-                [
-                    '-r', "$realWorkdir/../../",
-                    "--nproc=$proclimit",
-                    "--no-core",
-                    "--streamsize=$filelimit",
-                    "--user=$runuser",
-                    "--group=$rungroup",
-                    "--walltime=$wall_limit",
-                    "--cputime=$cpu_limit",
-                    "--memsize=$memlimit",
-                    "--filesize=$filelimit",
-                    "--stderr=program.err",
-                    "--outmeta=program.meta",
-                    "--",
-                    "$prefix/execdir/program",
-                ]
-            );
+                // Copy test output to the workdir for the validator (test input is already copied)
+                if (!copy($output, "$realWorkdir/testdata.out")) {
+                    logmsg(LOG_WARNING, "Could not copy '$output' to '$realWorkdir/testdata.out' for validator.");
+                    return Verdict::INTERNAL_ERROR;
+                }
+
+                // Copy the validator (runjury) from the run executable's build directory
+                // to the testcase execdir so it's accessible inside the chroot
+                $runjury_src = dirname($run_runpath) . '/runjury';
+                $runjury_dst = "$realWorkdir/execdir/runjury";
+                if (!copy($runjury_src, $runjury_dst)) {
+                    logmsg(LOG_WARNING, "Could not copy validator '$runjury_src' to '$runjury_dst'.");
+                    return Verdict::INTERNAL_ERROR;
+                }
+                chmod($runjury_dst, 0755);
+
+                // Build the validator command - the runjury script expects: testin testout feedbackdir
+                // All paths are relative to the chroot root and use $prefix which points to the workdir
+                $validator_cmd = "$prefix/execdir/runjury $prefix/testdata.in $prefix/testdata.out $prefix/feedback";
+
+                $runguard2_args = [BINDIR . "/runguard2"];
+                if (CREATE_WRITABLE_TEMP_DIR) {
+                    $runguard2_args[] = '-V';
+                    $runguard2_args[] = "TMPDIR=$prefix/write_tmp";
+                }
+                if ($debug) {
+                    $runguard2_args[] = '-v';
+                    $runguard2_args[] = '-V';
+                    $runguard2_args[] = "DEBUG=$debug";
+                }
+
+                $run_args = array_merge(
+                    $gainroot,
+                    $runguard2_args,
+                    $cpuset,
+                    [
+                        '-r', "$realWorkdir/../../",
+                        "--nproc=$proclimit",
+                        "--no-core",
+                        "--streamsize=$filelimit",
+                        "--user=$runuser",
+                        "--group=$rungroup",
+                        "--walltime=$wall_limit",
+                        "--cputime=$cpu_limit",
+                        "--memsize=$memlimit",
+                        "--filesize=$filelimit",
+                        "--stderr=program.err",
+                        "--outmeta=program.meta",
+                        "--interactive",
+                        "--validator-cmd=$validator_cmd",
+                        "--validator-meta=compare.meta",
+                        "--interaction-log=program.out",
+                        "--",
+                        "$prefix/execdir/program",
+                    ]
+                );
+            } else {
+                // For non-interactive problems, use the traditional runguard + run script
+                $run_args = [
+                    $run_runpath,
+                    'testdata.in', 'program.out'
+                ];
+
+                $runguard_args = [BINDIR . "/runguard"];
+                if (CREATE_WRITABLE_TEMP_DIR) {
+                    $runguard_args[] = '-V';
+                    $runguard_args[] = "TMPDIR=$prefix/write_tmp";
+                }
+                if ($debug) {
+                    $runguard_args[] = '-v';
+                    $runguard_args[] = '-V';
+                    $runguard_args[] = "DEBUG=$debug";
+                }
+
+                $run_args = array_merge(
+                    $run_args,
+                    $gainroot,
+                    $runguard_args,
+                    $cpuset,
+                    [
+                        '-r', "$realWorkdir/../../",
+                        "--nproc=$proclimit",
+                        "--no-core",
+                        "--streamsize=$filelimit",
+                        "--user=$runuser",
+                        "--group=$rungroup",
+                        "--walltime=$wall_limit",
+                        "--cputime=$cpu_limit",
+                        "--memsize=$memlimit",
+                        "--filesize=$filelimit",
+                        "--stderr=program.err",
+                        "--outmeta=program.meta",
+                        "--",
+                        "$prefix/execdir/program",
+                    ]
+                );
+            }
 
             $this->runCommandSafe($run_args, $exitcode, log_nonzero_exitcode: false, stderr_target: "runguard.err");
 
@@ -1995,9 +2055,9 @@ class JudgeDaemon
             $program_meta_ini = $this->readMetadata('program.meta');
             logmsg(LOG_DEBUG, "parsed program meta: " . var_export($program_meta_ini, true));
             $resourceInfo = "\nruntime: "
-                . $program_meta_ini['cpu-time'] . 's cpu, '
-                . $program_meta_ini['wall-time'] . "s wall\n"
-                . 'memory: ' . $program_meta_ini['memory-bytes'] . ' bytes';
+                . ($program_meta_ini['cpu-time'] ?? '?') . 's cpu, '
+                . ($program_meta_ini['wall-time'] ?? '?') . "s wall\n"
+                . 'memory: ' . ($program_meta_ini['memory-bytes'] ?? '?') . ' bytes';
 
             $compare_meta_ini = $this->readMetadata('compare.meta');
             logmsg(LOG_DEBUG, "parsed compare meta: " . var_export($compare_meta_ini, true));

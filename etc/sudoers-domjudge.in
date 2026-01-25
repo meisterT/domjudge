@@ -7,6 +7,7 @@
 # in or add its content to the end of /etc/sudoers)
 
 @DOMJUDGE_USER@ ALL=(root) NOPASSWD: @judgehost_bindir@/runguard *
+@DOMJUDGE_USER@ ALL=(root) NOPASSWD: @judgehost_bindir@/runguard2 *
 @DOMJUDGE_USER@ ALL=(root) NOPASSWD: /bin/chown -R @DOMJUDGE_USER@\: @judgehost_judgedir@/*
 
 # The chroot path below must match the path in chroot-startstop.sh.
