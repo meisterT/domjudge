@@ -1912,11 +1912,30 @@ class JudgeDaemon
                     $orig_compare_args = explode(' ', $compare_args);
                 }
 
+                // Copy compare script into chroot so it can be executed in the sandbox.
+                // Similar to how compile.sh copies compile scripts into the chroot.
+                $compareChrootDir = "$realWorkdir/../../compare-script";
+                if (!is_dir($compareChrootDir)) {
+                    if (!mkdir($compareChrootDir, 0755, true)) {
+                        logmsg(LOG_WARNING, "Could not create '$compareChrootDir'.");
+                        return Verdict::INTERNAL_ERROR;
+                    }
+                }
+                // Copy all files from the compare script build directory.
+                // Use -a to keep file attributes the same.
+                $compareScriptDir = dirname($compare_runpath);
+                if (!$this->runCommandSafe(['cp', '-a', $compareScriptDir . '/.', $compareChrootDir . '/'])) {
+                    logmsg(LOG_WARNING, "Could not copy compare script from '$compareScriptDir' to '$compareChrootDir'.");
+                    return Verdict::INTERNAL_ERROR;
+                }
+
                 $compare_args = array_merge(
                     $gainroot,
                     [BINDIR . "/runguard"],
                     $cpuset,
                     [
+                        '-r', "$realWorkdir/../../",
+                        '-d', $prefix,
                         "--user=$runuser",
                         "--group=$rungroup",
                         "-m", $scriptmemlimit,
@@ -1926,7 +1945,7 @@ class JudgeDaemon
                         "--no-core",
                         "-M", "compare.meta",
                         "--",
-                        $compare_runpath,
+                        "/compare-script/run",
                         "testdata.in",
                         "testdata.out",
                         "feedback/",
