@@ -4,9 +4,7 @@ namespace App\Controller\Jury;
 
 use App\Controller\BaseController;
 use App\DataTransferObject\SubmissionRestriction;
-use App\Entity\ExternalJudgement;
-use App\Entity\Judging;
-use App\Entity\Submission;
+use App\Entity\Problem;
 use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
@@ -14,7 +12,6 @@ use App\Service\SubmissionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
-use Doctrine\ORM\Query\Expr\Join;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
@@ -76,64 +73,49 @@ class ShadowDifferencesController extends BaseController
         // Pre-fill $verdictTable to get a consistent ordering.
         foreach ($verdicts as $verdict => $abbrev) {
             foreach ($verdicts as $verdict2 => $abbrev2) {
-                $verdictTable[$verdict][$verdict2] = [];
+                $verdictTable[$verdict][$verdict2] = 0;
             }
         }
 
-        /** @var Submission[] $submissions */
-        $submissions = $this->em->createQueryBuilder()
-            ->from(Submission::class, 's', 's.submitid')
-            ->leftJoin('s.external_judgements', 'ej', Join::WITH, 'ej.valid = 1')
-            ->leftJoin('s.judgings', 'j', Join::WITH, 'j.valid = 1')
-            ->select('s', 'ej', 'j')
-            ->andWhere('s.contest = :contest')
-            ->andWhere('s.externalid IS NOT NULL')
-            ->andWhere('s.expected_results IS NULL')
-            ->setParameter('contest', $contest)
-            ->getQuery()
-            ->getResult();
-
-        // Helper function to add verdicts.
-        $addVerdict = function ($unknownVerdict) use ($verdicts, &$verdictTable): void {
+        // Helper function to add verdicts discovered in query results.
+        $addVerdict = function (string $unknownVerdict) use ($verdicts, &$verdictTable): void {
             // Add column to existing rows.
             foreach ($verdicts as $verdict => $abbreviation) {
-                $verdictTable[$verdict][$unknownVerdict] = [];
+                $verdictTable[$verdict][$unknownVerdict] = 0;
             }
             // Add verdict to known verdicts.
             $verdicts[$unknownVerdict] = $unknownVerdict;
             // Add row.
             $verdictTable[$unknownVerdict] = [];
             foreach ($verdicts as $verdict => $abbreviation) {
-                $verdictTable[$unknownVerdict][$verdict] = [];
+                $verdictTable[$unknownVerdict][$verdict] = 0;
             }
         };
 
-        // Build up the verdict matrix and collect score change data.
-        $scoreChanges = [];
-        $hasScoringProblems = false;
-        $maxScore = 0;
+        // Build the verdict matrix using an aggregate query instead of loading all entities.
+        $verdictCounts = $this->em->getConnection()->executeQuery(
+            'SELECT
+                CASE WHEN ej.result IS NOT NULL THEN ej.result ELSE :judging END AS external_result,
+                CASE WHEN s.import_error IS NOT NULL THEN :importError WHEN j.result IS NOT NULL THEN j.result ELSE :judging END AS local_result,
+                COUNT(*) AS cnt
+            FROM submission s
+            LEFT JOIN external_judgement ej ON ej.submitid = s.submitid AND ej.valid = 1
+            LEFT JOIN judging j ON j.submitid = s.submitid AND j.valid = 1
+            WHERE s.cid = :contest
+                AND s.externalid IS NOT NULL
+                AND s.expected_results IS NULL
+            GROUP BY external_result, local_result',
+            [
+                'contest' => $contest->getCid(),
+                'judging' => 'judging',
+                'importError' => 'import-error',
+            ]
+        )->fetchAllAssociative();
 
-        foreach ($submissions as $submitid => $submission) {
-            /** @var ExternalJudgement|null $externalJudgement */
-            $externalJudgement = $submission->getExternalJudgements()->first();
-            /** @var Judging|null $localJudging */
-            $localJudging = $submission->getJudgings()->first();
-
-            if ($localJudging && $localJudging->getResult()) {
-                $localResult = $localJudging->getResult();
-            } else {
-                $localResult = 'judging';
-            }
-
-            if ($submission->isImportError()) {
-                $localResult = 'import-error';
-            }
-
-            if ($externalJudgement && $externalJudgement->getResult()) {
-                $externalResult = $externalJudgement->getResult();
-            } else {
-                $externalResult = 'judging';
-            }
+        foreach ($verdictCounts as $row) {
+            $externalResult = $row['external_result'];
+            $localResult = $row['local_result'];
+            $cnt = (int)$row['cnt'];
 
             // Add verdicts to data structures if they are unknown up to now.
             foreach ([$externalResult, $localResult] as $result) {
@@ -142,36 +124,62 @@ class ShadowDifferencesController extends BaseController
                 }
             }
 
-            // Mark them as used, so we can filter out unused cols/rows later.
             $used[$externalResult] = true;
             $used[$localResult]    = true;
 
-            // Append submitid to list of orig->new verdicts.
-            $verdictTable[$externalResult][$localResult][] = $submitid;
+            $verdictTable[$externalResult][$localResult] = $cnt;
+        }
 
-            // Collect score change data for scoring problems.
-            $problem = $submission->getProblem();
-            if ($problem->isScoringProblem() && $externalJudgement && $localJudging) {
-                $hasScoringProblems = true;
-                $externalScore = (float)$externalJudgement->getScore();
-                $localScore = (float)$localJudging->getScore();
-                $delta = $localScore - $externalScore;
-                $absDelta = abs($delta);
-                $maxScore = max($maxScore, $externalScore, $localScore);
+        // Collect score change data using a targeted query (only for scoring problems).
+        $scoreChanges = [];
+        $hasScoringProblems = false;
+        $maxScore = 0;
 
-                $scoreChanges[] = [
-                    'submitId' => $submission->getExternalid(),
-                    'contestId' => $contest->getExternalid(),
-                    'teamName' => $submission->getTeam()->getEffectiveName(),
-                    'teamId' => $submission->getTeam()->getExternalid(),
-                    'problemName' => $problem->getName(),
-                    'problemId' => $problem->getExternalid(),
-                    'oldScore' => $externalScore,
-                    'newScore' => $localScore,
-                    'delta' => $delta,
-                    'absDelta' => $absDelta,
-                ];
-            }
+        $scoreRows = $this->em->getConnection()->executeQuery(
+            'SELECT
+                s.externalid AS submitId,
+                COALESCE(t.display_name, t.name) AS teamName,
+                t.externalid AS teamId,
+                p.name AS problemName,
+                p.externalid AS problemId,
+                ej.score AS externalScore,
+                j.score AS localScore
+            FROM submission s
+            INNER JOIN external_judgement ej ON ej.submitid = s.submitid AND ej.valid = 1 AND ej.result IS NOT NULL
+            INNER JOIN judging j ON j.submitid = s.submitid AND j.valid = 1 AND j.result IS NOT NULL
+            INNER JOIN problem p ON p.probid = s.probid
+            INNER JOIN team t ON t.teamid = s.teamid
+            WHERE s.cid = :contest
+                AND s.externalid IS NOT NULL
+                AND s.expected_results IS NULL
+                AND (p.types & :scoringType) != 0',
+            [
+                'contest' => $contest->getCid(),
+                'scoringType' => Problem::TYPE_SCORING,
+            ]
+        )->fetchAllAssociative();
+
+        $contestExternalId = $contest->getExternalid();
+        foreach ($scoreRows as $row) {
+            $hasScoringProblems = true;
+            $externalScore = (float)$row['externalScore'];
+            $localScore = (float)$row['localScore'];
+            $delta = $localScore - $externalScore;
+            $absDelta = abs($delta);
+            $maxScore = max($maxScore, $externalScore, $localScore);
+
+            $scoreChanges[] = [
+                'submitId' => $row['submitId'],
+                'contestId' => $contestExternalId,
+                'teamName' => $row['teamName'],
+                'teamId' => $row['teamId'],
+                'problemName' => $row['problemName'],
+                'problemId' => $row['problemId'],
+                'oldScore' => $externalScore,
+                'newScore' => $localScore,
+                'delta' => $delta,
+                'absDelta' => $absDelta,
+            ];
         }
 
         $viewTypes = [0 => 'unjudged local', 1 => 'unjudged external', 2 => 'diff', 3 => 'all'];
@@ -215,7 +223,6 @@ class ShadowDifferencesController extends BaseController
             $restrictions->result = $local;
         }
 
-        /** @var Submission[] $submissions */
         [$submissions, $submissionCounts] = $this->submissions->getSubmissionList(
             $this->dj->getCurrentContests(honorCookie: true),
             $restrictions,

@@ -13,9 +13,8 @@
             {% if used[externalVerdict] is defined %}
                 <tr>
                     <th title="{{ externalVerdict }} (external)">{{ verdicts[externalVerdict] }}</th>
-                    {% for localVerdict, submitIds in localVerdicts %}
+                    {% for localVerdict, numSubmissions in localVerdicts %}
                         {% if used[localVerdict] is defined %}
-                            {% set numSubmissions = submitIds | length %}
                             {% set link = null %}
                             {% if externalVerdict == localVerdict %}
                                 {% set class = 'identical' %}
