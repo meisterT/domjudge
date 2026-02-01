@@ -115,12 +115,14 @@ a {
 }
 .tc-correct { background-color: #198754; }
 .tc-incorrect { background-color: #dc3545; }
-/* Verdict-specific bar segment colors (matching result badges) */
+/* Verdict-specific bar segment colors - currently all red */
+/*
 .tc-r-timelimit { background-color: #e67e22; }
 .tc-r-run-error { background-color: #7b4bbf; }
 .tc-r-compiler-error { background-color: #d63384; }
 .tc-r-output-limit { background-color: #0d8a8a; }
 .tc-r-no-output { background-color: #0d8a8a; }
+*/
 .tc-running { background-color: #0dcaf0; }
 .tc-pending { background-color: #dee2e6; }
 .tc-pending-done { background-color: #ced4da; }
@@ -149,22 +151,14 @@ a {
 }
 .compile-unsuccessful { color: red; }
 
-/* Differentiated incorrect result types */
-.sol.result-timelimit {
-    background-color: #e67e22;
-}
-.sol.result-run-error {
-    background-color: #7b4bbf;
-}
-.sol.result-compiler-error {
-    background-color: #d63384;
-}
-.sol.result-output-limit {
-    background-color: #0d8a8a;
-}
-.sol.result-no-output {
-    background-color: #0d8a8a;
-}
+/* Differentiated incorrect result types - currently all red */
+/*
+.sol.result-timelimit { background-color: #e67e22; }
+.sol.result-run-error { background-color: #7b4bbf; }
+.sol.result-compiler-error { background-color: #d63384; }
+.sol.result-output-limit { background-color: #0d8a8a; }
+.sol.result-no-output { background-color: #0d8a8a; }
+*/
 
 .sol_queued {
     color: #fff;

@@ -66,7 +66,7 @@
             {%- endif %}
 
             <th scope="col">time</th>
-            <th scope="col" colspan="2">team</th>
+            <th scope="col">team</th>
             <th scope="col">problem</th>
             <th scope="col">lang</th>
             {%- if rejudging is defined %}
@@ -129,11 +129,6 @@
 
                 <td rowspan="{{ rowSpan }}" class="{{ tdExtraClass }}">
                     <a href="{{ link }}">{{ submission.submittime | printtime(null, submission.contest) }}</a>
-                </td>
-                <td rowspan="{{ rowSpan }}" class="{{ tdExtraClass }}" style="text-align: right;">
-                    <a href="{{ link }}">
-                        {{ submission.team | entityIdBadge }}
-                    </a>
                 </td>
                 <td rowspan="{{ rowSpan }}" class="{{ tdExtraClass }}">
                     <a href="{{ link }}">

@@ -193,6 +193,9 @@ div.submission-summary > span {
 table.submissions-table {
     width: auto;
 }
+.submissions-table tbody td {
+    vertical-align: middle;
+}
 
 /* Sticky header for submissions table */
 .submissions-table thead.thead-light {
