@@ -336,42 +336,51 @@ class TwigExtension
             $submissionDone = $judging && !empty($judging->getEndtime());
         }
 
-        $results = '';
+        $total = count($testcases);
+        if ($total === 0) {
+            return '';
+        }
+
+        $segments = '';
         $lastTypeSample = true;
+
         foreach ($testcases as $key => $testcase) {
             if ($testcase['sample'] != $lastTypeSample) {
-                $results        .= ' | ';
+                $segments       .= ' | ';
                 $lastTypeSample = $testcase['sample'];
             }
-            $class = $submissionDone ? 'secondary' : 'primary';
-            $text  = '?';
+
+            $class       = $submissionDone ? 'tc-pending-done' : 'tc-pending';
+            $resultLabel = 'pending';
 
             if ($testcase['runresult'] !== null) {
-                $text  = substr($testcase['runresult'], 0, 1);
-                $class = 'danger';
                 if ($testcase['runresult'] === Judging::RESULT_CORRECT) {
-                    $text  = '✓';
-                    $class = 'success';
+                    $class       = 'tc-correct';
+                    $resultLabel = 'correct';
+                } else {
+                    $resultSlug  = str_replace(' ', '-', $testcase['runresult']);
+                    $class       = 'tc-incorrect tc-r-' . htmlspecialchars($resultSlug);
+                    $resultLabel = $testcase['runresult'];
                 }
             } elseif (array_key_exists('valid', $testcase) && !$testcase['valid']) {
-                $text = '✕';
+                $class       = 'tc-invalid';
+                $resultLabel = 'invalid';
             } elseif (array_key_exists('hostname', $testcase) && $testcase['hostname'] !== null) {
-                $text  = '↺';
-                $class = 'info';
+                $class       = 'tc-running';
+                $resultLabel = 'running';
             }
 
             if (!empty($testcase['description'])) {
-                $title = sprintf('Run %d: %s', $key + 1,
-                                 htmlspecialchars($testcase['description']));
+                $title = sprintf('Run %d: %s (%s)', $key + 1,
+                                 htmlspecialchars($testcase['description']), $resultLabel);
             } else {
-                $title = sprintf('Run %d', $key + 1);
+                $title = sprintf('Run %d: %s', $key + 1, $resultLabel);
             }
 
-            $results .= sprintf('<span class="badge text-bg-%s badge-testcase" title="%s">%s</span>', $class, $title,
-                                $text);
+            $segments .= sprintf('<span class="tc-seg %s" title="%s"></span>', $class, $title);
         }
 
-        return $results;
+        return sprintf('<span class="tc-bar">%s</span>', $segments);
     }
 
     // TODO: this function shares a lot with the above one, unify them?
@@ -495,7 +504,13 @@ class TwigExtension
                 }
         }
 
-        return sprintf('<span class="sol %s">%s</span>', $valid ? $style : 'disabled', $result);
+        $resultSlug = str_replace([' ', '/'], ['-', '-'], trim($result)) ?: 'pending';
+        return sprintf(
+            '<span class="sol %s result-%s">%s</span>',
+            $valid ? $style : 'disabled',
+            htmlspecialchars($resultSlug),
+            $result,
+        );
     }
 
     #[AsTwigFilter('printValidJuryResult', isSafe: ['html'])]
