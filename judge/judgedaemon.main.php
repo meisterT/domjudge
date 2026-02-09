@@ -308,9 +308,9 @@ class JudgeDaemon
             }
 
             $output = [];
-            exec("ps -u '$runuser' -o pid= -o comm=", $output, $retval);
+            exec("ps -u '$this->runuser' -o pid= -o comm=", $output, $retval);
             if (count($output) !== 0) {
-                error("found processes still running as '$runuser', check manually:\n" .
+                error("found processes still running as '$this->runuser', check manually:\n" .
                     implode("\n", $output));
             }
 
@@ -2185,6 +2185,11 @@ class JudgeDaemon
         $input = $tcfile['input'];
         $output = $tcfile['output'];
         $passLimit = $run_config['pass_limit'] ?? 1;
+        $nextPass = false;
+        $result = null;
+        $runtime = null;
+        $score = '';
+        $new_judging_run = [];
         for ($passCnt = 1; $passCnt <= $passLimit; $passCnt++) {
             $nextPass = false;
             if ($passLimit > 1) {
