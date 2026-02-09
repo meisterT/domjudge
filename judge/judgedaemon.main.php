@@ -51,6 +51,8 @@ readonly class ProgramMetadata
 
     /**
      * Create from raw metadata array with validation.
+     *
+     * @param array<string, string> $meta
      */
     public static function fromArray(array $meta): self
     {
@@ -104,6 +106,8 @@ readonly class CompareMetadata
 
     /**
      * Create from raw metadata array with validation.
+     *
+     * @param array<string, string> $meta
      */
     public static function fromArray(array $meta): self
     {
@@ -145,22 +149,28 @@ class JudgeDaemon
 
     private static ?JudgeDaemon $instance = null;
 
+    /** @var array{id: string, url: string, user: string, pass: string, waiting: bool, errorred: bool, last_attempt: int, retrying: bool, ch?: \CurlHandle}|null */
     private ?array $endpoint = null;
+    /** @var array<string, mixed> */
     private array $domjudge_config = [];
     private string $myhost;
     private int $verbose = LOG_INFO;
     private ?string $daemonid = null;
+    /** @var array<string, list<string|false>|string|false> */
     private array $options = [];
 
     private bool $exitsignalled = false;
     private bool $gracefulexitsignalled = false;
 
-    private ?string $lastrequest = '';
+    private string $lastrequest = '';
     private float $waittime = self::INITIAL_WAITTIME_SEC;
 
+    /** @var array<string, list<string>> */
     private array $langexts = [];
 
-    private $lockfile;
+    /** @var resource|closed-resource|false */
+    private mixed $lockfile;
+    /** @var array<int, string> */
     private array $EXITCODES;
     private string $runuser;
     private string $rungroup;
@@ -473,6 +483,9 @@ class JudgeDaemon
         }
     }
 
+    /**
+     * @param list<array<string, mixed>> $row
+     */
     private function handleJudgingTask(array $row, ?string &$lastWorkdir, string $workdirpath, string $workdir): void
     {
         $success_file = "$workdir/.uuid_pid";
@@ -569,6 +582,10 @@ class JudgeDaemon
         }
     }
 
+    /**
+     * @param list<array<string, mixed>> $row
+     * @param-out null $lastWorkdir
+     */
     private function handleDebugInfoTask(array $row, ?string &$lastWorkdir, string $workdirpath, string $workdir): void
     {
         if ($lastWorkdir !== null) {
@@ -623,6 +640,10 @@ class JudgeDaemon
         }
     }
 
+    /**
+     * @param list<array<string, mixed>> $row
+     * @param-out null $lastWorkdir
+     */
     private function handlePrefetchTask(array $row, ?string &$lastWorkdir, string $workdirpath): void
     {
         if ($lastWorkdir !== null) {
@@ -653,6 +674,9 @@ class JudgeDaemon
         logmsg(LOG_INFO, "  🔥 Pre-heating judgehost completed.");
     }
 
+    /**
+     * @param list<array<string, mixed>> $row
+     */
     private function handleTask(string $type, array $row, ?string &$lastWorkdir, string $workdirpath): void
     {
         if ($type == 'try_again') {
@@ -689,7 +713,7 @@ class JudgeDaemon
         $this->handleJudgingTask($row, $lastWorkdir, $workdirpath, $workdir);
     }
 
-    private function fetchWork()
+    private function fetchWork(): mixed
     {
         return $this->request('judgehosts/fetch-work', 'POST', ['hostname' => $this->myhost], false);
     }
@@ -742,9 +766,12 @@ class JudgeDaemon
         }
     }
 
+    /**
+     * @param array<string, mixed> $judgeTask
+     */
     private function judgingDirectory(string $workdirpath, array $judgeTask): string
     {
-        if (filter_var($judgeTask['submitid'], FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => static::EXTERNAL_IDENTIFIER_REGEX]]) === false ||
+        if (filter_var($judgeTask['submitid'], FILTER_VALIDATE_REGEXP, ['options' => ['regexp' => self::EXTERNAL_IDENTIFIER_REGEX]]) === false ||
             filter_var($judgeTask['jobid'], FILTER_VALIDATE_INT) === false) {
             error("Malformed data returned in judgeTask IDs: " . var_export($judgeTask, true));
         }
@@ -771,9 +798,8 @@ class JudgeDaemon
             if ($credential === '' || $credential[0] === '#') {
                 continue;
             }
-            /** @var string[] $items */
             $items = preg_split("/\s+/", $credential);
-            if (count($items) !== 4) {
+            if ($items === false || count($items) !== 4) {
                 error("Error parsing REST API credentials. Invalid format in line $lineno.");
             }
             [$endpointID, $resturl, $restuser, $restpass] = $items;
@@ -814,7 +840,10 @@ class JudgeDaemon
         }
     }
 
-    private function request(string $url, string $verb = 'GET', $data = '', bool $failonerror = true)
+    /**
+     * @param array<string, mixed>|string $data
+     */
+    private function request(string $url, string $verb = 'GET', array|string $data = '', bool $failonerror = true): mixed
     {
         // Don't flood the log with requests for new judgings every few seconds.
         if (str_starts_with($url, 'judgehosts/fetch-work') && $verb === 'POST') {
@@ -848,7 +877,7 @@ class JudgeDaemon
         if ($verb == 'POST' || $verb == 'PUT') {
             curl_setopt($curl_handle, CURLOPT_POSTFIELDS, $data);
         } else {
-            curl_setopt($curl_handle, CURLOPT_POSTFIELDS, null);
+            curl_setopt($curl_handle, CURLOPT_POSTFIELDS, '');
         }
 
         $delay_in_sec = BACKOFF_INITIAL_DELAY_SEC;
@@ -933,7 +962,7 @@ class JudgeDaemon
         $this->domjudge_config = $res;
     }
 
-    private function djconfigGetValue(string $name)
+    private function djconfigGetValue(string $name): mixed
     {
         if (empty($this->domjudge_config)) {
             $this->djconfigRefresh();
@@ -945,7 +974,7 @@ class JudgeDaemon
         return $this->domjudge_config[$name];
     }
 
-    private function restEncodeFile(string $file, $sizelimit = true): string
+    private function restEncodeFile(string $file, bool|int $sizelimit = true): string
     {
         $maxsize = null;
         if ($sizelimit === true) {
@@ -991,7 +1020,10 @@ class JudgeDaemon
         return trim(ob_get_clean());
     }
 
-    private function runCommandSafe(array $command_parts, &$retval = DONT_CARE, $log_nonzero_exitcode = true, $stdin_source = null, $stdout_target = null, $stderr_target = null): bool
+    /**
+     * @param list<string> $command_parts
+     */
+    private function runCommandSafe(array $command_parts, mixed &$retval = DONT_CARE, bool $log_nonzero_exitcode = true, ?string $stdin_source = null, ?string $stdout_target = null, ?string $stderr_target = null): bool
     {
         if (empty($command_parts)) {
             logmsg(LOG_WARNING, "Need at least the command that should be called.");
@@ -1055,6 +1087,9 @@ class JudgeDaemon
         return $retval_local === 0;
     }
 
+    /**
+     * @return array{0: ?string, 1: ?string}
+     */
     private function fetchExecutable(
         string $workdirpath,
         string $type,
@@ -1086,6 +1121,9 @@ class JudgeDaemon
         return [$execrunpath, $error];
     }
 
+    /**
+     * @return array{0: ?string, 1: ?string, 2: ?string}
+     */
     private function fetchExecutableInternal(
         string $workdirpath,
         string $type,
@@ -1322,6 +1360,9 @@ class JudgeDaemon
         logmsg(LOG_ERR, "=> internal error " . $error_id);
     }
 
+    /**
+     * @return array<string, string>|null
+     */
     private function readMetadata(string $filename): ?array
     {
         if (!is_readable($filename)) {
@@ -1363,6 +1404,10 @@ class JudgeDaemon
         }
     }
 
+    /**
+     * @param array<string, mixed> $judgeTask
+     * @param array<string, mixed> $compile_config
+     */
     private function compile(
         array   $judgeTask,
         string  $workdir,
@@ -1559,6 +1604,9 @@ class JudgeDaemon
         return true;
     }
 
+    /**
+     * @param array<string, mixed> $judgeTask
+     */
     private function compileAndRunSubmission(array $judgeTask, string $workdirpath): bool
     {
         $startTime = microtime(true);
@@ -1702,15 +1750,20 @@ class JudgeDaemon
         return $prefix . (empty($prefix) ? "" : " ") . "Wrong answer!";
     }
 
+    /**
+     * @param array{cpu: array{0: float, 1: float}, wall: array{0: float, 1: float}} $timelimit
+     * @param array<string, mixed> $run_config
+     * @param array<string, mixed> $compare_config
+     */
     private function testcaseRunInternal(
-        $input,
-        $output,
-        $timelimit,
-        $passdir,
-        $run_runpath,
-        $combined_run_compare,
-        $compare_runpath,
-        $compare_args,
+        string $input,
+        string $output,
+        array $timelimit,
+        string $passdir,
+        string $run_runpath,
+        bool $combined_run_compare,
+        string $compare_runpath,
+        string $compare_args,
         array $run_config,
         array $compare_config
     ) : Verdict {
@@ -1936,7 +1989,7 @@ class JudgeDaemon
                 $scriptfilelimit = (string)$compare_config['script_filesize_limit'];
                 // TODO: Perhaps we should change this in the database to be an array of args?
                 $orig_compare_args = [];
-                if ($compare_args !== null && strlen($compare_args) > 0) {
+                if (strlen($compare_args) > 0) {
                     $orig_compare_args = explode(' ', $compare_args);
                 }
 
@@ -2006,7 +2059,7 @@ class JudgeDaemon
             $compare_tmp = is_readable("compare.tmp") ? file_get_contents("compare.tmp") : "";
             $compareTimedOut = (bool)preg_match('/time-result: .*timelimit/', $compare_meta_raw);
             if ($compareTimedOut) {
-                logmsg(LOG_ERR, "Comparing aborted after the script timelimit of %s seconds, compare script output:\n%s", $scripttimelimit, $compare_tmp);
+                logmsg(LOG_ERR, sprintf("Comparing aborted after the script timelimit of %s seconds, compare script output:\n%s", $scripttimelimit, $compare_tmp));
             }
 
             // Append output validator stdout
@@ -2081,14 +2134,14 @@ class JudgeDaemon
 
                 if (file_exists("$realWorkdir/testdata.in")) {
                     unlink("$realWorkdir/testdata.in");
-                    if ($input !== null && is_readable($input)) {
+                    if (is_readable($input)) {
                         symlink($input, "$realWorkdir/testdata.in");
                     }
                 }
 
                 if (file_exists("$realWorkdir/testdata.out")) {
                     unlink("$realWorkdir/testdata.out");
-                    if ($output !== null && is_readable($output)) {
+                    if (is_readable($output)) {
                         symlink($output, "$realWorkdir/testdata.out");
                     }
                 }
@@ -2112,12 +2165,17 @@ class JudgeDaemon
             }
 
             // Restore working directory
-            if ($oldCwd !== null && is_dir($oldCwd)) {
+            if ($oldCwd !== false && is_dir($oldCwd)) {
                 chdir($oldCwd);
             }
         }
     }
 
+    /**
+     * @param array<string, mixed> $judgeTask
+     * @param array<string, mixed> $run_config
+     * @param array<string, mixed> $compare_config
+     */
     private function runTestcase(
         array $judgeTask,
         string $workdir,
@@ -2353,6 +2411,10 @@ class JudgeDaemon
         return $ret;
     }
 
+    /**
+     * @param array<string, mixed> $judgeTask
+     * @param array<string, mixed> $new_judging_run
+     */
     private function reportJudgingRun(array $judgeTask, array $new_judging_run, bool $asynchronous): ?string
     {
         $judgeTaskId = $judgeTask['judgetaskid'];
@@ -2425,6 +2487,9 @@ class JudgeDaemon
         return $response;
     }
 
+    /**
+     * @return array{input: string, output: string}|null
+     */
     private function fetchTestcase(string $workdirpath, string $testcase_id, int $judgetaskid, string $testcase_hash): ?array
     {
         // Get both in- and output files, only if we didn't have them already.

@@ -29,5 +29,29 @@ parameters:
         -
             message: "#Method .* return type has no value type specified in iterable type array#"
             path: src/DataFixtures/Test
+        # Judge daemon: defensive check for getopt() return value
+        -
+            message: '#Strict comparison using === between array.* and false will always evaluate to false#'
+            path: ../judge/judgedaemon.main.php
+        # Judge daemon: SYSLOG constant check - depends on runtime configuration
+        -
+            message: '#Right side of && is always true#'
+            path: ../judge/judgedaemon.main.php
+        # Judge daemon: redundant is_int() after type narrowing
+        -
+            message: '#Call to function is_int\(\) with .* will always evaluate to true#'
+            path: ../judge/judgedaemon.main.php
+        # Judge daemon: is_file/is_executable check after chmod
+        -
+            message: '#Negated boolean expression is always false#'
+            path: ../judge/judgedaemon.main.php
+        # Judge daemon: CREATE_WRITABLE_TEMP_DIR is a runtime configuration constant
+        -
+            message: '#(Ternary operator condition|If condition) is always false#'
+            path: ../judge/judgedaemon.main.php
+        # Judge daemon: strlen > 0 comparison on string PHPDoc type
+        -
+            message: '#Comparison operation ">" between int<1, max> and 0 is always true#'
+            path: ../judge/judgedaemon.main.php
 includes:
     - vendor/phpstan/phpstan-doctrine/extension.neon
