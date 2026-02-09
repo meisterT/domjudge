@@ -6,6 +6,9 @@ parameters:
         - resources/functions.php
         - rector.php
         - tests
+        - ../judge/judgedaemon.main.php
+    bootstrapFiles:
+        - ../judge/phpstan-bootstrap.php
     scanFiles:
         - vendor/vrana/adminer/adminer/include/functions.inc.php
     scanDirectories:
