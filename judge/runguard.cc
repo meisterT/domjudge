@@ -621,19 +621,30 @@ void cgroup_delete()
 		if ( cgroup_add_controller(cg, "cpuset")==nullptr ) die(0,"cgroup_add_controller cpuset");
 	}
 	/* Clean up our cgroup. Try immediately; if the kernel hasn't
-	   finished cleaning up yet, retry with short sleeps. */
+	   finished cleaning up yet, retry with short sleeps.
+
+	   libcgroup reports the error of the rmdir() behind this in errno and
+	   returns ECGOTHER, so that is the code the transient EBUSY of a
+	   cgroup that still holds tasks arrives under, as well as the ENOENT
+	   of one that is already gone. */
 	const struct timespec retry_delay = { 0, 1000000L }; /* 1ms */
 	const int max_retries = 10;
-	int ret;
+	int ret, last_errno = 0;
 	for (int attempt = 0; attempt <= max_retries; attempt++) {
 		if (attempt > 0) nanosleep(&retry_delay, nullptr);
 		ret = cgroup_delete_cgroup_ext(cg, CGFLAG_DELETE_IGNORE_MIGRATION | CGFLAG_DELETE_RECURSIVE);
-		if (ret == 0 || ret == ECGOTHER) break;
+		if ( ret==0 ) break;
+		if ( ret!=ECGOTHER ) die(ret,"deleting cgroup `{}'",cgroupname);
+
+		last_errno = cgroup_get_last_errno();
+		if ( last_errno==ENOENT ) break; /* Someone deleted it before us. */
+		if ( last_errno!=EBUSY ) die(last_errno,"deleting cgroup `{}'",cgroupname);
+
 		if (attempt < max_retries) {
-			logmsg(LOG_DEBUG, "cgroup delete attempt {} failed ({}), retrying...", attempt + 1, ret);
+			logmsg(LOG_DEBUG, "cgroup delete attempt {} failed (busy), retrying...", attempt + 1);
 		}
 	}
-	if ( ret!=0 && ret!=ECGOTHER ) die(ret,"deleting cgroup");
+	if ( ret!=0 && last_errno!=ENOENT ) die(last_errno,"deleting cgroup `{}'",cgroupname);
 
 	cgroup_free(&cg);
 

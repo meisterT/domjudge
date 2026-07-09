@@ -50,6 +50,13 @@ expect_no_leftover_procs() {
 	fail "processes of '$RUNUSER' survived: $(pgrep -a -u "$RUNUSER" | head -n5)"
 }
 
+expect_cgroup_deleted() {
+	# Under `-v' runguard reports the cgroup it created; it must not leak it.
+	cgroup=$(grep -o "domjudge/dj_cgroup_[^']*" "$LOG2" | head -n1)
+	[ -n "$cgroup" ] || fail "runguard did not report the cgroup it created"
+	[ ! -d "/sys/fs/cgroup/$cgroup" ] || fail "cgroup '$cgroup' was not deleted"
+}
+
 not_expect_stdout() {
 	token="$1"
 	grep -q "$token" "$LOG1" && fail "did find unexpected '$token' in log, first few lines: $(head "$LOG1")"
@@ -255,19 +262,21 @@ test_nprocs() {
 test_leftover_procs() {
 	# The left-over `sleep' must be reported as a warning and then killed,
 	# not turn an otherwise successful run into an error.
-	exec_check_success sudo $RUNGUARD $RUNGUARD_OPTIONS ./leftover.sh
+	exec_check_success sudo $RUNGUARD $RUNGUARD_OPTIONS -v ./leftover.sh
 	expect_stdout "spawned"
 	expect_stderr "left-over process"
 	expect_no_leftover_procs
+	expect_cgroup_deleted
 }
 
 test_leftover_procs_forking() {
 	# The command leaves a process behind that keeps forking children, so
 	# killing the cgroup must not race with those forks. Bound the run: a
 	# kill that never completes would otherwise hang the test suite.
-	exec_check_success sudo timeout 30 $RUNGUARD $RUNGUARD_OPTIONS ./respawn.sh
+	exec_check_success sudo timeout 30 $RUNGUARD $RUNGUARD_OPTIONS -v ./respawn.sh
 	expect_stderr "left-over process"
 	expect_no_leftover_procs
+	expect_cgroup_deleted
 }
 
 test_meta() {
