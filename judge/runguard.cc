@@ -153,6 +153,9 @@ pid_t child_pid = -1;
 static volatile sig_atomic_t received_SIGCHLD = 0;
 static volatile sig_atomic_t received_signal = -1;
 static volatile sig_atomic_t error_in_signalhandler = 0;
+/* Set when terminate() reaped the command itself, together with its status. */
+static volatile sig_atomic_t child_reaped = 0;
+static volatile sig_atomic_t child_status = 0;
 
 int child_pipefd[3][2];
 int child_redirfd[3];
@@ -645,9 +648,28 @@ void terminate(int sig)
 		return;
 	}
 
-	/* Prefer nanosleep over sleep because of higher resolution and
+	/* Give the command `killdelay' to act on the SIGTERM, but no longer
+	   than it needs: poll for its exit rather than sleep for a fixed
+	   while. waitpid() is async-signal-safe; that it reaps the command is
+	   what `child_reaped' tells the main loop about.
+
+	   Prefer nanosleep over sleep because of higher resolution and
 	   it does not interfere with signals. */
-	nanosleep(&killdelay,nullptr);
+	const struct timespec poll_delay = { 0, 1000000L }; /* 1ms */
+	const int poll_retries = 100; /* poll_retries*poll_delay == killdelay */
+	for(int retry = 0; retry < poll_retries; retry++) {
+		int status;
+		pid_t pid = waitpid(child_pid, &status, WNOHANG);
+		if ( pid==child_pid ) {
+			child_status = status;
+			child_reaped = 1;
+			return;
+		}
+		/* The main loop reaped it before us, nothing left to kill. */
+		if ( pid<0 ) return;
+
+		nanosleep(&poll_delay,nullptr);
+	}
 
 	verbose_from_signalhandler("sending SIGKILL");
 	if ( kill(-child_pid,SIGKILL)!=0 && errno!=ESRCH ) {
@@ -656,8 +678,8 @@ void terminate(int sig)
 		return;
 	}
 
-	/* Wait another while to make sure the process is killed by now. */
-	nanosleep(&killdelay,nullptr);
+	/* No need to wait for the command to be killed here: the main loop
+	   waits on it as soon as we return. */
 }
 
 static void child_handler(int sig)
@@ -1404,7 +1426,19 @@ int main(int argc, char **argv)
 
 			if ( received_SIGCHLD || received_signal == SIGALRM ) {
 				pid_t pid;
-				if ( (pid = wait(&status))<0 ) die(errno,"waiting on child");
+				/* terminate() may have reaped the command, either before
+				   we got here or while we were waiting on it below. */
+				if ( child_reaped ) {
+					status = child_status;
+					break;
+				}
+				if ( (pid = wait(&status))<0 ) {
+					if ( errno==ECHILD && child_reaped ) {
+						status = child_status;
+						break;
+					}
+					die(errno,"waiting on child");
+				}
 				if ( pid==child_pid ) break;
 			}
 

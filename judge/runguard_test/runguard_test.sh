@@ -235,6 +235,20 @@ test_nprocs() {
 	expect_stderr "fork: retry: Resource temporarily unavailable"
 }
 
+test_walltime_kill() {
+	# The command dies on the SIGTERM, so runguard must not wait for it any
+	# longer than that takes: the wall time it reports runs until it does.
+	exec_check_fail sudo $RUNGUARD $RUNGUARD_OPTIONS -t 1 -M "$META" sleep 60
+	expect_stderr "hard wall time"
+	expect_meta 'wall-time: 1.0'
+
+	# This one ignores the SIGTERM, so runguard escalates to a SIGKILL after
+	# its kill delay of 0.1s, and not any later than that.
+	exec_check_fail sudo $RUNGUARD $RUNGUARD_OPTIONS -t 1 -M "$META" ./ignore-sigterm.py
+	expect_stdout "ignoring SIGTERM"
+	expect_meta 'wall-time: 1.1'
+}
+
 test_meta() {
 	exec_check_success sudo $RUNGUARD $RUNGUARD_OPTIONS -t 2 -M "$META" sleep 1
 	expect_meta 'wall-time: 1.0'
@@ -258,7 +272,7 @@ test_meta() {
 	exec_check_fail sudo $RUNGUARD $RUNGUARD_OPTIONS -C 3.1 -t 1.4 -M "$META" ./threads 2 3
 	expect_meta 'exitcode: 143'
 	expect_meta 'signal: 14'
-	expect_meta 'wall-time: 1.5'
+	expect_meta 'wall-time: 1.4'
 	expect_meta 'time-result: hard-timelimit'
 
 	exec_check_success sudo $RUNGUARD $RUNGUARD_OPTIONS -C 1:5 -M "$META" ./threads 2 3
