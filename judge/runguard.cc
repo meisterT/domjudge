@@ -1434,6 +1434,10 @@ int main(int argc, char **argv)
 
 		/* Close the output files */
 		for(int i=1; i<=2; i++) {
+			/* Without `-e' this aliases our own stderr; closing it
+			   would discard all logmsg()/warning()/die() output for
+			   the rest of our lifetime. */
+			if ( child_redirfd[i]==STDERR_FILENO ) continue;
 			ret = close(child_redirfd[i]);
 			if( ret!=0 ) die(errno,"closing output fd {}", i);
 		}
