@@ -5,7 +5,8 @@
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 RUNGUARD=../runguard
-RUNGUARD_OPTIONS='-u domjudge-run-0'
+RUNUSER=domjudge-run-0
+RUNGUARD_OPTIONS="-u $RUNUSER"
 LOG1="$(mktemp)"
 LOG2="$(mktemp)"
 # shellcheck disable=SC2154
@@ -34,6 +35,19 @@ expect_stdout() {
 
 expect_stderr() {
 	expect_file "$LOG2" "$1"
+}
+
+expect_no_leftover_procs() {
+	# Whatever the command left behind must have been killed with its cgroup.
+	# The kernel takes a killed process out of the cgroup while it exits, so
+	# it can still await reaping once the cgroup is empty; allow a short while
+	# for that. Keep this well below the lifetime of the processes we leave
+	# behind, or they would pass by simply ending.
+	for _ in $(seq 1 10); do
+		pgrep -u "$RUNUSER" > /dev/null || return 0
+		sleep 0.05
+	done
+	fail "processes of '$RUNUSER' survived: $(pgrep -a -u "$RUNUSER" | head -n5)"
 }
 
 not_expect_stdout() {
@@ -244,6 +258,16 @@ test_leftover_procs() {
 	exec_check_success sudo $RUNGUARD $RUNGUARD_OPTIONS ./leftover.sh
 	expect_stdout "spawned"
 	expect_stderr "left-over process"
+	expect_no_leftover_procs
+}
+
+test_leftover_procs_forking() {
+	# The command leaves a process behind that keeps forking children, so
+	# killing the cgroup must not race with those forks. Bound the run: a
+	# kill that never completes would otherwise hang the test suite.
+	exec_check_success sudo timeout 30 $RUNGUARD $RUNGUARD_OPTIONS ./respawn.sh
+	expect_stderr "left-over process"
+	expect_no_leftover_procs
 }
 
 test_meta() {

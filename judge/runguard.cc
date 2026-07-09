@@ -568,18 +568,44 @@ void cgroup_create()
 
 void cgroup_kill()
 {
-	/* kill any remaining tasks, and wait for them to be gone */
 	char mem_controller[10] = "memory";
-	int size;
-	do {
-		pid_t* pids;
-		int ret = cgroup_get_procs(cgroupname, mem_controller, &pids, &size);
-		if(ret != 0) die(ret, "cgroup_get_procs");
-		for(int i = 0; i < size; i++) {
-			kill(pids[i], SIGKILL);
-		}
+
+	/* Let the kernel kill all remaining tasks for us. It does so
+	   atomically, also catching processes that are forked while it runs,
+	   which we cannot do by hand: enumerating and signalling the tasks
+	   ourselves races both with such forks and with the reuse of a pid
+	   that exited after we read it. */
+	char *mountpoint;
+	int ret = cgroup_get_subsys_mount_point(mem_controller, &mountpoint);
+	if ( ret!=0 ) die(ret,"getting cgroup mount point");
+
+	char path[1024];
+	snprintf(path, sizeof(path), "%s/%s/cgroup.kill", mountpoint, cgroupname);
+	free(mountpoint);
+
+	FILE *file = fopen(path, "w");
+	if ( file==nullptr ) die(errno,"opening cgroups file `{}'", path);
+	if ( fputs("1", file)==EOF ) die(errno,"writing to file `{}'", path);
+	if ( fclose(file)!=0 ) die(errno,"closing file `{}'", path);
+
+	/* The kill is asynchronous, so wait for the tasks to leave the cgroup,
+	   which the kernel does for them while they exit, before it is deleted.
+	   A task in uninterruptible sleep does not act on SIGKILL while it is
+	   stuck, so bail out instead of hanging here forever. */
+	const struct timespec retry_delay = { 0, 1000000L }; /* 1ms */
+	const int max_retries = 1000;
+	for (int attempt = 0; attempt <= max_retries; attempt++) {
+		if (attempt > 0) nanosleep(&retry_delay, nullptr);
+
+		pid_t *pids;
+		int size;
+		ret = cgroup_get_procs(cgroupname, mem_controller, &pids, &size);
+		if ( ret!=0 ) die(ret, "cgroup_get_procs");
 		free(pids);
-	} while (size > 0);
+
+		if ( size==0 ) return;
+	}
+	die(0,"left-over processes in cgroup could not be killed");
 }
 
 void cgroup_delete()
