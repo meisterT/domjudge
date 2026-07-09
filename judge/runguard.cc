@@ -83,7 +83,10 @@
 #define PIPE_IN  1
 #define PIPE_OUT 0
 
-#define BUF_SIZE 4*1024
+/* Match the capacity of a pipe, which the kernel gives 16 pages by default:
+   a full one is emptied in a single call, and a larger buffer would never be
+   filled by one. */
+#define BUF_SIZE 64*1024
 
 /* Types of time for writing to file. */
 #define WALL_TIME_TYPE 0
