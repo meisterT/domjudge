@@ -573,7 +573,8 @@ class ScoreboardService
                 $scoreKey[$variant] = self::getICPCScoreKey(
                     $numPoints[$variant],
                     $totalTime[$variant],
-                    $timeOfLastCorrect[$variant]
+                    $timeOfLastCorrect[$variant],
+                    $contest->getRuntimeAsScoreTiebreaker() ? $totalRuntime[$variant] : null
                 );
             } else {
                 // TODO: Any tie breakers?
@@ -643,13 +644,23 @@ class ScoreboardService
         return str_pad($value, 33, "0", STR_PAD_LEFT);
     }
 
-    public static function getICPCScoreKey(int $numSolved, int $totalTime, int $timeOfLastSolved): string
-    {
+    public static function getICPCScoreKey(
+        int $numSolved,
+        int $totalTime,
+        int $timeOfLastSolved,
+        ?int $totalRuntime = null
+    ): string {
         $scoreKeyArray = [
             self::convertToScoreKeyElement($numSolved),
-            self::convertToScoreKeyElement($totalTime, Order::Ascending),
-            self::convertToScoreKeyElement($timeOfLastSolved, Order::Ascending),
         ];
+        if ($totalRuntime === null) {
+            $scoreKeyArray[] = self::convertToScoreKeyElement($totalTime, Order::Ascending);
+            $scoreKeyArray[] = self::convertToScoreKeyElement($timeOfLastSolved, Order::Ascending);
+        } else {
+            // When runtime is the tiebreaker, it takes the place of the penalty time: that is also
+            // the only tiebreaker shown on the scoreboard, so teams with an equal runtime tie.
+            $scoreKeyArray[] = self::convertToScoreKeyElement($totalRuntime, Order::Ascending);
+        }
         return implode(',', $scoreKeyArray);
     }
 
@@ -661,6 +672,47 @@ class ScoreboardService
             self::convertToScoreKeyElement($score, Order::Descending),
         ];
         return implode(',', $scoreKeyArray);
+    }
+
+    /**
+     * Get all teams that take part in the given contest.
+     *
+     * @return Team[]
+     */
+    protected function getTeamsInContest(Contest $contest): array
+    {
+        $queryBuilder = $this->em->createQueryBuilder()
+            ->from(Team::class, 't')
+            ->select('t')
+            ->orderBy('t.teamid');
+        if (!$contest->isOpenToAllTeams()) {
+            $queryBuilder
+                ->leftJoin('t.contests', 'c')
+                ->join('t.categories', 'cat')
+                ->leftJoin('cat.contests', 'cc')
+                ->andWhere('c.cid = :cid OR cc.cid = :cid')
+                ->setParameter('cid', $contest->getCid());
+        }
+
+        return $queryBuilder->getQuery()->getResult();
+    }
+
+    /**
+     * Recalculate the rankCache of a contest, leaving the scoreCache alone.
+     *
+     * This is needed when a contest setting changes that only affects the sort key,
+     * since the rank cache is otherwise only updated for teams whose score changes,
+     * which would leave sort keys of different generations to be compared to each other.
+     */
+    public function refreshRankCache(Contest $contest): void
+    {
+        Utils::extendMaxExecutionTime(300);
+
+        $this->dj->auditlog('contest', $contest->getExternalid(), 'refresh rank cache');
+
+        foreach ($this->getTeamsInContest($contest) as $team) {
+            $this->updateRankCache($contest, $team);
+        }
     }
 
     /**
@@ -680,20 +732,7 @@ class ScoreboardService
             };
         }
 
-        $queryBuilder = $this->em->createQueryBuilder()
-            ->from(Team::class, 't')
-            ->select('t')
-            ->orderBy('t.teamid');
-        if (!$contest->isOpenToAllTeams()) {
-            $queryBuilder
-                ->leftJoin('t.contests', 'c')
-                ->join('t.categories', 'cat')
-                ->leftJoin('cat.contests', 'cc')
-                ->andWhere('c.cid = :cid OR cc.cid = :cid')
-                ->setParameter('cid', $contest->getCid());
-        }
-        /** @var Team[] $teams */
-        $teams = $queryBuilder->getQuery()->getResult();
+        $teams = $this->getTeamsInContest($contest);
         /** @var Problem[] $problems */
         $problems = $this->em->createQueryBuilder()
             ->from(Problem::class, 'p')

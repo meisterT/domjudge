@@ -452,8 +452,11 @@ class ContestController extends BaseController
 
     #[IsGranted('ROLE_ADMIN')]
     #[Route(path: '/{contestId}/edit', name: 'jury_contest_edit')]
-    public function editAction(Request $request, string $contestId): Response
-    {
+    public function editAction(
+        Request $request,
+        string $contestId,
+        ScoreboardService $scoreboardService
+    ): Response {
         $contest = $this->em->getRepository(Contest::class)->findByExternalId($contestId);
         if (!$contest) {
             throw new NotFoundHttpException(sprintf('Contest with ID %s not found', $contestId));
@@ -465,6 +468,8 @@ class ContestController extends BaseController
         }
 
         $form = $this->createForm(ContestType::class, $contest);
+
+        $oldRuntimeAsScoreTiebreaker = $contest->getRuntimeAsScoreTiebreaker();
 
         // If we are submitting problems, we need to do some reindexing:
         // Problems that already existed on the contest should use the same index as before.
@@ -576,6 +581,15 @@ class ContestController extends BaseController
                 $this->eventLogService->log('problems', $problem->getProbid(),
                     EventLogService::ACTION_DELETE, $contest->getCid(), null, null, false);
             }
+
+            // The tiebreaker is part of the scoreboard sort key, so all sort keys are stale now.
+            // Rebuild them right away: the rank cache is otherwise only updated for teams whose
+            // score changes, which would leave us comparing sort keys of two different kinds.
+            if ($contest->getRuntimeAsScoreTiebreaker() !== $oldRuntimeAsScoreTiebreaker) {
+                $scoreboardService->refreshRankCache($contest);
+                $this->addFlash('info', 'The score tiebreaker changed; the scoreboard ranking has been recalculated.');
+            }
+
             return $this->redirectToRoute('jury_contest', ['contestId' => $contest->getExternalId()]);
         }
 
