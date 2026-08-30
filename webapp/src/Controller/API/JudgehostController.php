@@ -825,32 +825,41 @@ class JudgehostController extends AbstractFOSRestController
 
         if ($field_name !== null) {
             // Disable any outstanding judgetasks with the same script that have not been claimed yet.
-            $this->em->wrapInTransaction(function (EntityManagerInterface $em) use ($field_name, $disabled_id, $error): void {
-                $judgingids = $em->getConnection()->executeQuery(
-                    'SELECT DISTINCT jobid'
-                    . ' FROM judgetask'
-                    . ' WHERE ' . $field_name . ' = :id'
-                    . ' AND judgehostid IS NULL'
-                    . ' AND valid = 1',
-                    [
-                        'id' => $disabled_id,
-                    ]
-                )->fetchFirstColumn();
-                $judgings = $em->getRepository(Judging::class)->findBy(['judgingid' => $judgingids]);
-                foreach ($judgings as $judging) {
-                    /** @var Judging $judging */
-                    $judging->setInternalError($error);
-                }
-                $em->flush();
-                $em->getConnection()->executeStatement(
-                    'UPDATE judgetask SET valid=0'
-                    . ' WHERE ' . $field_name . ' = :id'
-                    . ' AND judgehostid IS NULL',
-                    [
-                        'id' => $disabled_id,
-                    ]
-                );
-            });
+            //
+            // Not in a transaction: reading judgetask and then writing it back fails with error
+            // 1020 under innodb_snapshot_isolation while fetch-work claims the same rows. A
+            // judge task claimed in between is left alone by the judgehostid guard, as intended.
+            $judgingIds = $this->em->getConnection()->executeQuery(
+                'SELECT DISTINCT jobid'
+                . ' FROM judgetask'
+                . ' WHERE ' . $field_name . ' = :id'
+                . ' AND judgehostid IS NULL'
+                . ' AND valid = 1',
+                [
+                    'id' => $disabled_id,
+                ]
+            )->fetchFirstColumn();
+
+            if ($judgingIds !== []) {
+                // A bulk update, so the judgings are written without being read first.
+                $this->em->createQueryBuilder()
+                    ->update(Judging::class, 'j')
+                    ->set('j.internalError', ':error')
+                    ->andWhere('j.judgingid IN (:judgingids)')
+                    ->setParameter('error', $error)
+                    ->setParameter('judgingids', $judgingIds)
+                    ->getQuery()
+                    ->execute();
+            }
+
+            $this->em->getConnection()->executeStatement(
+                'UPDATE judgetask SET valid=0'
+                . ' WHERE ' . $field_name . ' = :id'
+                . ' AND judgehostid IS NULL',
+                [
+                    'id' => $disabled_id,
+                ]
+            );
         }
 
         $this->dj->setInternalError($disabled, $contest, false);
