@@ -27,7 +27,4 @@ return [
     // RejudgingServiceTest::testUpdateFirstToSolve
     'App\Service\RejudgingService::finishRejudging'
         => 'TODO: INSERT IGNORE of balloons after plain reads in the transaction.',
-    // No test: JudgehostWorkflowTest reaches it with the entities already loaded.
-    'App\Controller\API\JudgehostController::giveBackJudging'
-        => 'TODO: replace the ORM loop with guarded bulk UPDATEs.',
 ];
