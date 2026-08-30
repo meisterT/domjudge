@@ -18,9 +18,6 @@ return [
     // JudgehostWorkflowTest::testCheckVersionsRecordsTheReportedVersion
     'App\Controller\API\JudgehostController::checkVersions'
         => 'TODO: guard the language auto-promote write, drop the transaction.',
-    // Jury\SubmissionControllerTest::testVerifyAndUnverifyJudging
-    'App\Controller\Jury\SubmissionController::verifyAction'
-        => 'TODO: verify with one bulk UPDATE, no transaction.',
     // Jury\ProblemControllerTest::testMultiDeleteProblems
     'App\Controller\BaseController::commitDeleteEntity'
         => 'TODO: do the reads of cascaded deletes outside the transaction.',
