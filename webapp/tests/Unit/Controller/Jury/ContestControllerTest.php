@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
+use App\DataFixtures\Test\PreviousSubmissionTestcaseRunsFixture;
 use App\Entity\Contest;
 use App\Entity\JudgeTask;
 use App\Entity\QueueTask;
@@ -502,5 +503,34 @@ class ContestControllerTest extends JuryControllerTestCase
         $this->verifyPageResponse('GET', $deleteUrl, 200);
         $crawler = $this->getCurrentCrawler();
         self::assertStringStartsWith('Delete contest ', $crawler->filter('h1')->text());
+    }
+
+    public function testDeleteContestWithSubmissionsAndRuns(): void
+    {
+        $this->roles = ['admin'];
+        $this->logOut();
+        $this->logIn();
+
+        // 1. Populate submissions and runs across multiple teams/problems in 'demo' contest
+        $this->loadFixture(PreviousSubmissionTestcaseRunsFixture::class);
+        $this->addSubmission('DOMjudge', 'fltcmp', 'demo');
+
+        /** @var EntityManagerInterface $em */
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        self::assertNotNull($contest);
+        $contest->setIsLocked(false);
+        $em->flush();
+        $contestId = $contest->getExternalid();
+
+        // 2. Request delete page and submit
+        $this->verifyPageResponse('GET', "/jury/contests/$contestId/delete", 200);
+        $this->client->submitForm('Delete', []);
+
+        // 3. Follow redirect and assert successful cascade removal
+        $this->checkStatusAndFollowRedirect();
+        $this->verifyPageResponse('GET', static::$baseUrl, 200);
+        self::assertSelectorNotExists('body:contains("Demo contest")');
+        self::assertNull($em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']));
     }
 }
