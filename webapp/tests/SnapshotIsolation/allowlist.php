@@ -18,9 +18,6 @@ return [
     // JudgehostWorkflowTest::testCheckVersionsRecordsTheReportedVersion
     'App\Controller\API\JudgehostController::checkVersions'
         => 'TODO: guard the language auto-promote write, drop the transaction.',
-    // Jury\ProblemControllerTest::testMultiDeleteProblems
-    'App\Controller\BaseController::commitDeleteEntity'
-        => 'TODO: do the reads of cascaded deletes outside the transaction.',
     // RejudgingServiceTest::testUpdateFirstToSolve
     'App\Service\RejudgingService::finishRejudging'
         => 'TODO: INSERT IGNORE of balloons after plain reads in the transaction.',
