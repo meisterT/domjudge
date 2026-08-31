@@ -1482,6 +1482,9 @@ class JudgehostController extends AbstractFOSRestController
 
         // Track version mismatch for enforcement check after transaction
         $versionMismatch = null;
+        // Whether the reported version was not known yet, which is what makes it a candidate
+        // for Trust On First Use below.
+        $isNewVersion = false;
 
         $this->em->wrapInTransaction(function () use (
             $judgehost,
@@ -1489,12 +1492,25 @@ class JudgehostController extends AbstractFOSRestController
             $language,
             $judgeTask,
             $enforceVersionMatch,
-            &$versionMismatch
+            &$versionMismatch,
+            &$isNewVersion
         ): void {
-            $activeVersion = $this->em->getRepository(Version::class)
-                ->findOneBy(['language' => $language, 'judgehost' => $judgehost, 'active' => true]);
+            // A locking read: this row is deactivated below, and under innodb_snapshot_isolation
+            // a row read without a lock cannot be written later in the same transaction. At
+            // most one row, for this judgehost and language, and only ever written from here.
+            $activeVersion = $this->em->createQueryBuilder()
+                ->from(Version::class, 'v')
+                ->select('v')
+                ->andWhere('v.language = :language')
+                ->andWhere('v.judgehost = :judgehost')
+                ->andWhere('v.active = true')
+                ->setParameter('language', $language)
+                ->setParameter('judgehost', $judgehost)
+                ->setMaxResults(1)
+                ->getQuery()
+                ->setLockMode(LockMode::PESSIMISTIC_WRITE)
+                ->getOneOrNullResult();
 
-            $isNewVersion = false;
             if (!$activeVersion) {
                 $isNewVersion = true;
             } else {
@@ -1531,20 +1547,6 @@ class JudgehostController extends AbstractFOSRestController
                 $activeVersion->setLastChangedTime(Utils::now());
                 $this->em->persist($activeVersion);
                 $this->em->flush();
-
-                // Trust On First Use - auto-promote first reported version as canonical.
-                if ($this->config->get('auto_promote_first_version')) {
-                    if (isset($reportedVersions['compiler']) && empty($language->getCompilerVersion())) {
-                        $language
-                            ->setCompilerVersion($reportedVersions['compiler'])
-                            ->setCompilerVersionCommand($language->getCompilerVersionCommand());
-                    }
-                    if (isset($reportedVersions['runner']) && empty($language->getRunnerVersion())) {
-                        $language
-                            ->setRunnerVersion($reportedVersions['runner'])
-                            ->setRunnerVersionCommand($language->getRunnerVersionCommand());
-                    }
-                }
             }
 
             $judgeTask->setVersion($activeVersion);
@@ -1577,6 +1579,39 @@ class JudgehostController extends AbstractFOSRestController
                 }
             }
         });
+
+        // Trust On First Use - auto-promote the first reported version as canonical.
+        //
+        // Outside the transaction above, which reads the language: writing it back there would
+        // fail under innodb_snapshot_isolation if an admin promoted a version at the same time.
+        // The guard carries the "still unset" condition, so losing that race leaves the other
+        // writer's value standing, as before.
+        if ($isNewVersion && $this->config->get('auto_promote_first_version')) {
+            $langId = $language->getLangid();
+            if (isset($reportedVersions['compiler'])) {
+                $this->em->getConnection()->executeStatement(
+                    'UPDATE language SET compiler_version = :version, compiler_version_command = :command'
+                    . ' WHERE langid = :langid AND (compiler_version IS NULL OR compiler_version = \'\')',
+                    [
+                        'version' => $reportedVersions['compiler'],
+                        'command' => $language->getCompilerVersionCommand(),
+                        'langid' => $langId,
+                    ]
+                );
+            }
+            if (isset($reportedVersions['runner'])) {
+                $this->em->getConnection()->executeStatement(
+                    'UPDATE language SET runner_version = :version, runner_version_command = :command'
+                    . ' WHERE langid = :langid AND (runner_version IS NULL OR runner_version = \'\')',
+                    [
+                        'version' => $reportedVersions['runner'],
+                        'command' => $language->getRunnerVersionCommand(),
+                        'langid' => $langId,
+                    ]
+                );
+            }
+            $this->em->refresh($language);
+        }
 
         if ($versionMismatch !== null) {
             $judgingId = $judgeTask->getJobId();
