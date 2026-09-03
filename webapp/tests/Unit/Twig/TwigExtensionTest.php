@@ -658,54 +658,6 @@ class TwigExtensionTest extends TestCase
      * The scoreboard variant of the badge escapes the same label, and additionally puts the
      * team and problem external ids into data-attributes.
      */
-    public function testProblemBadgeMaybeEscapesTheShortnameAndIds(): void
-    {
-        $html = $this->problemBadgeMaybe(
-            shortname: self::XSS_PAYLOAD,
-            teamExternalId: '" onmouseover="alert(1)',
-            problemExternalId: '" onfocus="alert(2)'
-        );
-
-        self::assertStringNotContainsString('<img', $html);
-        self::assertStringContainsString('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;', $html);
-        self::assertStringContainsString('data-team-id="&quot; onmouseover=&quot;alert(1)"', $html);
-        self::assertStringContainsString('data-problem-id="&quot; onfocus=&quot;alert(2)"', $html);
-    }
-
-
-
-    private function problemBadgeMaybe(
-        string $shortname,
-        string $teamExternalId = 'team1',
-        string $problemExternalId = 'problem1',
-        bool $isCorrect = true,
-        int $numSubmissions = 1,
-        int $numPending = 0
-    ): string {
-        $this->router->method('generate')->willReturn('/submissions');
-
-        $problem = $this->createMock(ContestProblem::class);
-        $problem->method('getColor')->willReturn('#ff0000');
-        $problem->method('getShortname')->willReturn($shortname);
-        $problem->method('getExternalId')->willReturn($problemExternalId);
-
-        $team = $this->createMock(Team::class);
-        $team->method('getPenalty')->willReturn(0);
-        $team->method('getExternalid')->willReturn($teamExternalId);
-
-        return $this->twigExtension->problemBadgeMaybe(
-            $problem,
-            new ScoreboardMatrixItem($isCorrect, false, $numSubmissions, $numPending, 0, 0, 0),
-            new TeamScore($team, null, true)
-        );
-    }
-
-
-
-    /**
-     * The submission's external id lands in a script block, and in shadow mode it comes from
-     * the remote CCS without ever passing the validator.
-     */
     public function testShowDiffEncodesTheSubmissionId(): void
     {
         $this->serializer

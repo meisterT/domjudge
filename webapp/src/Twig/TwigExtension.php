@@ -1150,59 +1150,6 @@ EOF;
         return sprintf('background-color: %s; border: 1px solid %s; color: %s;', $rgb, $border, $foreground);
     }
 
-    #[AsTwigFilter('problemBadgeMaybe', isSafe: ['html'])]
-    public function problemBadgeMaybe(
-        ContestProblem $problem,
-        ScoreboardMatrixItem $matrixItem,
-        TeamScore $score,
-        bool $static = false,
-    ): string {
-        $rgb = Utils::convertToHex($problem->getColor() ?? '#ffffff');
-        if (!$matrixItem->isCorrect || empty($rgb)) {
-            $rgb = Utils::convertToHex('whitesmoke');
-        }
-
-        [$foreground, $border] = Utils::hexToForegroundAndBorder($rgb);
-
-        if (!$matrixItem->isCorrect) {
-            $foreground = 'silver';
-            $border = 'linen';
-        }
-
-        $submissionsUrl = $static
-            ? $this->router->generate('public_submissions_data')
-            : $this->router->generate('public_submissions_data_cell', [
-                'teamId' => $score->team->getExternalid(),
-                'problemId' => $problem->getExternalId(),
-            ]);
-
-        $ret = sprintf(<<<HTML
-                <span class="badge problem-badge"
-                      style="font-size: x-small; background-color: %s; min-width: 18px; border: 1px solid %s;"
-                      data-submissions-url="%s"
-                      data-team-id="%s"
-                      data-problem-id="%s">
-                    <span style="color: %s;">%s</span>
-                </span>
-                HTML,
-            $rgb,
-            $border,
-            $submissionsUrl,
-            htmlspecialchars((string)$score->team->getExternalid()),
-            htmlspecialchars((string)$problem->getExternalId()),
-            $foreground,
-            htmlspecialchars($problem->getShortname())
-        );
-        if (!$matrixItem->isCorrect) {
-            if ($matrixItem->numSubmissionsPending > 0) {
-                $ret = '<span><span class="mobile-pending">' . $ret . '</span></span>';
-            } elseif ($matrixItem->numSubmissions > 0) {
-                $ret = '<span><span class="strike-diagonal">' . $ret . '</span></span>';
-            }
-        }
-        return $ret;
-    }
-
     #[AsTwigFilter('problemBadgeForContest', isSafe: ['html'])]
     public function problemBadgeForContest(Problem $problem, ?Contest $contest = null): string
     {
