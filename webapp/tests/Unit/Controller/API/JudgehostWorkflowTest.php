@@ -358,6 +358,8 @@ class JudgehostWorkflowTest extends BaseTestCase
         $newJudging = $this->judgingForTask((int)$rejudgeTasks[0]['judgetaskid']);
         self::assertSame($rejudgingId, $newJudging->getRejudging()?->getRejudgingid());
         self::assertTrue($newJudging->getValid(), 'the rejudged judging must become the valid one');
+        self::assertSame(Judging::RESULT_CORRECT, $newJudging->getResult(), 'the rejudged judging must record its verdict');
+        self::assertNotNull($newJudging->getEndtime(), 'the rejudged judging must be ended');
 
         $superseded = $em->getRepository(Judging::class)->find($originalJudgingId);
         self::assertFalse($superseded->getValid(), 'the original judging must be superseded');
