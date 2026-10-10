@@ -1515,6 +1515,11 @@ class JudgehostController extends AbstractFOSRestController
         // Check config outside transaction to avoid repeated lookups
         $enforceVersionMatch = $this->config->get('enforce_version_match');
 
+        // The language is a lazy proxy, and reading it inside the transaction below would be a
+        // plain read that the later write of the judge task cannot follow under
+        // innodb_snapshot_isolation.
+        $this->em->initializeObject($language);
+
         // Track version mismatch for enforcement check after transaction
         $versionMismatch = null;
         // Whether the reported version was not known yet, which is what makes it a candidate
