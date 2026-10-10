@@ -15,6 +15,10 @@ return [
     'App\Doctrine\ExternalIdAssigner::__invoke'
         => 'postPersist: only updates the row this transaction just inserted.',
 
+    // JudgehostWorkflowTest::testCompletingAnAutoApplyRejudgingAppliesIt
+    'App\Service\RejudgingService::createRejudging'
+        => 'locks the judging this transaction inserted a few statements earlier, which no other transaction can change.',
+
     // RejudgingServiceTest::testUpdateFirstToSolve
     'App\Service\RejudgingService::finishRejudging'
         => 'TODO: INSERT IGNORE of balloons after plain reads in the transaction.',
