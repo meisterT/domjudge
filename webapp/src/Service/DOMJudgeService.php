@@ -1638,14 +1638,27 @@ class DOMJudgeService
         $basePathProperty->setValue($request, '/CHANGE_ME');
         $requestStack->push($request);
 
-        $contestPage = $this->twig->render('public/scoreboard.html.twig', $data);
+        // Reset router context so relative URLs in index.html are generated relative to the ZIP root
+        $oldContext = $this->router->getContext();
+        $zipContext = clone $oldContext;
+        $zipContext->setBaseUrl('');
+        $zipContext->setPathInfo('/');
+        $this->router->setContext($zipContext);
+
+        try {
+            $contestPage = $this->twig->render('public/scoreboard.html.twig', $data);
+        } finally {
+            $this->router->setContext($oldContext);
+        }
 
         // Now get all assets that are used
         $assetRegex = '|/CHANGE_ME/([/a-z0-9_\-\.]*)(\??[/a-z0-9_\-\.=]*)|i';
         preg_match_all($assetRegex, $contestPage, $assetMatches);
         $contestPage = preg_replace($assetRegex, '$1$2', $contestPage);
-        $contestPage = preg_replace('|data-submissions-url="[^"]*/public/submissions-data\.json"|',
+        $contestPage = preg_replace('|data-submissions-url="[^"]*submissions-data\.json"|',
             'data-submissions-url="submissions-data.json"', $contestPage);
+        $contestPage = preg_replace('|href="[^"]*scoreboard-category-color\.css"|',
+            'href="scoreboard-category-color.css"', $contestPage);
 
         $zip = new ZipArchive();
         if (!($tempFilename = tempnam($this->getDomjudgeTmpDir(), "contest-"))) {
@@ -1657,6 +1670,9 @@ class DOMJudgeService
             throw new ServiceUnavailableHttpException(null, 'Could not create temporary zip file.');
         }
         $zip->addFromString('index.html', $contestPage);
+
+        $categoryColors = $this->twig->render('public/scoreboard_category_color.css.twig', $this->getScoreboardCategoryColorCss());
+        $zip->addFromString('scoreboard-category-color.css', $categoryColors);
 
         $submissionsDataRequest  = Request::create('/public/submissions-data.json', Request::METHOD_GET);
         if ($contest !== null) {
