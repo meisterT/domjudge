@@ -277,6 +277,61 @@ class ScoringScoreboardIntegrationTest extends KernelTestCase
         }
     }
 
+    /**
+     * A judging that still has to be verified must not show its score or
+     * runtime on the scoreboard.
+     */
+    public function testScoringScoreboardUnverifiedJudgingIsHidden(): void
+    {
+        $lang = $this->em->getRepository(Language::class)->findByExternalId('c');
+        $this->setConfig('verification_required', true);
+
+        $team = $this->teams[0];
+        $submission = $this->createScoringSubmission($lang, $this->problems[0], $team, 10*60, [
+            'problem_0_tc_0' => ['correct', '10'],
+            'problem_0_tc_1' => ['correct', '20'],
+            'problem_0_tc_2' => ['correct', '30'],
+        ]);
+
+        $this->recalcScoreCaches();
+        static::assertEquals(['0.000000000', 0, 0], $this->getCell($team));
+        static::assertEquals(1, $this->getPending($team));
+
+        $submission->getValidJudging()->setVerified(true);
+        $this->em->flush();
+        $this->recalcScoreCaches();
+        static::assertEquals(['60.000000000', 1, 100], $this->getCell($team));
+    }
+
+    /**
+     * @return array{string, int, int} score, is_correct and runtime of the restricted cell
+     */
+    private function getCell(Team $team): array
+    {
+        $row = $this->em->getConnection()->fetchNumeric(
+            'SELECT score_restricted, is_correct_restricted, runtime_restricted
+             FROM scorecache WHERE cid = :cid AND teamid = :teamid AND probid = :probid',
+            [
+                'cid' => $this->contest->getCid(),
+                'teamid' => $team->getTeamid(),
+                'probid' => $this->problems[0]->getProbid(),
+            ]
+        );
+        return [$row[0], (int)$row[1], (int)$row[2]];
+    }
+
+    private function getPending(Team $team): int
+    {
+        return (int)$this->em->getConnection()->fetchOne(
+            'SELECT pending_restricted FROM scorecache WHERE cid = :cid AND teamid = :teamid AND probid = :probid',
+            [
+                'cid' => $this->contest->getCid(),
+                'teamid' => $team->getTeamid(),
+                'probid' => $this->problems[0]->getProbid(),
+            ]
+        );
+    }
+
     public function testScoringScoreboardMultipleSubmissions(): void
     {
         $lang = $this->em->getRepository(Language::class)->findByExternalId('c');

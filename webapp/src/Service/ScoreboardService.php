@@ -271,7 +271,12 @@ class ScoreboardService
                 $judging = $submission->getValidJudging();
             }
 
-            if ($problem->isScoringProblem()) {
+            // A judging that still has to be verified is not visible yet, so it must
+            // not contribute to the score or the runtime either.
+            $awaitingVerification = $judging !== null && !$useExternalJudgements &&
+                $verificationRequired && !$judging->getVerified();
+
+            if ($problem->isScoringProblem() && !$awaitingVerification) {
                 $score = $judging?->getScore();
                 if ($score !== null) {
                     if (bccomp($pointsJury, $score, scale: self::SCALE) < 0) {
@@ -291,7 +296,7 @@ class ScoreboardService
 
             // STEP 1:
             // runtime improvements should be possible for all correct submissions
-            if (!is_null($judging) && $judging->getResult() == Judging::RESULT_CORRECT) {
+            if (!is_null($judging) && !$awaitingVerification && $judging->getResult() == Judging::RESULT_CORRECT) {
                 $runtime = (int) floor(1000*$judging->getMaxRuntime()); // round to milliseconds
                 $runtimeJury = min($runtimeJury, $runtime);
                 if (!$submission->isAfterFreeze()) {
@@ -308,7 +313,7 @@ class ScoreboardService
             // STEP 2:
             // Check if this submission has a publicly visible judging result:
             if ($judging === null || empty($judging->getResult()) ||
-                (!$useExternalJudgements && $verificationRequired && !$judging->getVerified())) {
+                $awaitingVerification) {
                 // For the jury: only consider it pending if we don't have a
                 // correct one yet. This is needed because during the freeze
                 // we consider submissions after the correct one for the
