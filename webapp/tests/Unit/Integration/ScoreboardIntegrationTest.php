@@ -388,6 +388,34 @@ class ScoreboardIntegrationTest extends KernelTestCase
     }
 
     /**
+     * Whether a team is first to solve must not depend on how floating point
+     * numbers are converted to strings, even for submit times with more
+     * decimals than the database comparison used to look at.
+     */
+    public function testFTSIndependentOfFloatPrecision(): void
+    {
+        $lang = $this->em->getRepository(Language::class)->findByExternalId('c');
+
+        $this->createSubmission($lang, $this->problems[0], $this->teams[0], 20*60 + 0.12344, 'correct', true);
+        $this->createSubmission($lang, $this->problems[0], $this->teams[1], 20*60 + 0.12346, 'correct', true);
+
+        $oldPrecision = ini_set('precision', '-1');
+        try {
+            $this->ss->calculateScoreRow($this->contest, $this->teams[0], $this->problems[0]);
+            $this->ss->calculateScoreRow($this->contest, $this->teams[1], $this->problems[0]);
+        } finally {
+            ini_set('precision', (string)$oldPrecision);
+        }
+
+        $first = $this->em->getConnection()->fetchAllKeyValue(
+            'SELECT teamid, is_first_to_solve FROM scorecache WHERE cid = :cid AND probid = :probid',
+            ['cid' => $this->contest->getCid(), 'probid' => $this->problems[0]->getProbid()]
+        );
+        static::assertEquals(1, $first[$this->teams[0]->getTeamid()], 'Earlier submission is first');
+        static::assertEquals(0, $first[$this->teams[1]->getTeamid()], 'Later submission is not first');
+    }
+
+    /**
      * Test that delaying the contest start (disabling start time) doesn't cause
      * negative score key values when a jury test submission exists before the start time.
      * Regression test for https://github.com/DOMjudge/domjudge/issues/3417

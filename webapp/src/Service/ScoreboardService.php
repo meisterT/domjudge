@@ -261,7 +261,8 @@ class ScoreboardService
         $pointsJury      = "0";
         $pointsPubl      = "0";
 
-        $firstAbsSubmitTime = null;
+        // The first correct submission of this team, to determine if it was the first to solve.
+        $firstCorrectSubmitId = null;
 
         foreach ($submissions as $submission) {
             /** @var Judging|ExternalJudgement|null $judging */
@@ -354,14 +355,10 @@ class ScoreboardService
             $absSubmitTime = max($absSubmitTime, $contestStartTime);
             $submitTime    = $contest->getContestTime($absSubmitTime);
 
-            // For scoring problems we consider submissions after the first correct one. So we need to
-            // keep track of when the first correct submission occurred.
-            // TODO: is this actually what 'first to solve' for scoring problems means?
-            if ($firstAbsSubmitTime === null) {
-                $firstAbsSubmitTime = $absSubmitTime;
-            }
-
             if ($judging->getResult() == Judging::RESULT_CORRECT) {
+                // For scoring problems we consider submissions after the first correct one, so
+                // make sure to remember the first one.
+                $firstCorrectSubmitId ??= $submission->getSubmitid();
                 $correctJury = true;
                 $timeJury    = $submitTime;
                 if (!$submission->isAfterFreeze()) {
@@ -379,8 +376,7 @@ class ScoreboardService
                 'cid' => $contest->getCid(),
                 'probid' => $problem->getProbid(),
                 'teamSortOrder' => $team->getSortorder(),
-                /** @phpstan-ignore-next-line $absSubmitTime is always set when $correctJury is true */
-                'submitTime' => $absSubmitTime,
+                'submitId' => $firstCorrectSubmitId,
                 'correctResult' => Judging::RESULT_CORRECT,
                 'scoring' => TeamCategory::TYPE_SCORING,
             ];
@@ -405,12 +401,14 @@ class ScoreboardService
                     # TODO: category type
                     LEFT JOIN team_category_team tcc USING (teamid)
                     LEFT JOIN team_category tc ON tc.categoryid = tcc.categoryid AND (tc.types & :scoring) = :scoring
+                    JOIN submission me ON me.submitid = :submitId
                 WHERE s.valid = 1 AND
                     (ej.result IS NULL OR ej.result = :correctResult '.
                     $verificationRequiredExtra.') AND
                     s.cid = :cid AND s.probid = :probid AND
                     tc.sortorder = :teamSortOrder AND
-                    round(s.submittime,4) < :submitTime', $params);
+                    (s.submittime < me.submittime OR (s.submittime = me.submittime AND s.submitid < me.submitid))',
+                    $params);
             } else {
                 $firstToSolve = 0 == $this->em->getConnection()->fetchOne('
                 SELECT count(*) FROM submission s
@@ -419,12 +417,14 @@ class ScoreboardService
                     # TODO: category type
                     LEFT JOIN team_category_team tcc USING (teamid)
                     LEFT JOIN team_category tc ON tc.categoryid = tcc.categoryid AND (tc.types & :scoring) = :scoring
+                    JOIN submission me ON me.submitid = :submitId
                 WHERE s.valid = 1 AND
                     (j.judgingid IS NULL OR j.result IS NULL OR j.result = :correctResult '.
                     $verificationRequiredExtra.') AND
                     s.cid = :cid AND s.probid = :probid AND
                     tc.sortorder = :teamSortOrder AND
-                    round(s.submittime,4) < :submitTime', $params);
+                    (s.submittime < me.submittime OR (s.submittime = me.submittime AND s.submitid < me.submitid))',
+                    $params);
             }
         }
 
