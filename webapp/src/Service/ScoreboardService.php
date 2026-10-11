@@ -715,6 +715,25 @@ class ScoreboardService
             return;
         }
 
+        // Only team/problem combinations with a (valid) submission, or with an existing cell
+        // that might have to be cleared, can have anything on the scoreboard. Do not spend
+        // a query on all the others.
+        $cellsToCalculate = [];
+        foreach ([[Submission::class, 'valid = 1'], [ScoreCache::class, null]] as [$class, $condition]) {
+            $queryBuilder = $this->em->createQueryBuilder()
+                ->from($class, 'c')
+                ->select('IDENTITY(c.team) AS teamid', 'IDENTITY(c.problem) AS probid')
+                ->distinct()
+                ->andWhere('c.contest = :contest')
+                ->setParameter('contest', $contest);
+            if ($condition !== null) {
+                $queryBuilder->andWhere('c.' . $condition);
+            }
+            foreach ($queryBuilder->getQuery()->getScalarResult() as $cellRow) {
+                $cellsToCalculate[$cellRow['teamid'] . '-' . $cellRow['probid']] = true;
+            }
+        }
+
         $first = true;
         $log = '';
 
@@ -730,11 +749,27 @@ class ScoreboardService
 
             // for each problem fetch the result
             foreach ($problems as $problem) {
-                $this->calculateScoreRow($contest, $team, $problem, false);
+                if (isset($cellsToCalculate[$team->getTeamid() . '-' . $problem->getProbid()])) {
+                    $this->calculateScoreRow($contest, $team, $problem, false);
+                }
             }
 
             $this->updateRankCache($contest, $team);
         }
+
+        // Drop the cells that turned out to be empty again.
+        $this->em->createQueryBuilder()
+            ->delete(ScoreCache::class, 's')
+            ->andWhere('s.contest = :contest')
+            ->andWhere('s.submissions_restricted = 0')
+            ->andWhere('s.pending_restricted = 0')
+            ->andWhere('s.is_correct_restricted = 0')
+            ->andWhere('s.submissions_public = 0')
+            ->andWhere('s.pending_public = 0')
+            ->andWhere('s.is_correct_public = 0')
+            ->setParameter('contest', $contest)
+            ->getQuery()
+            ->execute();
 
         // Drop all teams and problems that do not exist in the contest.
         $problemIds = array_map(fn(Problem $problem) => $problem->getProbid(), $problems);
