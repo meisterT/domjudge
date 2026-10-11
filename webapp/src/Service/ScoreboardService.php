@@ -385,9 +385,9 @@ class ScoreboardService
                 'scoring' => TeamCategory::TYPE_SCORING,
             ];
 
-            // Find out how many valid submissions were submitted earlier
-            // that have a valid judging that is correct, or are awaiting judgement.
-            // Only if there are 0 found, we are definitely the first to solve this problem.
+            // Find out if any valid submission was submitted earlier that has a valid
+            // judging that is correct, or is awaiting judgement.
+            // Only if there is none, we are definitely the first to solve this problem.
             // To find relevant submissions/judgings:
             // - submission needs to be valid (not invalidated)
             // - a valid judging is present, but
@@ -395,37 +395,37 @@ class ScoreboardService
             //   - or already judged to be correct (if it is judged but not correct,
             //     it is not a first to solve)
             // - or the submission is still queued for judgement (judgehost is NULL).
-            $verificationRequiredExtra = $verificationRequired ? 'OR j.verified = 0' : '';
+            // We only need to know if there is one, so stop at the first match.
             if ($useExternalJudgements) {
-                $firstToSolve = 0 == $this->em->getConnection()->fetchOne('
-                SELECT count(*) FROM submission s
-                    LEFT JOIN external_judgement ej USING (submitid)
-                    LEFT JOIN external_judgement ej2 ON ej2.submitid = s.submitid AND ej2.starttime > ej.starttime
-                    LEFT JOIN team t USING(teamid)
-                    # TODO: category type
-                    LEFT JOIN team_category_team tcc USING (teamid)
-                    LEFT JOIN team_category tc ON tc.categoryid = tcc.categoryid AND (tc.types & :scoring) = :scoring
-                WHERE s.valid = 1 AND
-                    (ej.result IS NULL OR ej.result = :correctResult '.
-                    $verificationRequiredExtra.') AND
-                    s.cid = :cid AND s.probid = :probid AND
-                    tc.sortorder = :teamSortOrder AND
-                    round(s.submittime,4) < :submitTime', $params);
+                $earlierSubmissionExists = $this->em->getConnection()->fetchOne('
+                SELECT EXISTS (
+                    SELECT 1 FROM submission s
+                        LEFT JOIN external_judgement ej ON ej.submitid = s.submitid
+                        # TODO: category type
+                        JOIN team_category_team tcc ON tcc.teamid = s.teamid
+                        JOIN team_category tc ON tc.categoryid = tcc.categoryid AND (tc.types & :scoring) = :scoring
+                    WHERE s.valid = 1 AND
+                        (ej.result IS NULL OR ej.result = :correctResult) AND
+                        s.cid = :cid AND s.probid = :probid AND
+                        tc.sortorder = :teamSortOrder AND
+                        round(s.submittime,4) < :submitTime)', $params);
             } else {
-                $firstToSolve = 0 == $this->em->getConnection()->fetchOne('
-                SELECT count(*) FROM submission s
-                    LEFT JOIN judging j ON (s.submitid=j.submitid AND j.valid=1)
-                    LEFT JOIN team t USING (teamid)
-                    # TODO: category type
-                    LEFT JOIN team_category_team tcc USING (teamid)
-                    LEFT JOIN team_category tc ON tc.categoryid = tcc.categoryid AND (tc.types & :scoring) = :scoring
-                WHERE s.valid = 1 AND
-                    (j.judgingid IS NULL OR j.result IS NULL OR j.result = :correctResult '.
-                    $verificationRequiredExtra.') AND
-                    s.cid = :cid AND s.probid = :probid AND
-                    tc.sortorder = :teamSortOrder AND
-                    round(s.submittime,4) < :submitTime', $params);
+                $verificationRequiredExtra = $verificationRequired ? 'OR j.verified = 0' : '';
+                $earlierSubmissionExists = $this->em->getConnection()->fetchOne('
+                SELECT EXISTS (
+                    SELECT 1 FROM submission s
+                        LEFT JOIN judging j ON (s.submitid=j.submitid AND j.valid=1)
+                        # TODO: category type
+                        JOIN team_category_team tcc ON tcc.teamid = s.teamid
+                        JOIN team_category tc ON tc.categoryid = tcc.categoryid AND (tc.types & :scoring) = :scoring
+                    WHERE s.valid = 1 AND
+                        (j.judgingid IS NULL OR j.result IS NULL OR j.result = :correctResult '.
+                        $verificationRequiredExtra.') AND
+                        s.cid = :cid AND s.probid = :probid AND
+                        tc.sortorder = :teamSortOrder AND
+                        round(s.submittime,4) < :submitTime)', $params);
             }
+            $firstToSolve = !$earlierSubmissionExists;
         }
 
         // Use a direct REPLACE INTO query to drastically speed this up
