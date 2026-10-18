@@ -35,10 +35,6 @@
     },
     {
       "app_id": 15368,
-      "context": "Post results assuming forks"
-    },
-    {
-      "app_id": 15368,
       "context": "pycodestyle"
     },
     {
