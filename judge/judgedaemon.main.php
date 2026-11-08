@@ -35,6 +35,20 @@ enum Verdict
 }
 
 /**
+ * Exit requested by a signal. Ordered by severity: a later signal may
+ * escalate the request, never weaken it.
+ */
+// phpcs:ignore
+enum ExitRequest: int
+{
+    case NONE = 0;
+    // Finish the current judging, then exit.
+    case GRACEFUL = 1;
+    // Abort the current judging and exit.
+    case ABORT = 2;
+}
+
+/**
  * Represents program execution metadata with validated fields.
  * @phpstan-type MetaData_Program array{
  *     exitcode: string, memory-bytes: string, time-used: string, time-result: string,
@@ -206,8 +220,7 @@ class JudgeDaemon
     /** @var array<string, bool|string> */
     private array $options = [];
 
-    private bool $exitsignalled = false;
-    private bool $gracefulexitsignalled = false;
+    private ExitRequest $exitRequest = ExitRequest::NONE;
 
     private string $lastrequest = '';
     private float $waittime = self::INITIAL_WAITTIME_SEC;
@@ -238,17 +251,19 @@ class JudgeDaemon
 
     public function handleSignal(int $signal): void
     {
-        logmsg(LOG_NOTICE, "Signal $signal received.");
-        if ($signal === SIGHUP) {
-            logmsg(LOG_NOTICE, "SIGHUP received, restarting.");
-            $this->exitsignalled = true;
-        } elseif ($signal === SIGUSR1) {
-            $this->gracefulexitsignalled = true;
-            logmsg(LOG_NOTICE, "SIGUSR1 received, finishing current judging and exiting.");
-        } else {
-            $this->exitsignalled = true;
-            logmsg(LOG_NOTICE, "Received signal, exiting.");
+        $request = match ($signal) {
+            SIGHUP, SIGINT, SIGTERM => ExitRequest::GRACEFUL,
+            SIGQUIT => ExitRequest::ABORT,
+            default => ExitRequest::NONE,
+        };
+        if ($request->value > $this->exitRequest->value) {
+            $this->exitRequest = $request;
         }
+        logmsg(LOG_NOTICE, "Signal $signal received, " . match ($this->exitRequest) {
+            ExitRequest::GRACEFUL => 'finishing current judging and exiting.',
+            ExitRequest::ABORT => 'aborting current judging and exiting.',
+            ExitRequest::NONE => 'ignoring it.',
+        });
     }
 
     public function __construct()
@@ -482,7 +497,7 @@ class JudgeDaemon
                     }
                 }
             }
-            if ($this->exitsignalled) {
+            if ($this->exitRequest !== ExitRequest::NONE) {
                 logmsg(LOG_NOTICE, "Received signal, exiting.");
                 $this->closeCurlHandles();
                 fclose($this->lockfile);
@@ -640,7 +655,7 @@ class JudgeDaemon
         file_put_contents($success_file, $expected_uuid_pid);
 
         // Check if we were interrupted while judging, if so, exit (to avoid sleeping)
-        if ($this->exitsignalled) {
+        if ($this->exitRequest !== ExitRequest::NONE) {
             logmsg(LOG_NOTICE, "Received signal, exiting.");
             $this->closeCurlHandles();
             fclose($this->lockfile);
@@ -1868,11 +1883,11 @@ class JudgeDaemon
         // TODO: How do we plan to handle these?
         $overshoot = $this->djconfigGetValue('timelimit_overshoot');
 
-        // Check whether we have received an exit signal (but not a graceful exit signal).
+        // Check whether we have been asked to abort the current judging.
         if (function_exists('pcntl_signal_dispatch')) {
             pcntl_signal_dispatch();
         }
-        if ($this->exitsignalled && !$this->gracefulexitsignalled) {
+        if ($this->exitRequest === ExitRequest::ABORT) {
             logmsg(LOG_NOTICE, "Received HARD exit signal, aborting current judging.");
 
             // Make sure the domserver knows that we didn't finish this judging.
@@ -2753,7 +2768,7 @@ class JudgeDaemon
                 pcntl_signal(SIGTERM, SIG_DFL);
                 pcntl_signal(SIGINT, SIG_DFL);
                 pcntl_signal(SIGHUP, SIG_DFL);
-                pcntl_signal(SIGUSR1, SIG_DFL);
+                pcntl_signal(SIGQUIT, SIG_DFL);
 
                 // The child should use its own curl handle to avoid issues with sharing handles
                 // between processes.
@@ -2851,10 +2866,13 @@ class JudgeDaemon
 
     private function initsignals(): void
     {
-        pcntl_signal(SIGTERM, self::signalHandler(...));
-        pcntl_signal(SIGINT, self::signalHandler(...));
+        // SIGHUP, SIGINT and SIGTERM finish the current judging before
+        // exiting, SIGQUIT aborts it. The sleep() call will automatically
+        // return on receiving a signal.
         pcntl_signal(SIGHUP, self::signalHandler(...));
-        pcntl_signal(SIGUSR1, self::signalHandler(...));
+        pcntl_signal(SIGINT, self::signalHandler(...));
+        pcntl_signal(SIGQUIT, self::signalHandler(...));
+        pcntl_signal(SIGTERM, self::signalHandler(...));
     }
 }
 

@@ -73,49 +73,6 @@ function alert(string $msgtype, string $description = ''): void
 }
 
 /**
- * Functions to support (graceful) shutdown of daemons upon receiving a
- * signal.
- */
-function sig_handler(int $signal, mixed $siginfo = null): void
-{
-    global $exitsignalled, $gracefulexitsignalled;
-
-    logmsg(LOG_DEBUG, "Signal $signal received");
-
-    switch ($signal) {
-        case SIGHUP:
-        case SIGINT:   # Ctrl+C
-        case SIGTERM:
-            $gracefulexitsignalled = true;
-            // no break
-        case SIGQUIT:  # Ctrl+/
-            $exitsignalled = true;
-    }
-}
-
-function initsignals(): void
-{
-    global $exitsignalled;
-
-    $exitsignalled = false;
-
-    if (! function_exists('pcntl_signal')) {
-        logmsg(LOG_INFO, "Signal handling not available");
-        return;
-    }
-
-    logmsg(LOG_DEBUG, "Installing signal handlers");
-
-    // Install signal handler for HANGUP, INTERRUPT, QUIT and TERMINATE
-    // signals. All but the QUIT signal should trigger a graceful shutdown.
-    // The sleep() call will automatically return on receiving a signal.
-    pcntl_signal(SIGHUP, "sig_handler");
-    pcntl_signal(SIGINT, "sig_handler");
-    pcntl_signal(SIGQUIT, "sig_handler");
-    pcntl_signal(SIGTERM, "sig_handler");
-}
-
-/**
  * Output generic version information and exit.
  */
 function version() : never
