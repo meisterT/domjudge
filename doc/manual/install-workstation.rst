@@ -62,32 +62,15 @@ content::
 See the `netrc manual page`_ for more details. You can run ``./submit --help``
 to inspect its configuration and options.
 
-Rebuilding team documentation
------------------------------
+Team documentation
+------------------
 
-The source of the team manual can be found in ``doc/manual/team.rst``.
-The team manual can incorporate specific settings of your environment,
-most notably the URL of the DOMjudge installation. To achieve this,
-rebuild the team manual *after* configuration of the system.
-
-.. note::
-
-  A prebuilt team manual is included, but this contains
-  default/example values for site-specific configuration settings such
-  as the team web interface URL and judging settings such as the memory
-  limit. We strongly recommend rebuilding the team manual to include
-  site-specific settings and also to revise it to reflect your contest
-  specific environment and rules.
-
-
-When DOMjudge is configured and site-specific configuration set,
-the team manual can be generated with the command ``make docs``.
-The following should do it on a Debian-like system::
-
-  sudo apt install python3-sphinx python3-sphinx-rtd-theme fontconfig python3-yaml
-  cd <DOWNLOAD_PATH>/doc/
-  make docs
-
-The resulting manual will then be found in the ``team/`` subdirectory.
+The team manual is rendered directly in the DOMjudge web interface at
+``/team/manual`` (also linked from the Jury home page under *Documentation*).
+It automatically incorporates the active configuration of your DOMjudge
+installation, such as the web interface URL, judging limits, and enabled
+programming languages, and can be printed or saved as a PDF directly from
+the browser. Customizing its contents can be done in
+``webapp/templates/team/manual.html.twig``.
 
 .. _netrc manual page: https://ec.haxx.se/usingcurl/usingcurl-netrc

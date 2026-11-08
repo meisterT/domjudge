@@ -89,7 +89,7 @@
 <h2 class="mt-4 mb-3 h5">Documentation</h2>
 <div class="row g-2 mb-3">
     {{ _self.tile(asset('doc/manual/html/index.html'), 'book', 'DOMjudge manual') }}
-    {{ _self.tile(asset('doc/manual/domjudge-team-manual.pdf'), 'file-pdf', 'Team manual') }}
+    {{ _self.tile(path('team_manual'), 'book-open', 'Team manual') }}
     {{ _self.tile(path('app.swagger_ui'), 'code', 'API documentation') }}
     {{ _self.tile(CCS_SPEC_API_URL, 'globe', 'ICPC Contest API') }}
 </div>

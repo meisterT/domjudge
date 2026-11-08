@@ -16,7 +16,6 @@ docs distdocs: $(PDF) $(ZIP)
 	touch .pdf-generated
 
 install-docs:
-	$(INSTALL_DATA) -t $(DESTDIR)$(domjudge_docdir)/examples example.*
 	$(INSTALL_DATA) -t $(DESTDIR)$(domjudge_docdir)/examples hello.pdf hello.in hello.out
 	$(INSTALL_DATA) -t $(DESTDIR)$(domjudge_docdir)/examples fltcmp.pdf fltcmp.in fltcmp.out
 	$(INSTALL_DATA) -t $(DESTDIR)$(domjudge_docdir)/examples boolfind.pdf boolfind.in boolfind.out

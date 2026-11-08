@@ -200,6 +200,26 @@ class MiscControllerTest extends BaseTestCase
     }
 
     /**
+     * Test that the in-app team manual renders with configured limits and examples.
+     */
+    public function testTeamManualPage(): void
+    {
+        $this->verifyPageResponse('GET', '/team/manual', 200);
+
+        self::assertSelectorTextContains('h1', 'DOMjudge Team Manual');
+        self::assertSelectorTextContains('#runlimits', '256 kilobytes');
+        self::assertSelectorTextContains('#codeexamples', 'Hello %s!');
+    }
+
+    /**
+     * Test that the legacy team manual PDF path redirects to the in-app team manual.
+     */
+    public function testLegacyTeamManualPdfRedirect(): void
+    {
+        $this->verifyPageResponse('GET', '/doc/manual/domjudge-team-manual.pdf', 302, '/team/manual');
+    }
+
+    /**
      * Jury and admin users are not restricted by the clarification query
      * builder, but their own team page should still only show the
      * clarifications their team is allowed to see.

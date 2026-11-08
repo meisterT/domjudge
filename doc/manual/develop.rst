@@ -40,17 +40,14 @@ already listed under
 :ref:`submit client <submit_client_requirements>` requirements)::
 
   sudo apt install autoconf automake bats \
-    python3-sphinx python3-sphinx-rtd-theme fontconfig python3-yaml \
-    latexmk yarnpkg texlive-latex-recommended texlive-latex-extra tex-gyre
+    python3-sphinx python3-sphinx-rtd-theme python3-yaml \
+    yarnpkg texlive-latex-recommended texlive-latex-extra
 
 For Fedora use::
 
   sudo dnf install git autoconf automake bats \
-    sphinx-build python3-sphinx_rtd_theme latexmk yarnpkg texlive-cmap \
-    texlive-metafont texlive-tex-gyre texlive-fncychap texlive-wrapfig \
-    texlive-capt-of texlive-framed texlive-upquote texlive-needspace \
-    texlive-tabulary texlive-parskip texlive-oberdiek texlive-makeindex \
-    texlive-ellipse texlive-pict2e texlive-collection-fontsextra
+    sphinx-build python3-sphinx_rtd_theme yarnpkg \
+    texlive-collection-latexrecommended texlive-collection-latexextra
 
 When this software is present, bootstrapping can be done by running
 ``make dist``, which creates the ``configure`` script,

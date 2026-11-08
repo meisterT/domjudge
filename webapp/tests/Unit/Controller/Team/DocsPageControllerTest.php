@@ -42,7 +42,7 @@ class DocsPageControllerTest extends BaseTestCase
         $links = $crawler->filter('.list-group a');
 
         $manual = $links->eq(0);
-        self::assertEquals('../docs/team.pdf', $manual->attr('href'));
+        self::assertEquals('manual', $manual->attr('href'));
         self::assertStringContainsString('Team guide', $manual->text('', false));
         $stl = $links->eq(1);
         self::assertEquals('https://www.cplusplus.com/reference/stl/', $stl->attr('href'));

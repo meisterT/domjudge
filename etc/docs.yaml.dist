@@ -3,9 +3,9 @@
 
 # This file should contain an array with items to show.
 
-  # Add a link to a local file under webapp/public/docs/
+  # Add a link to the built-in team manual (or a local file under webapp/public/docs/)
 - name: Team guide
-  link: ../docs/team.pdf
+  link: manual
   # Optional icon. See https://fontawesome.com/v5.15/icons?d=gallery&p=1&m=free
   # for supported icons. Note: use full icon class, e.g. `fas fa-user`.
   # Omit for no icon.

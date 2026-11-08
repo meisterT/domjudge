@@ -131,57 +131,25 @@ latex_elements = {
     # The paper size ('letterpaper' or 'a4paper').
     #
     # 'papersize': 'letterpaper',
-    'papersize': 'a4paper',
 
     # The font size ('10pt', '11pt' or '12pt').
     #
     # 'pointsize': '10pt',
 
     # Additional stuff for the LaTeX preamble.
-    'preamble': r'''
-\definecolor{VerbatimColor}{rgb}{0.95,0.95,0.95}
-\definecolor{OuterLinkColor}{rgb}{0,0,1}
-\definecolor{noteBgColor}{rgb}{1,0,1}
-
-\definecolor{sphinxnoteBgColor}{RGB}{221,233,239}
-
-\usepackage{fancyhdr}
-\pagestyle{fancy}
-\renewcommand{\familydefault}{\sfdefault}
-
-% Begin new paragraphs without indentation but vertical space.
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{1.5ex plus 0.5ex minus 0.2ex}
-\usepackage{titlesec}
-
-% No chapter numbers.
-\renewcommand{\thesection}{\arabic{section}}
-
-''',
+    #
+    # 'preamble': '',
 
     # Latex figure (float) alignment
     #
     # 'figure_align': 'htbp',
-
-    # No empty pages between chapters.
-    'extraclassoptions': 'openany',
-    
-    # No toc.
-    'tableofcontents': '',
-
-    # No title page.
-    'maketitle': '',
 }
-
-latex_toplevel_sectioning = 'section'
 
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'DOMjudge.tex', 'DOMjudge Documentation',
-     'DOMjudge Team', 'manual'),
-    ('team', 'domjudge-team-manual.tex', 'DOMjudge Team Manual',
      'DOMjudge Team', 'manual'),
 ]
 
@@ -227,21 +195,3 @@ epub_exclude_files = ['search.html']
 
 
 # -- Extension configuration -------------------------------------------------
-
-# Options specifically for the Team manual PDF
-
-pdf_documents = [
-    ('team', u'domjudge-team-manual', u'DOMjudge Team Manual', u'The DOMjudge Developers'),
-]
-
-pdf_compressed = True
-pdf_stylesheets = ['sphinx','kerning','a4','sphinx-team']
-
-pdf_use_coverpage = False
-
-# This is of string type, not bool. See: https://github.com/rst2pdf/rst2pdf/pull/846
-pdf_use_toc = ''
-
-# This is needed to avoid a bug in rst2pdf << 0.94 (Debian buster has 0.93)
-# See: https://github.com/rst2pdf/rst2pdf/issues/678
-pdf_invariant = False

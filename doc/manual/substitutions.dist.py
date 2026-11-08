@@ -4,13 +4,5 @@
 # Keep this in sync with substitutions.py.in.
 
 rst_prolog = """
-.. |DOMjudge| replace:: DOMjudge
-
 .. |phpversion| replace:: 8.3
-.. |baseurlteam| replace:: https://example.com/domjudge/team
-
-.. |SOURCESIZE| replace:: 256
-.. |COMPILETIME| replace:: 30
-.. |PROCLIMIT| replace:: 64
-
 """

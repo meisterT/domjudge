@@ -1,0 +1,702 @@
+{% extends layout ~ '/base.html.twig' %}
+
+{% block title %}DOMjudge Team Manual - {{ parent() }}{% endblock %}
+
+{% block extrahead %}
+    {{ parent() }}
+    <style>
+        .team-manual {
+            max-width: 960px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        .team-manual h1,
+        .team-manual h2,
+        .team-manual h3 {
+            scroll-margin-top: 4.5rem;
+        }
+        .team-manual h2 {
+            margin-top: 2.25rem;
+            padding-bottom: 0.4rem;
+            border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+        }
+        .team-manual h3 {
+            margin-top: 1.5rem;
+            font-size: 1.2rem;
+        }
+        .team-manual .summary-box {
+            background-color: #dde9ef;
+            border: 1px solid #b8d0dc;
+            border-left: 4px solid #0d6efd;
+            border-radius: 0.375rem;
+            padding: 1.25rem 1.5rem;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .team-manual .manual-figure {
+            margin: 1.5rem 0;
+            text-align: center;
+        }
+        .team-manual .manual-figure img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid var(--bs-border-color, #dee2e6);
+            border-radius: 0.375rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        .team-manual .manual-figure figcaption {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--bs-secondary-color, #6c757d);
+        }
+        .team-manual .code-figure {
+            margin: 1.25rem 0;
+            border: 1px solid var(--bs-border-color, #dee2e6);
+            border-radius: 0.375rem;
+            overflow: hidden;
+        }
+        .team-manual .code-figure figcaption {
+            background-color: var(--bs-tertiary-bg, #f8f9fa);
+            padding: 0.5rem 1rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .team-manual .code-figure pre {
+            margin: 0;
+            padding: 0.875rem 1rem;
+            background-color: #f8f9fa;
+            overflow-x: auto;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .team-manual dl.manual-dl dt {
+            font-weight: 700;
+            margin-top: 0.75rem;
+        }
+        .team-manual dl.manual-dl dd {
+            margin-left: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+        .team-manual .manual-logo {
+            width: 72px;
+            height: auto;
+        }
+
+        @media print {
+            @page {
+                size: A4;
+                margin: 1.4cm 1.6cm;
+            }
+            body {
+                padding-top: 0 !important;
+                padding-bottom: 0 !important;
+                background: #fff !important;
+                color: #000 !important;
+                font-size: 9.5pt;
+            }
+            .navbar,
+            .progress,
+            .d-print-none {
+                display: none !important;
+            }
+            .team-manual {
+                max-width: 100%;
+                line-height: 1.38;
+                padding-top: 0 !important;
+                padding-bottom: 0 !important;
+            }
+            .team-manual h1 {
+                font-size: 18pt;
+            }
+            .team-manual h2 {
+                font-size: 13pt;
+                margin-top: 1.1rem;
+                margin-bottom: 0.4rem;
+                padding-bottom: 0.2rem;
+                break-after: avoid;
+                page-break-after: avoid;
+            }
+            .team-manual h3 {
+                font-size: 10.5pt;
+                margin-top: 0.8rem;
+                margin-bottom: 0.3rem;
+                break-after: avoid;
+                page-break-after: avoid;
+            }
+            .team-manual p,
+            .team-manual ul,
+            .team-manual dl.manual-dl {
+                margin-bottom: 0.45rem;
+            }
+            .team-manual .manual-logo {
+                width: 52px;
+            }
+            .team-manual .summary-box {
+                padding: 0.75rem 1rem;
+                margin: 0.6rem 0 !important;
+                break-inside: avoid;
+            }
+            .team-manual .manual-figure {
+                margin: 0.6rem 0;
+                break-inside: avoid;
+            }
+            .team-manual .manual-figure img {
+                max-height: 6.8cm;
+                width: auto;
+                max-width: 85%;
+                box-shadow: none;
+            }
+            .team-manual .manual-figure figcaption {
+                margin-top: 0.25rem;
+                font-size: 8.5pt;
+            }
+            .team-manual .code-figure {
+                margin: 0.55rem 0;
+                break-inside: avoid;
+            }
+            .team-manual .code-figure figcaption {
+                padding: 0.25rem 0.65rem;
+                font-size: 8.5pt;
+            }
+            .team-manual .code-figure pre {
+                padding: 0.45rem 0.65rem;
+                font-size: 8pt;
+                line-height: 1.25;
+            }
+            .team-manual dl.manual-dl > div {
+                break-inside: avoid;
+            }
+            .team-manual dl.manual-dl dt {
+                margin-top: 0.35rem;
+                break-after: avoid;
+            }
+            .team-manual dl.manual-dl dd {
+                margin-left: 1rem;
+                margin-bottom: 0.25rem;
+            }
+            .team-manual .print-page-break {
+                break-before: page;
+                page-break-before: always;
+            }
+            .team-manual a {
+                text-decoration: none;
+                color: inherit;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    {% set team_url = url('team_index') %}
+    <article class="team-manual py-3">
+        <header class="d-flex justify-content-between align-items-start gap-3 mb-4">
+            <div>
+                <h1 class="mb-1">DOMjudge Team Manual</h1>
+                <p class="text-muted mb-2">
+                    DOMjudge Programming Contest Control System &mdash; version {{ DOMJUDGE_VERSION }}
+                </p>
+                <div class="d-print-none mt-2">
+                    <button type="button" id="print-team-manual-btn" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-print" aria-hidden="true"></i> Print / Save as PDF
+                    </button>
+                </div>
+            </div>
+            <img src="{{ asset('images/DOMjudgelogo.svg') }}"
+                 alt="DOMjudge logo"
+                 width="72"
+                 height="158"
+                 fetchpriority="high"
+                 class="manual-logo flex-shrink-0">
+        </header>
+
+        <p>
+            This is the manual for the DOMjudge programming contest control system
+            (version {{ DOMJUDGE_VERSION }}). The summary below outlines how the system
+            interface works so you can get started quickly. It is strongly advised that
+            your team reads the entire document, as specific details of the contest
+            control system may become important when you run into problems.
+        </p>
+
+        <section class="summary-box my-4" aria-labelledby="summary-heading">
+            <h2 id="summary-heading" class="h5 mt-0 border-0 pb-0">Summary</h2>
+            <p>
+                The team web interface of DOMjudge can be found at
+                <a href="{{ team_url }}"><code>{{ team_url }}</code></a>.
+                See the figures in <a href="#interface-overview">Overview of the interface</a> for an impression.
+            </p>
+            <p>
+                Solutions have to read all input from <em>standard in</em> and write all
+                output to <em>standard out</em> (also known as console). You will never have
+                to open (other) files. See our <a href="#codeexamples">code examples</a>.
+            </p>
+            <p class="mb-2">You can submit solutions in two ways:</p>
+            <dl class="manual-dl mb-3">
+                <div>
+                    <dt>Command-line</dt>
+                    <dd>
+                        Use <code>submit &lt;filename&gt;</code>. If your filename is of the form
+                        <code>&lt;problem&gt;.&lt;extension&gt;</code> where <code>&lt;problem&gt;</code> is the
+                        label of the problem and <code>&lt;extension&gt;</code> is a standard extension for
+                        your language, then these will automatically be detected.
+                        It will also try to auto-detect the main class (for Java and Kotlin) or the
+                        main file (for Python). You can override these auto-detections;
+                        for a complete reference of all options and examples, see <code>submit --help</code>.
+                    </dd>
+                </div>
+                <div>
+                    <dt>Web interface</dt>
+                    <dd>
+                        From your team page, <a href="{{ team_url }}"><code>{{ team_url }}</code></a>,
+                        click the green <strong>Submit</strong> button in the menu bar.
+                        {% if 'upload' in submit_methods and 'paste' in submit_methods %}
+                            Select the files you want to submit or paste your source code directly.
+                        {% elseif 'paste' in submit_methods %}
+                            Paste your source code into the editor.
+                        {% else %}
+                            Select the files you want to submit.
+                        {% endif %}
+                        By default, the problem is selected from the base of the (first)
+                        filename and the language from the extension. The web interface tries
+                        to auto-detect the main class (for Java and Kotlin) or the main file (for
+                        Python) from the file name. Double check that the guess is correct
+                        before submitting.
+                    </dd>
+                </div>
+            </dl>
+            <p>
+                Viewing scores, submissions, and sending and reading clarification
+                requests and replies is done through the web interface at
+                <a href="{{ team_url }}"><code>{{ team_url }}</code></a>.
+            </p>
+            <p class="mb-1">Use the problemset page to:</p>
+            <ul class="mb-0">
+                <li>get all attachments such as testing tools and sample data for each problem,</li>
+                {% if show_public_stats %}
+                    <li>view indicators for problem difficulty (submission and acceptance rates) across contest intervals (hover over the boxes for exact numbers),</li>
+                {% endif %}
+                <li>get the problem statement and clarifications on those statements,</li>
+                {% if show_limits_on_team_page %}
+                    <li>see the time and memory limits.</li>
+                {% endif %}
+            </ul>
+        </section>
+
+        <section id="interface-overview" class="print-page-break">
+            <h2>Overview of the interface</h2>
+
+            <figure class="manual-figure">
+                <img src="{{ asset('images/team-manual/team-overview.png') }}"
+                     alt="The team web interface overview page"
+                     width="3364"
+                     height="2356"
+                     loading="lazy">
+                <figcaption>The team web interface overview page.</figcaption>
+            </figure>
+
+            {% if enable_ranking %}
+                <figure class="manual-figure">
+                    <img src="{{ asset('images/team-manual/team-scoreboard.png') }}"
+                         alt="The scoreboard webpage"
+                         width="3364"
+                         height="2046"
+                         loading="lazy">
+                    <figcaption>The scoreboard webpage.</figcaption>
+                </figure>
+            {% endif %}
+
+            <figure class="manual-figure">
+                <img src="{{ asset('images/team-manual/team-problemset.png') }}"
+                     alt="The problemset webpage"
+                     width="1919"
+                     height="548"
+                     loading="lazy">
+                <figcaption>The problemset webpage.</figcaption>
+            </figure>
+        </section>
+
+        <section id="submitting" class="print-page-break">
+            <h2>Submitting solutions</h2>
+            <p>
+                Submitting solutions can be done in two ways: with the command-line
+                program <code>submit</code> (if installed) or using the web interface.
+            </p>
+
+            <h3>Command-line: <code>submit</code></h3>
+            <p>Syntax:</p>
+            <pre tabindex="0" class="bg-light p-2 border rounded"><code>submit [options] filename.ext ...</code></pre>
+            <p>
+                The <code>submit</code> program takes the name (label) of the problem from
+                <code>filename</code> and the programming language from the extension <code>ext</code>.
+                For Java it uses the filename as a guess for the main class; for Kotlin it capitalizes
+                <code>filename</code> and appends <code>Kt</code> to compute the guess for the main class name.
+                For Python, the first filename is used as a guess for the main file. These guesses can be
+                overruled with the options <code>-p problemname</code>, <code>-l languageextension</code>, and
+                <code>-e entry_point</code>.
+            </p>
+            <p>
+                See <code>submit --help</code> for a complete list of all options, extensions, and examples.
+                <code>submit</code> will check your file and warn you about potential issues, for example when the
+                file has not been modified for a long time or when it is larger than the maximum source code size
+                (see <a href="#runlimits">Restrictions</a>).
+            </p>
+            <p>
+                Filenames must start with an alphanumerical character and may contain only alphanumerical
+                characters and <code>+._-</code>.
+                {% if sourcefiles_limit > 1 %}
+                    You can specify multiple files (up to {{ sourcefiles_limit }}) to be part of this submission
+                    (see <a href="#judgingprocess">How are submissions being judged?</a>).
+                {% endif %}
+            </p>
+            <p>
+                Then <code>submit</code> displays a summary with all details of your submission and asks for
+                confirmation. Check whether you are submitting the right file for the right problem and language
+                and press <code>y</code> to confirm. <code>submit</code> will report a successful submission or
+                give an error message otherwise.
+            </p>
+
+            <h3>Web interface</h3>
+            <p>
+                Judges may distribute the digital versions of the problems either individually per problem or as a
+                full problemset through DOMjudge. If the judges issue a clarification for a problem, it will be
+                displayed in the corresponding problem card. The judges may provide additional files for a problem,
+                such as extra inputs, testing tools, or other relevant attachments.
+                {% if show_public_stats %}
+                    You can use the problemset page to help decide which problem to solve next. DOMjudge shows the live
+                    contest progress, including the number of successful and failed submissions for each problem. Use
+                    the info from the problemset page and the scoreboard to gauge problem difficulty. A good rule of
+                    thumb is: problems solved often and early in the contest are likely easier; problems solved
+                    infrequently or only later in the contest are typically more difficult.
+                {% endif %}
+            </p>
+            <p>
+                Solutions can be submitted from the web interface at <a href="{{ team_url }}"><code>{{ team_url }}</code></a>.
+                Click the green <strong>Submit</strong> button in the menu bar on every page.
+                {% if 'upload' in submit_methods and 'paste' in submit_methods %}
+                    Click the file selection button to select one
+                    {% if sourcefiles_limit > 1 %}or multiple files{% else %}file{% endif %}
+                    for submission, or switch to the paste tab to paste your source code directly.
+                {% elseif 'paste' in submit_methods %}
+                    Paste your source code directly into the editor.
+                {% else %}
+                    Click the file selection button and select one
+                    {% if sourcefiles_limit > 1 %}or multiple files{% else %}file{% endif %}
+                    for submission.
+                {% endif %}
+                DOMjudge will try to determine the problem, language, and main class (in case of Java
+                and Kotlin) or main file (in case of Python) from the base and extension of the first filename.
+                Otherwise, select the appropriate values. Filenames must start with an alphanumerical character and may
+                contain only alphanumerical characters and <code>+._-</code>.
+            </p>
+            <p>
+                After you hit the submit button and confirm the submission, you will be redirected back to your
+                submission list page. On this page, a message will be displayed that your submission was successful and
+                the submission will be present in the list. An error message will be displayed if something went wrong.
+            </p>
+        </section>
+
+        <section id="viewing-results">
+            <h2>Viewing the results of submissions</h2>
+            <p>
+                The left column of your team web page shows an overview of your submissions. It contains all relevant
+                information: submission time, programming language, problem, and status. The address of your team page
+                is <a href="{{ team_url }}"><code>{{ team_url }}</code></a>.
+            </p>
+            {% if enable_ranking %}
+                <p>
+                    The top of the page shows your team's row in the scoreboard: your position and which problems you
+                    attempted and solved. Via the menu you can view the public scoreboard page with the scores of all
+                    teams. Many cells will show additional information when hovering over them. The score column lists
+                    the number of solved problems and the total time including penalty time. Each cell in a problem
+                    column lists the number of submissions, and if the problem was solved, the time of the first
+                    correct submission since contest start. This is included in your total time together with any
+                    penalty time incurred for previous incorrect submissions.
+                </p>
+                <p>
+                    Optionally the scoreboard can be <em>frozen</em> some time before the end of the contest. The full
+                    scoreboard view will not be updated anymore, but your team row on your overview page will be. Your
+                    team's rank will then be displayed as <code>?</code>.
+                </p>
+            {% endif %}
+            <p>
+                Via the top menu you can also view the list of problems and view/download problem texts and sample
+                data, if provided by the judges.
+            </p>
+
+            <h3>Possible results</h3>
+            <p>
+                A submission can have the following results (not all of these may be available depending on
+                configuration of the system):
+            </p>
+            <dl class="manual-dl">
+                <div>
+                    <dt><span class="sol sol_correct">CORRECT</span></dt>
+                    <dd>
+                        The submission passed all tests: you solved this problem!
+                        <em>Correct submissions do not incur penalty time.</em>
+                    </dd>
+                </div>
+                <div>
+                    <dt><span class="sol sol_incorrect">COMPILER-ERROR</span></dt>
+                    <dd>
+                        There was an error when compiling your program.
+                        {% if show_compile > 0 %}
+                            On the submission details page you can inspect the exact error.
+                        {% endif %}
+                        Note that when compilation takes more than {{ script_timelimit }} seconds, it is aborted and
+                        this counts as a compilation error.
+                        {% if compile_penalty %}
+                            <em>Compilation errors incur penalty time in this configuration.</em>
+                        {% else %}
+                            <em>Compilation errors do not incur penalty time.</em>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt><span class="sol sol_incorrect">TIMELIMIT</span></dt>
+                    <dd>
+                        Your program took longer than the maximum allowed time for this problem. Therefore it has been
+                        aborted. This might indicate that your program hangs in a loop or that your solution is not
+                        efficient enough.
+                    </dd>
+                </div>
+                <div>
+                    <dt><span class="sol sol_incorrect">RUN-ERROR</span></dt>
+                    <dd>
+                        There was an error during the execution of your program. This can have a lot of different
+                        causes like division by zero, incorrectly addressing memory (e.g. by indexing arrays out of
+                        bounds), trying to use more memory than the limit, reading or writing to files, etc. Also check
+                        that your program exits with exit code 0!
+                    </dd>
+                </div>
+                <div>
+                    <dt><span class="sol sol_incorrect">NO-OUTPUT</span></dt>
+                    <dd>
+                        Your program did not generate any output. Check that you write to standard out.
+                    </dd>
+                </div>
+                <div>
+                    <dt><span class="sol sol_incorrect">OUTPUT-LIMIT</span></dt>
+                    <dd>
+                        Your program generated more output than the allowed limit. The solution is considered incorrect.
+                    </dd>
+                </div>
+                <div>
+                    <dt><span class="sol sol_incorrect">WRONG-ANSWER</span></dt>
+                    <dd>
+                        The output of your program was incorrect. This can happen simply because your solution is not
+                        correct, but remember that your output must comply exactly with the specifications of the
+                        judges. See <a href="#testing">Testing</a> below for more details.
+                    </dd>
+                </div>
+                <div>
+                    <dt><span class="sol sol_incorrect">TOO-LATE</span></dt>
+                    <dd>
+                        You submitted after the contest ended! Your submission is stored but will not be processed
+                        anymore.
+                    </dd>
+                </div>
+            </dl>
+            <p>
+                The judges may have prepared multiple test files for each problem. DOMjudge will report back the first
+                highest-priority non-correct result as the verdict.
+            </p>
+        </section>
+
+        <section id="clarifications">
+            <h2>Clarifications</h2>
+            <p>
+                All communication with the judges is to be done through clarification messages. These can be found in
+                the right column on your team page. Both clarification replies from the judges and requests sent by you
+                are displayed there.
+            </p>
+            <p>
+                There is also a button to submit a new clarification request to the judges; you can associate a
+                specific problem or one of the general categories to a request. This clarification request is only
+                readable by the judges. The judges can answer specifically to your team or send a reply to everyone if
+                it is relevant for all teams.
+            </p>
+        </section>
+
+        <section id="judgingprocess">
+            <h2>How are submissions being judged?</h2>
+            <p>
+                The DOMjudge contest control system is fully automated. Judging is done in the following way:
+            </p>
+
+            <h3>Submitting solutions</h3>
+            <p>
+                With the <code>submit</code> program or the web interface (see
+                <a href="#submitting">Submitting solutions</a>) you can submit a solution to a problem to the judges.
+                Note that you have to submit the source code of your program (and not a compiled program or the output
+                of your program).
+            </p>
+            <p>
+                On the contest control system your program enters a queue, awaiting compilation, execution, and testing
+                on one of the autojudges.
+            </p>
+
+            <h3>Compilation</h3>
+            <p>
+                Your program will be compiled on an autojudge machine running Linux. All submitted source files will be
+                passed to the compiler which generates a single program to run. For Java and Kotlin the given main
+                class will be checked; for Python we do a syntax check using the <code>py_compile</code> module.
+            </p>
+
+            <h3 id="testing">Testing</h3>
+            <p>
+                After your program has compiled successfully it will be executed and its output compared to the output
+                of the judges. Before comparing the output, the exit status of your program is checked: if your program
+                exits with a non-zero exit code, the result will be a <code>RUN-ERROR</code> even if the output of the
+                program is correct! There are some restrictions during execution. If your program violates these, it
+                will also be aborted with a <code>RUN-ERROR</code> (see <a href="#runlimits">Restrictions</a>).
+            </p>
+            <p>
+                When comparing program output, it has to exactly match the output of the judges, except that some extra
+                whitespace may be ignored (this depends on the system configuration of the problems). So take care that
+                you follow the output specifications. In case of problem statements which do not have unique output
+                (e.g. with floating-point answers), the system may use a customized comparison function. This will be
+                documented in the problem description.
+            </p>
+
+            <h3 id="runlimits">Restrictions</h3>
+            <p>
+                Submissions are run in a sandbox to prevent abuse, keep the judging system stable, and give everyone
+                clear and equal environments. There are some restrictions to which all submissions are subjected:
+            </p>
+            <dl class="manual-dl">
+                <div>
+                    <dt>Compile time</dt>
+                    <dd>
+                        Compilation of your program may take no longer than <strong>{{ script_timelimit }} seconds</strong>.
+                        After that, compilation will be aborted and the result will be a compile error. In practice this
+                        should never give rise to problems. Should this happen to a normal program, please inform the
+                        judges right away.
+                    </dd>
+                </div>
+                <div>
+                    <dt>Source size</dt>
+                    <dd>
+                        The total amount of source code in a single submission may not exceed
+                        <strong>{{ sourcesize_limit }} kilobytes</strong>
+                        {% if sourcefiles_limit > 1 %}(and at most {{ sourcefiles_limit }} files){% endif %},
+                        otherwise your submission will be rejected.
+                    </dd>
+                </div>
+                <div>
+                    <dt>Memory</dt>
+                    <dd>
+                        The judges will specify how much memory you have available during execution of your program.
+                        This may vary per problem. It is the total amount of memory (including program code, statically
+                        and dynamically defined variables, stack, Java/Python VM, etc.)! If your program tries to use
+                        more memory, it will most likely abort, resulting in a run error.
+                    </dd>
+                </div>
+                <div>
+                    <dt>Creating new files</dt>
+                    <dd>
+                        Do not create new files. The sandbox will not allow this and the file open function will return
+                        a failure. Using the file without handling this error can result in a runtime error depending on
+                        the submission language.
+                    </dd>
+                </div>
+                <div>
+                    <dt>Number of processes</dt>
+                    <dd>
+                        You are not supposed to explicitly create multiple processes (threads). This is to no avail
+                        anyway, because your program has exactly 1 processor core fully at its disposal. DOMjudge
+                        executes submissions in a sandbox where a maximum of <strong>{{ process_limit }} processes</strong>
+                        can be run simultaneously (including processes that started your program). People who have never
+                        programmed with multiple processes (or have never heard of &ldquo;threads&rdquo;) do not have to
+                        worry: a normal program runs in one process.
+                    </dd>
+                </div>
+            </dl>
+        </section>
+
+        <section id="codeexamples" class="print-page-break">
+            <h2>Code examples</h2>
+            <p>
+                Below are a few examples on how to read input and write output for a problem.
+            </p>
+            <p>
+                The examples are solutions for the following problem: the first line of the input contains the number of
+                testcases. Then each testcase consists of a line containing a name (a single word) of at most 99
+                characters. For each testcase output the string <code>Hello &lt;name&gt;!</code> on a separate line.
+            </p>
+
+            <div class="row g-3 my-2">
+                <div class="col-6">
+                    <figure class="code-figure my-0">
+                        <figcaption>Sample Input</figcaption>
+                        <pre tabindex="0"><code>{{ example_in }}</code></pre>
+                    </figure>
+                </div>
+                <div class="col-6">
+                    <figure class="code-figure my-0">
+                        <figcaption>Sample Output</figcaption>
+                        <pre tabindex="0"><code>{{ example_out }}</code></pre>
+                    </figure>
+                </div>
+            </div>
+            <p class="mt-2">
+                Note that the number <code>3</code> on the first line indicates that 3 testcases follow.
+                What follows is a number of possible solutions to this problem for different programming languages:
+            </p>
+
+            {% for example in examples %}
+                <figure class="code-figure">
+                    <figcaption>A solution in {{ example.name }} (<code>{{ example.file }}</code>)</figcaption>
+                    <pre tabindex="0"><code class="language-{{ example.lang }}" data-lang="{{ example.lang }}">{{ example.code }}</code></pre>
+                </figure>
+            {% endfor %}
+        </section>
+
+        <section id="feedback">
+            <h2>Improvements to DOMjudge</h2>
+            <p>
+                The DOMjudge team would like your feedback. We do not receive much feedback from participants. If you
+                find something lacking or have improvement ideas, please report them. See
+                <a href="https://www.domjudge.org/development" target="_blank" rel="noopener">https://www.domjudge.org/development</a>.
+            </p>
+        </section>
+    </article>
+{% endblock %}
+
+{% block extrafooter %}
+    {{ parent() }}
+    {% if layout != 'jury' %}
+        <script src="{{ asset('js/monaco/vs/loader.js') }}"></script>
+        <script>
+            require.config({ paths: { vs: '{{ asset('js/monaco/vs') }}'.replace(/\?.*/, '') } });
+        </script>
+    {% endif %}
+    <script>
+        document.getElementById('print-team-manual-btn')?.addEventListener('click', function () {
+            window.print();
+        });
+        $(function () {
+            if (typeof require !== 'undefined') {
+                require(['vs/editor/editor.main'], function () {
+                    document.querySelectorAll('style.monaco-colors').forEach(function (styleEl) {
+                        styleEl.removeAttribute('media');
+                    });
+                    document.querySelectorAll('.team-manual code[data-lang]').forEach(function (el) {
+                        if (el.dataset.colorized) {
+                            return;
+                        }
+                        el.dataset.colorized = '1';
+                        monaco.editor.colorize(el.textContent, el.dataset.lang, { tabSize: 4 }).then(function (html) {
+                            el.innerHTML = html.replace(/<br\s*\/?>\s*$/i, '');
+                            document.querySelectorAll('style.monaco-colors').forEach(function (styleEl) {
+                                styleEl.removeAttribute('media');
+                            });
+                        });
+                    });
+                });
+            }
+        });
+    </script>
+{% endblock %}

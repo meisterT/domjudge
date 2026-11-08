@@ -322,7 +322,6 @@ inplace-install-l:
 	@echo "        setfacl    -m   u:$(WEBSERVER_GROUP):x    $(CURDIR)/doc/manual/build"
 	@echo "        setfacl -R -m d:u:$(WEBSERVER_GROUP):rx   $(CURDIR)/doc/manual/build/html"
 	@echo "        setfacl -R -m   u:$(WEBSERVER_GROUP):rx   $(CURDIR)/doc/manual/build/html"
-	@echo "        setfacl -R -m   u:$(WEBSERVER_GROUP):r    $(CURDIR)/doc/manual/build/domjudge-team-manual.pdf"
 	@echo "        setfacl -R -m d:u:$(WEBSERVER_GROUP):rwx  $(CURDIR)/webapp/var"
 	@echo "        setfacl -R -m   u:$(WEBSERVER_GROUP):rwx  $(CURDIR)/webapp/var"
 	@echo "        setfacl -R -m d:u:$(WEBSERVER_GROUP):rwx  $(CURDIR)/webapp/public/images/countries"
@@ -370,7 +369,6 @@ ifneq ($(DOC_BUILD_ENABLED),no)
 	setfacl    -m   u:$(WEBSERVER_GROUP):x    $(CURDIR)/doc/manual/build
 	setfacl -R -m d:u:$(WEBSERVER_GROUP):rx   $(CURDIR)/doc/manual/build/html
 	setfacl -R -m   u:$(WEBSERVER_GROUP):rx   $(CURDIR)/doc/manual/build/html
-	setfacl -R -m   u:$(WEBSERVER_GROUP):r    $(CURDIR)/doc/manual/build/domjudge-team-manual.pdf
 endif
 	setfacl -R -m d:u:$(WEBSERVER_GROUP):rwx  $(CURDIR)/webapp/var
 	setfacl -R -m   u:$(WEBSERVER_GROUP):rwx  $(CURDIR)/webapp/var
