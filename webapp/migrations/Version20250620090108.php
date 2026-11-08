@@ -23,7 +23,7 @@ final class Version20250620090108 extends AbstractMigration
         $this->addSql('CREATE TABLE team_category_team (categoryid INT UNSIGNED NOT NULL COMMENT \'Team category ID\', teamid INT UNSIGNED NOT NULL COMMENT \'Team ID\', INDEX IDX_3A19F9C99B32FD3 (categoryid), INDEX IDX_3A19F9C94DD6ABF3 (teamid), PRIMARY KEY(categoryid, teamid)) DEFAULT CHARACTER SET utf8mb4 COLLATE `utf8mb4_unicode_ci` ENGINE = InnoDB');
         $this->addSql('ALTER TABLE team_category_team ADD CONSTRAINT FK_3A19F9C99B32FD3 FOREIGN KEY (categoryid) REFERENCES team_category (categoryid) ON DELETE CASCADE');
         $this->addSql('ALTER TABLE team_category_team ADD CONSTRAINT FK_3A19F9C94DD6ABF3 FOREIGN KEY (teamid) REFERENCES team (teamid) ON DELETE CASCADE');
-        $this->addSql('INSERT INTO team_category_team (categoryid, teamid) SELECT categoryid, teamid FROM team');
+        $this->addSql('INSERT INTO team_category_team (categoryid, teamid) SELECT categoryid, teamid FROM team WHERE categoryid IS NOT NULL');
         $this->addSql('ALTER TABLE team DROP FOREIGN KEY team_ibfk_1');
         $this->addSql('DROP INDEX categoryid ON team');
         $this->addSql('ALTER TABLE team DROP categoryid');
