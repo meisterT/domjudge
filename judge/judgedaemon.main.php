@@ -10,6 +10,7 @@
 namespace DOMjudge;
 
 use CurlHandle;
+use UnexpectedValueException;
 
 if (isset($_SERVER['REMOTE_ADDR'])) {
     die("Commandline use only");
@@ -32,6 +33,26 @@ enum Verdict
     case OUTPUT_LIMIT;
     case COMPARE_ERROR;
     case INTERNAL_ERROR;
+}
+
+/**
+ * Check that runguard metadata contains all required fields. These are
+ * missing when runguard crashed or was killed while writing the file.
+ *
+ * @param array<string, string> $meta
+ * @param list<string> $fields
+ * @throws UnexpectedValueException
+ */
+function requireMetadataFields(array $meta, array $fields, string $kind): void
+{
+    $missing = array_diff($fields, array_keys($meta));
+    if ($missing !== []) {
+        throw new UnexpectedValueException(sprintf(
+            "%s metadata is incomplete, missing: %s",
+            $kind,
+            implode(', ', $missing)
+        ));
+    }
 }
 
 /**
@@ -59,10 +80,15 @@ readonly class ProgramMetadata
 
     /**
      * Create from raw metadata array with validation.
-     * @param MetaData_Program $meta
+     * @param array<string, string> $meta
+     * @throws UnexpectedValueException if a required field is missing.
      */
     public static function fromArray(array $meta): self
     {
+        requireMetadataFields($meta, [
+            'exitcode', 'cpu-time', 'wall-time', 'memory-bytes',
+            'time-result', 'stdout-bytes', 'stderr-bytes',
+        ], 'program');
         return new self(
             exitcode: $meta['exitcode'],
             cpuTime: $meta['cpu-time'],
@@ -119,10 +145,12 @@ readonly class CompareMetadata
 
     /**
      * Create from raw metadata array with validation.
-     * @param MetaData_Compare $meta
+     * @param array<string, string> $meta
+     * @throws UnexpectedValueException if a required field is missing.
      */
     public static function fromArray(array $meta): self
     {
+        requireMetadataFields($meta, ['exitcode'], 'compare');
         return new self(
             exitcode: $meta['exitcode'],
             validatorExitedFirst: ($meta['validator-exited-first'] ?? '') === 'true',
@@ -2293,11 +2321,14 @@ class JudgeDaemon
             $compare_tmp = is_readable("compare.tmp") ? file_get_contents("compare.tmp") : "";
             $compare_meta_ini = $this->readMetadata('compare.meta');
             $compareTimedOut = false;
+            if ($compare_meta_ini === null) {
+                logmsg(LOG_ERR, "'compare.meta' is not readable");
+                return Verdict::INTERNAL_ERROR;
+            }
             if (isset($compare_meta_ini['internal-error'])) {
                 $this->handleMetaInternalError($judgetaskid, $compare_meta_ini);
                 return Verdict::INTERNAL_ERROR;
             }
-            /** @var MetaData_Compare $compare_meta_ini */
             logmsg(LOG_DEBUG, "parsed compare meta: " . var_export($compare_meta_ini, true));
             if (($compare_meta_ini['time-result'] ?? null) === 'timelimit') {
                 $compareTimedOut = true;
@@ -2315,26 +2346,31 @@ class JudgeDaemon
                 appendToFile("$realWorkdir/feedback/judgemessage.txt", $compare_err);
             }
 
-            if (!is_readable("program.meta")) {
+            logmsg(LOG_DEBUG, "checking program exit status");
+            $program_meta_ini = $this->readMetadata('program.meta');
+            if ($program_meta_ini === null) {
                 logmsg(LOG_ERR, "'program.meta' is not readable");
                 return Verdict::INTERNAL_ERROR;
             }
-            logmsg(LOG_DEBUG, "checking program exit status");
-            $program_meta_ini = $this->readMetadata('program.meta');
             if (isset($program_meta_ini['internal-error'])) {
                 $this->handleMetaInternalError($judgetaskid, $program_meta_ini);
                 return Verdict::INTERNAL_ERROR;
             }
-            /** @var MetaData_Program $program_meta_ini */
             logmsg(LOG_DEBUG, "parsed program meta: " . var_export($program_meta_ini, true));
+
+            try {
+                $programMeta = ProgramMetadata::fromArray($program_meta_ini);
+                $compareMeta = CompareMetadata::fromArray($compare_meta_ini);
+            } catch (UnexpectedValueException $e) {
+                logmsg(LOG_ERR, $e->getMessage());
+                return Verdict::INTERNAL_ERROR;
+            }
             $resourceInfo = "\nruntime: "
-                . $program_meta_ini['cpu-time'] . 's cpu, '
-                . $program_meta_ini['wall-time'] . "s wall\n"
-                . 'memory: ' . $program_meta_ini['memory-bytes'] . ' bytes';
+                . $programMeta->cpuTime . 's cpu, '
+                . $programMeta->wallTime . "s wall\n"
+                . 'memory: ' . $programMeta->memoryBytes . ' bytes';
 
             $programOutSize = filesize("program.out");
-            $programMeta = ProgramMetadata::fromArray($program_meta_ini);
-            $compareMeta = CompareMetadata::fromArray($compare_meta_ini);
 
             $verdictInput = new VerdictInput(
                 programMeta: $programMeta,
