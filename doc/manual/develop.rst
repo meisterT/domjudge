@@ -41,13 +41,12 @@ already listed under
 
   sudo apt install autoconf automake bats \
     python3-sphinx python3-sphinx-rtd-theme python3-yaml \
-    yarnpkg texlive-latex-recommended texlive-latex-extra
+    yarnpkg texlive-latex-base
 
 For Fedora use::
 
   sudo dnf install git autoconf automake bats \
-    sphinx-build python3-sphinx_rtd_theme yarnpkg \
-    texlive-collection-latexrecommended texlive-collection-latexextra
+    sphinx-build python3-sphinx_rtd_theme yarnpkg texlive-latex
 
 When this software is present, bootstrapping can be done by running
 ``make dist``, which creates the ``configure`` script,
