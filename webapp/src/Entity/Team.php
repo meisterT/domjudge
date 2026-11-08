@@ -465,6 +465,10 @@ class Team extends BaseApiEntity implements
     #[Serializer\Type('bool')]
     public function getHidden(): bool
     {
+        // A disabled team is not on the scoreboard, so it is hidden as well.
+        if (!$this->getEnabled()) {
+            return true;
+        }
         foreach ($this->getCategories() as $category) {
             if ($category->getVisible()) {
                 return false;

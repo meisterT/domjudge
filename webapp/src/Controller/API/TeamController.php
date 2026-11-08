@@ -401,8 +401,7 @@ class TeamController extends AbstractRestController
             ->leftJoin('t.categories', 'tc')
             ->leftJoin('t.contests', 'c')
             ->leftJoin('tc.contests', 'cc')
-            ->select('t, ta, tc')
-            ->andWhere('t.enabled = 1');
+            ->select('t, ta, tc');
 
         if ($request->query->has('category')) {
             $queryBuilder
@@ -423,6 +422,8 @@ class TeamController extends AbstractRestController
                 // to show all the categories a team belongs to, not only the scoring ones
                 ->leftJoin('t.categories', 'scoringcats', Join::WITH, 'BIT_AND(scoringcats.types, :scoring) = :scoring')
                 ->setParameter('scoring', TeamCategory::TYPE_SCORING)
+                // Disabled teams are not on the scoreboard. Others see them with hidden set.
+                ->andWhere('t.enabled = 1')
                 ->andWhere('tc.visible = 1')
                 ->andWhere('scoringcats.visible = 1');
         }

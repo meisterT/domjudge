@@ -4,6 +4,7 @@ namespace App\Tests\Unit\Controller\API;
 
 use App\DataFixtures\Test\AddLocationToTeamFixture;
 use App\DataFixtures\Test\CreateTeamWithTwoTeamAffiliationsFixture;
+use App\DataFixtures\Test\DisableDemoTeamFixture;
 use App\Entity\Team;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -166,5 +167,28 @@ class TeamControllerTest extends BaseTestCase
     {
         $url = $this->helperGetEndpointURL($this->apiEndpoint, 'nonexistent');
         $this->verifyApiJsonResponse('PATCH', $url, 404, 'admin', ['name' => 'Patched']);
+    }
+
+    /**
+     * A disabled team is off the scoreboard. The jury and the event feed still see it, marked as hidden.
+     */
+    public function testDisabledTeamIsHiddenForJury(): void
+    {
+        $this->loadFixture(DisableDemoTeamFixture::class);
+
+        $team = $this->verifyApiJsonResponse('GET', '/teams/exteam', 200, 'disabledteam-jury');
+        static::assertTrue($team['hidden']);
+
+        $teams = $this->verifyApiJsonResponse('GET', '/teams', 200, 'disabledteam-jury');
+        static::assertContains('exteam', array_column($teams, 'id'));
+    }
+
+    public function testDisabledTeamIsNotListedPublicly(): void
+    {
+        $this->loadFixture(DisableDemoTeamFixture::class);
+
+        $teams = $this->verifyApiJsonResponse('GET', '/teams', 200, null);
+        static::assertNotContains('exteam', array_column($teams, 'id'));
+        $this->verifyApiJsonResponse('GET', '/teams/exteam', 404, null);
     }
 }
