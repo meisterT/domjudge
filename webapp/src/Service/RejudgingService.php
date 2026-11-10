@@ -12,12 +12,17 @@ use App\Entity\Team;
 use App\Entity\User;
 use App\Utils\Utils;
 use BadMethodCallException;
+use Doctrine\Bundle\DoctrineBundle\Middleware\DebugMiddleware;
 use Doctrine\DBAL\Exception as DBALException;
+use Doctrine\DBAL\Logging\Middleware as LoggingMiddleware;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
+use Monolog\Logger;
 use Ramsey\Uuid\Uuid;
-use Doctrine\Bundle\DoctrineBundle\Middleware\DebugMiddleware;
+use ReflectionProperty;
+use Symfony\Bridge\Doctrine\Middleware\Debug\DebugDataHolder;
+use Symfony\Contracts\Service\ResetInterface;
 
 class RejudgingService
 {
@@ -63,16 +68,7 @@ class RejudgingService
         // This might take a while. Make sure we do not timeout.
         set_time_limit(0);
 
-        // In dev mode, Doctrine's DebugMiddleware accumulates all SQL queries in memory.
-        // Find the DebugDataHolder so we can periodically reset it during the loop.
-        $debugDataHolder = null;
-        foreach ($this->em->getConnection()->getConfiguration()->getMiddlewares() as $middleware) {
-            if ($middleware instanceof DebugMiddleware) {
-                $ref = new \ReflectionProperty($middleware, 'debugDataHolder');
-                $debugDataHolder = $ref->getValue($middleware);
-                break;
-            }
-        }
+        $debugCollectors = $this->getDebugCollectors();
 
         $rejudging = new Rejudging();
         $rejudging
@@ -195,10 +191,12 @@ class RejudgingService
                 $progressReporter($progress, $log);
             }
 
-            // In dev mode, Doctrine's DebugDataHolder accumulates all SQL queries
-            // in memory. Periodically reset it to prevent memory exhaustion.
+            // In dev mode, Doctrine debug collectors accumulate all SQL queries in memory.
+            // Periodically reset them to prevent memory exhaustion.
             if ($index % 100 === 0) {
-                $debugDataHolder?->reset();
+                foreach ($debugCollectors as $collector) {
+                    $collector->reset();
+                }
             }
         }
 
@@ -282,6 +280,8 @@ class RejudgingService
         foreach ($this->dj->getCurrentContests() as $contest) {
             $this->eventLogService->addMissingStateEvents($contest);
         }
+
+        $debugCollectors = $this->getDebugCollectors();
 
         // This loop uses direct queries instead of Doctrine classes to speed
         // it up drastically.
@@ -382,6 +382,12 @@ class RejudgingService
                 $maxProgress = ($action === self::ACTION_APPLY ? static::APPLY_PROGRESS_WITH_SCOREBOARD_UPDATE : 100);
                 $progress    = (int)round($index / count($submissions) * $maxProgress);
                 $progressReporter($progress, $log);
+            }
+
+            if ($index % 100 === 0) {
+                foreach ($debugCollectors as $collector) {
+                    $collector->reset();
+                }
             }
         }
 
@@ -534,5 +540,34 @@ class RejudgingService
         }
 
         return $result;
+    }
+
+    /**
+     * Find Doctrine debug collectors that accumulate SQL queries and parameters in memory in dev mode.
+     *
+     * @return list<DebugDataHolder|ResetInterface>
+     */
+    private function getDebugCollectors(): array
+    {
+        $collectors = [];
+        foreach ($this->em->getConnection()->getConfiguration()->getMiddlewares() as $middleware) {
+            if ($middleware instanceof DebugMiddleware) {
+                $holder = (new ReflectionProperty($middleware, 'debugDataHolder'))->getValue($middleware);
+                if ($holder instanceof DebugDataHolder) {
+                    $collectors[] = $holder;
+                }
+            } elseif ($middleware instanceof LoggingMiddleware) {
+                $logger = (new ReflectionProperty($middleware, 'logger'))->getValue($middleware);
+                if ($logger instanceof Logger) {
+                    foreach ($logger->getProcessors() as $processor) {
+                        if ($processor instanceof ResetInterface) {
+                            $collectors[] = $processor;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $collectors;
     }
 }
