@@ -8,11 +8,17 @@ use App\Entity\Contest;
 use App\Entity\Executable;
 use App\Entity\ExecutableFile;
 use App\Entity\ImmutableExecutable;
+use App\Entity\JudgeTask;
+use App\Entity\Judging;
+use App\Entity\Language;
 use App\Entity\Problem;
+use App\Entity\Rejudging;
+use App\Entity\Submission;
 use App\Entity\SubmissionSource;
 use App\Entity\Team;
 use App\Service\SubmissionService;
 use App\Tests\Unit\BaseTestCase;
+use App\Utils\Utils;
 use Doctrine\ORM\EntityManagerInterface;
 use Generator;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -212,6 +218,66 @@ class RejudgingControllerTest extends BaseTestCase
         // Empty match returns a single redirect response without creating an empty rejudging.
         $decoded = json_decode(trim($this->createRejudging('problem', 'hello')), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame(['progress' => 100, 'log' => '', 'redirect' => '/jury'], $decoded);
+
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $submit = function (string $lang) use ($em): int {
+            $message = null;
+            return static::getContainer()->get(SubmissionService::class)->submitSolution(
+                $em->getRepository(Team::class)->findOneBy(['name' => 'DOMjudge']),
+                null,
+                $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']),
+                $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']),
+                $lang,
+                [new UploadedFile(__FILE__, 'foo.' . $lang, null, null, true)],
+                SubmissionSource::UNKNOWN, null, null, null, null, null, $message
+            )->getSubmitid();
+        };
+
+        $validId = $submit('c');
+        $disabledLangId = $submit('cpp');
+        $claimedId = $submit('c');
+
+        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $subValid = $em->getRepository(Submission::class)->find($validId);
+        $subDisabledLang = $em->getRepository(Submission::class)->find($disabledLangId);
+        $subClaimed = $em->getRepository(Submission::class)->find($claimedId);
+
+        foreach ([$subValid, $subDisabledLang, $subClaimed] as $sub) {
+            $sub->getJudgings()->first()->setResult('wrong-answer');
+        }
+        // Second valid judging on the same submission must be deduplicated without flashing as skipped.
+        $dupJudging = (new Judging())
+            ->setContest($contest)
+            ->setSubmission($subValid)
+            ->setStarttime(Utils::now())
+            ->setEndtime(Utils::now())
+            ->setValid(true)
+            ->setResult('timelimit');
+        $subValid->addJudging($dupJudging);
+        $em->persist($dupJudging);
+
+        $em->getRepository(Language::class)->findOneBy(['externalid' => 'cpp'])->setAllowJudge(false);
+        $existingRejudging = (new Rejudging())->setStarttime(Utils::now())->setReason('existing');
+        $em->persist($existingRejudging);
+        $subClaimed->setRejudging($existingRejudging);
+        $em->flush();
+
+        $this->client->xmlHttpRequest('POST', '/jury/rejudgings/add', [
+            'reason' => 'mixed',
+            'priority' => JudgeTask::PRIORITY_DEFAULT,
+            'contests' => [$contest->getCid()],
+            'verdicts' => ['wrong-answer', 'timelimit'],
+        ]);
+        preg_match('#"redirect":"(/jury/rejudgings/(\d+))"#', $this->client->getInternalResponse()->getContent(), $matches);
+        self::assertNotEmpty($matches);
+        self::assertSame((int)$matches[2], $this->getRejudgingOfSubmission($validId));
+        self::assertNull($this->getRejudgingOfSubmission($disabledLangId));
+
+        $this->verifyPageResponse('GET', $matches[1], 200);
+        $html = $this->client->getResponse()->getContent();
+        self::assertStringContainsString(sprintf('Skipping submission %s since language C++ is not allowed to be judged.', $subDisabledLang->getExternalid()), $html);
+        self::assertStringContainsString(sprintf('Skipping submission %s since it is already part of rejudging r%d.', $subClaimed->getExternalid(), $existingRejudging->getRejudgingid()), $html);
+        self::assertStringNotContainsString(sprintf('Skipping submission %s', $subValid->getExternalid()), $html);
     }
 
     /**

@@ -580,131 +580,115 @@ class RejudgingController extends BaseController
             ]);
         }
         if ($isCreateRejudgingAjax) {
-            $progressReporter = function (int $progress, string $log, ?string $redirect = null): void {
-                echo Utils::jsonEncode(['progress' => $progress, 'log' => htmlspecialchars($log), 'redirect' => $redirect]);
-                Utils::ob_flush_if_possible();
-                flush();
-            };
-            return $this->streamResponse($this->requestStack, function () use ($request, $progressReporter): void {
-                set_time_limit(0);
+            set_time_limit(0);
 
-                $reason = $request->request->get('reason');
-                $data   = $request->request->all();
+            $reason = (string)$request->request->get('reason');
+            $data   = $request->request->all();
 
-                $queryBuilder = $this->em->createQueryBuilder()
-                    ->from(Judging::class, 'j')
-                    ->leftJoin('j.submission', 's')
-                    ->leftJoin('s.rejudging', 'r')
-                    ->leftJoin('s.contest_problem', 'cp')
-                    ->leftJoin('s.language', 'l')
-                    ->leftJoin('s.team', 't')
-                    ->select('j', 's', 'r', 'cp', 'l', 't')
-                    ->andWhere('j.valid = 1');
+            $queryBuilder = $this->em->createQueryBuilder()
+                ->from(Judging::class, 'j')
+                ->leftJoin('j.submission', 's')
+                ->leftJoin('s.rejudging', 'r')
+                ->leftJoin('s.contest_problem', 'cp')
+                ->leftJoin('s.language', 'l')
+                ->leftJoin('s.team', 't')
+                ->select('j', 's', 'r', 'cp', 'l', 't')
+                ->andWhere('j.valid = 1');
 
-                /** @var int[] $contests */
-                $contests = $data['contests'] ?? [];
-                if (count($contests)) {
+            /** @var int[] $contests */
+            $contests = $data['contests'] ?? [];
+            if (count($contests)) {
+                $queryBuilder
+                    ->andWhere('j.contest IN (:contests)')
+                    ->setParameter('contests', $contests);
+            }
+            /** @var int[] $problems */
+            $problems = $data['problems'] ?? [];
+            if (count($problems)) {
+                $queryBuilder
+                    ->andWhere('s.problem IN (:problems)')
+                    ->setParameter('problems', $problems);
+            }
+            /** @var int[] $languages */
+            $languages = $data['languages'] ?? [];
+            if (count($languages)) {
+                $queryBuilder
+                    ->andWhere('s.language IN (:languages)')
+                    ->setParameter('languages', $languages);
+            }
+            /** @var int[] $teams */
+            $teams = $data['teams'] ?? [];
+            if (count($teams)) {
+                $queryBuilder
+                    ->andWhere('s.team IN (:teams)')
+                    ->setParameter('teams', $teams);
+            }
+            /** @var int[] $users */
+            $users = $data['users'] ?? [];
+            if (count($users)) {
+                $queryBuilder
+                    ->andWhere('s.user IN (:users)')
+                    ->setParameter('users', $users);
+            }
+            /** @var int[] $judgehosts */
+            $judgehosts = $data['judgehosts'] ?? [];
+            if (count($judgehosts)) {
+                $queryBuilder
+                    ->innerJoin('j.runs', 'jr')
+                    ->innerJoin('jr.judgetask', 'jt')
+                    ->andWhere('jt.judgehost IN (:judgehosts)')
+                    ->setParameter('judgehosts', $judgehosts)
+                    ->distinct();
+            }
+            /** @var string[] $verdicts */
+            $verdicts = $data['verdicts'] ?? [];
+            if (count($verdicts)) {
+                $queryBuilder
+                    ->andWhere('j.result IN (:verdicts)')
+                    ->setParameter('verdicts', $verdicts);
+            }
+            $before = $data['before'] ?? null;
+            $after  = $data['after'] ?? null;
+            if (!empty($before) || !empty($after)) {
+                if (count($contests) != 1) {
+                    $this->addFlash('danger',
+                        'Only allowed to set before/after restrictions with exactly one selected contest.');
+                    return $this->json(['progress' => 100, 'log' => '', 'redirect' => $this->generateUrl('jury_rejudging_add')]);
+                }
+                /** @var Contest $contest */
+                $contest = $this->em->getRepository(Contest::class)->find($contests[0]);
+                if (!empty($before)) {
+                    $beforeTime = $contest->getAbsoluteTime($before);
                     $queryBuilder
-                        ->andWhere('j.contest IN (:contests)')
-                        ->setParameter('contests', $contests);
+                        ->andWhere('s.submittime <= :before')
+                        ->setParameter('before', $beforeTime);
                 }
-                /** @var int[] $problems */
-                $problems = $data['problems'] ?? [];
-                if (count($problems)) {
+                if (!empty($after)) {
+                    $afterTime = $contest->getAbsoluteTime($after);
                     $queryBuilder
-                        ->andWhere('s.problem IN (:problems)')
-                        ->setParameter('problems', $problems);
+                        ->andWhere('s.submittime >= :after')
+                        ->setParameter('after', $afterTime);
                 }
-                /** @var int[] $languages */
-                $languages = $data['languages'] ?? [];
-                if (count($languages)) {
-                    $queryBuilder
-                        ->andWhere('s.language IN (:languages)')
-                        ->setParameter('languages', $languages);
-                }
-                /** @var int[] $teams */
-                $teams = $data['teams'] ?? [];
-                if (count($teams)) {
-                    $queryBuilder
-                        ->andWhere('s.team IN (:teams)')
-                        ->setParameter('teams', $teams);
-                }
-                /** @var int[] $users */
-                $users = $data['users'] ?? [];
-                if (count($users)) {
-                    $queryBuilder
-                        ->andWhere('s.user IN (:users)')
-                        ->setParameter('users', $users);
-                }
-                /** @var int[] $judgehosts */
-                $judgehosts = $data['judgehosts'] ?? [];
-                if (count($judgehosts)) {
-                    $queryBuilder
-                        ->innerJoin('j.runs', 'jr')
-                        ->innerJoin('jr.judgetask', 'jt')
-                        ->andWhere('jt.judgehost IN (:judgehosts)')
-                        ->setParameter('judgehosts', $judgehosts)
-                        ->distinct();
-                }
-                /** @var string[] $verdicts */
-                $verdicts = $data['verdicts'] ?? [];
-                if (count($verdicts)) {
-                    $queryBuilder
-                        ->andWhere('j.result IN (:verdicts)')
-                        ->setParameter('verdicts', $verdicts);
-                }
-                $before = $data['before'] ?? null;
-                $after  = $data['after'] ?? null;
-                if (!empty($before) || !empty($after)) {
-                    if (count($contests) != 1) {
-                        $this->addFlash('danger',
-                            'Only allowed to set before/after restrictions with exactly one selected contest.');
-                        $progressReporter(100, '', $this->generateUrl('jury_rejudging_add'));
-                        return;
-                    }
-                    /** @var Contest $contest */
-                    $contest = $this->em->getRepository(Contest::class)->find($contests[0]);
-                    if (!empty($before)) {
-                        $beforeTime = $contest->getAbsoluteTime($before);
-                        $queryBuilder
-                            ->andWhere('s.submittime <= :before')
-                            ->setParameter('before', $beforeTime);
-                    }
-                    if (!empty($after)) {
-                        $afterTime = $contest->getAbsoluteTime($after);
-                        $queryBuilder
-                            ->andWhere('s.submittime >= :after')
-                            ->setParameter('after', $afterTime);
-                    }
-                }
+            }
 
-                /** @var Judging[] $judgings */
-                $judgings = $queryBuilder
-                    ->getQuery()
-                    ->getResult();
-                if (empty($judgings)) {
-                    $this->addFlash('danger', 'No judgings matched.');
-                    $progressReporter(100, '', $this->generateUrl('jury_rejudging_add'));
-                    return;
-                }
+            /** @var Judging[] $judgings */
+            $judgings = $queryBuilder
+                ->getQuery()
+                ->getResult();
+            if (empty($judgings)) {
+                $this->addFlash('danger', 'No judgings matched.');
+                return $this->json(['progress' => 100, 'log' => '', 'redirect' => $this->generateUrl('jury_rejudging_add')]);
+            }
 
-                $skipped = [];
-                $res     = $this->rejudgingService->createRejudging(
-                    $reason, (int)$data['priority'], $judgings, false, (int)($data['repeat'] ?? 1), (int) ($data['overshoot'] ?? 0), null, $skipped, $progressReporter);
-                $this->generateFlashMessagesForSkippedJudgings($skipped);
-
-                if ($res === null) {
-                    $prefix = sprintf('%s%s', $request->getSchemeAndHttpHost(), $request->getBasePath());
-                    if ($this->isLocalRefererUrl($this->router, $data['referer'] ?? '', $prefix)) {
-                        $redirect = $data['referer'];
-                    } else {
-                        $redirect = $this->generateUrl('jury_index');
-                    }
-                } else {
-                    $redirect = $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()]);
-                }
-                $progressReporter(100, '', $redirect);
-            });
+            return $this->streamRejudgingCreation(
+                $judgings,
+                $reason,
+                (int)$data['priority'],
+                false,
+                (int)($data['repeat'] ?? 1),
+                (int)($data['overshoot'] ?? 0),
+                $this->getLocalRefererOrIndex($request, (string)($data['referer'] ?? ''))
+            );
         }
         return $this->render('jury/rejudging_form.html.twig', [
             'form' => $form,
@@ -776,114 +760,170 @@ class RejudgingController extends BaseController
             ]);
         }
 
-        $progressReporter = function (int $progress, string $log, ?string $redirect = null): void {
-            echo Utils::jsonEncode(['progress' => $progress, 'log' => htmlspecialchars($log), 'redirect' => $redirect]);
+        set_time_limit(0);
+
+        // Only rejudge submissions in active contests.
+        $contests = $this->dj->getCurrentContests();
+
+        $queryBuilder = $this->em->createQueryBuilder()
+            ->from(Judging::class, 'j')
+            ->leftJoin('j.submission', 's')
+            ->leftJoin('s.rejudging', 'r')
+            ->leftJoin('s.contest', 'c')
+            ->leftJoin('s.contest_problem', 'cp')
+            ->leftJoin('s.language', 'l')
+            ->leftJoin('s.problem', 'p')
+            ->leftJoin('s.team', 't')
+            ->leftJoin('s.user', 'u')
+            ->select('j', 's', 'r', 'c', 'cp', 'l', 'p', 't', 'u')
+            ->andWhere('j.contest IN (:contests)')
+            ->andWhere('j.valid = 1')
+            ->setParameter('contests', $contests);
+
+        if ($table === 'judgehost') {
+            $queryBuilder
+                ->innerJoin('j.runs', 'jr')
+                ->innerJoin('jr.judgetask', 'jt')
+                ->distinct();
+        } elseif ($table === 'rejudging') {
+            $queryBuilder
+                ->innerJoin('s.judgings', 'j2')
+                ->distinct();
+        }
+
+        if ($executable !== null) {
+            $this->dj->restrictToJudgingsWithOutdatedExecutable($queryBuilder, $executable);
+        } else {
+            $queryBuilder
+                ->andWhere(sprintf('%s = :id', $tablemap[$table]))
+                ->setParameter('id', $id);
+        }
+
+        if ($includeAll && !$autoApply) {
+            $queryBuilder
+                ->andWhere('j.result IS NOT NULL')
+                ->andWhere('j.valid = 1');
+        } elseif (!$includeAll) {
+            $queryBuilder
+                ->andWhere('j.result != :correct')
+                ->setParameter('correct', 'correct');
+        }
+
+        /** @var Judging[] $judgings */
+        $judgings = $queryBuilder
+            ->getQuery()
+            ->getResult();
+
+        $fallbackRedirect = $this->getLocalRefererOrIndex($request, (string)$request->request->get('referer', ''));
+        if (empty($judgings)) {
+            $this->addFlash('danger', 'No judgings matched.');
+            return $this->json(['progress' => 100, 'log' => '', 'redirect' => $fallbackRedirect]);
+        }
+
+        return $this->streamRejudgingCreation(
+            $judgings,
+            (string)$reason,
+            JudgeTask::parsePriority($priority),
+            $autoApply,
+            $repeat,
+            $overshoot,
+            $fallbackRedirect
+        );
+    }
+
+    private function getLocalRefererOrIndex(Request $request, string $referer): string
+    {
+        $prefix = sprintf('%s%s', $request->getSchemeAndHttpHost(), $request->getBasePath());
+        return $this->isLocalRefererUrl($this->router, $referer, $prefix)
+            ? $referer
+            : $this->generateUrl('jury_index');
+    }
+
+    /**
+     * Filter out judgings whose submissions cannot be rejudged and flash why before streaming starts.
+     *
+     * @param Judging[] $judgings
+     * @return Judging[]
+     */
+    private function filterAndFlashSkippedJudgings(array $judgings): array
+    {
+        $filtered = [];
+        $seen = [];
+        foreach ($judgings as $judging) {
+            $submission = $judging->getSubmission();
+            if (isset($seen[$submission->getSubmitid()])) {
+                continue;
+            }
+            $seen[$submission->getSubmitid()] = true;
+
+            if ($submission->getRejudging() !== null) {
+                $reason = sprintf('it is already part of rejudging r%d', $submission->getRejudging()->getRejudgingid());
+            } elseif (!$submission->getContestProblem()->getAllowJudge()) {
+                $reason = sprintf('problem %s is not allowed to be judged', $submission->getContestProblem()->getShortname());
+            } elseif (!$submission->getLanguage()->getAllowJudge()) {
+                $reason = sprintf('language %s is not allowed to be judged', $submission->getLanguage()->getName());
+            } else {
+                $filtered[] = $judging;
+                continue;
+            }
+
+            $this->addFlash('danger', sprintf('Skipping submission %s since %s.', $submission->getExternalid(), $reason));
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * @param Judging[] $judgings
+     */
+    private function streamRejudgingCreation(
+        array $judgings,
+        string $reason,
+        int $priority,
+        bool $autoApply,
+        int $repeat,
+        int $overshoot,
+        string $fallbackRedirect
+    ): Response {
+        $judgings = $this->filterAndFlashSkippedJudgings($judgings);
+        if (empty($judgings)) {
+            return $this->json(['progress' => 100, 'log' => '', 'redirect' => $fallbackRedirect]);
+        }
+
+        $progressReporter = function (int $progress, string $log, ?string $redirect = null, ?string $message = null): void {
+            echo Utils::jsonEncode([
+                'progress' => $progress,
+                'log' => htmlspecialchars($log),
+                'redirect' => $redirect,
+                'message' => $message,
+            ]);
             Utils::ob_flush_if_possible();
             flush();
         };
 
-        return $this->streamResponse($this->requestStack, function () use ($priority, $progressReporter, $repeat, $reason, $overshoot, $request, $autoApply, $includeAll, $id, $table, $tablemap, $executable): void {
-            set_time_limit(0);
-
-            // Only rejudge submissions in active contests.
-            $contests = $this->dj->getCurrentContests();
-
-            $queryBuilder = $this->em->createQueryBuilder()
-                ->from(Judging::class, 'j')
-                ->leftJoin('j.submission', 's')
-                ->leftJoin('s.rejudging', 'r')
-                ->leftJoin('s.contest', 'c')
-                ->leftJoin('s.contest_problem', 'cp')
-                ->leftJoin('s.language', 'l')
-                ->leftJoin('s.problem', 'p')
-                ->leftJoin('s.team', 't')
-                ->leftJoin('s.user', 'u')
-                ->select('j', 's', 'r', 'c', 'cp', 'l', 'p', 't', 'u')
-                ->andWhere('j.contest IN (:contests)')
-                ->andWhere('j.valid = 1')
-                ->setParameter('contests', $contests);
-
-            if ($table === 'judgehost') {
-                $queryBuilder
-                    ->innerJoin('j.runs', 'jr')
-                    ->innerJoin('jr.judgetask', 'jt')
-                    ->distinct();
-            } elseif ($table === 'rejudging') {
-                $queryBuilder
-                    ->innerJoin('s.judgings', 'j2')
-                    ->distinct();
-            }
-
-            if ($executable !== null) {
-                $this->dj->restrictToJudgingsWithOutdatedExecutable($queryBuilder, $executable);
-            } else {
-                $queryBuilder
-                    ->andWhere(sprintf('%s = :id', $tablemap[$table]))
-                    ->setParameter('id', $id);
-            }
-
-            if ($includeAll && !$autoApply) {
-                $queryBuilder
-                    ->andWhere('j.result IS NOT NULL')
-                    ->andWhere('j.valid = 1');
-            } elseif (!$includeAll) {
-                $queryBuilder
-                    ->andWhere('j.result != :correct')
-                    ->setParameter('correct', 'correct');
-            }
-
-            /** @var Judging[] $judgings */
-            $judgings = $queryBuilder
-                ->getQuery()
-                ->getResult();
-
-            if (empty($judgings)) {
-                $this->addFlash('danger', 'No judgings matched.');
-                $prefix = sprintf('%s%s', $request->getSchemeAndHttpHost(), $request->getBasePath());
-                if ($this->isLocalRefererUrl($this->router, $request->request->get('referer', ''), $prefix)) {
-                    $redirect = $request->request->get('referer');
-                } else {
-                    $redirect = $this->generateUrl('jury_index');
-                }
-                $progressReporter(100, '', $redirect);
-                return;
-            }
-
+        return $this->streamResponse($this->requestStack, function () use ($judgings, $reason, $priority, $autoApply, $repeat, $overshoot, $fallbackRedirect, $progressReporter): void {
             $skipped = [];
-            $res     = $this->rejudgingService->createRejudging($reason, JudgeTask::parsePriority($priority), $judgings, $autoApply, $repeat, $overshoot, null, $skipped, $progressReporter);
+            $res = $this->rejudgingService->createRejudging(
+                $reason, $priority, $judgings, $autoApply, $repeat, $overshoot, null, $skipped, $progressReporter
+            );
+            $redirect = $res !== null
+                ? $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()])
+                : $fallbackRedirect;
 
-            if ($res === null) {
-                $prefix = sprintf('%s%s', $request->getSchemeAndHttpHost(), $request->getBasePath());
-                if ($this->isLocalRefererUrl($this->router, $request->request->get('referer', ''), $prefix)) {
-                    $redirect = $request->request->get('referer');
-                } else {
-                    $redirect = $this->generateUrl('jury_index');
-                }
-            } else {
-                $redirect = $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()]);
+            if (!empty($skipped)) {
+                $ids = implode(', ', array_map(
+                    static fn(Judging $j): string => htmlspecialchars($j->getSubmission()->getExternalid()),
+                    $skipped
+                ));
+                $link = $res !== null
+                    ? sprintf('Rejudging <a href="%s">r%d</a> created.', htmlspecialchars($redirect, ENT_QUOTES), $res->getRejudgingid())
+                    : sprintf('<a href="%s">Return</a>.', htmlspecialchars($redirect, ENT_QUOTES));
+                $progressReporter(100, '', null, sprintf('Skipped submission(s) %s claimed by another rejudging. %s', $ids, $link));
+                return;
             }
 
             $progressReporter(100, '', $redirect);
         });
-    }
-
-    /**
-     * @param Judging[] $skipped
-     */
-    private function generateFlashMessagesForSkippedJudgings(array $skipped): void
-    {
-        foreach ($skipped as $judging) {
-            $submission = $judging->getSubmission();
-            $submitid = $submission->getExternalid();
-            $rejudgingid = $submission->getRejudging()->getRejudgingid();
-            $msg = sprintf(
-                'Skipping submission %s since it is ' .
-                'already part of rejudging r%d.',
-                $submitid,
-                $rejudgingid
-            );
-            $this->addFlash('danger', $msg);
-        }
     }
 
     /**
