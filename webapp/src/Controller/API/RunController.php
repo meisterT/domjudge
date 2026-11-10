@@ -173,12 +173,9 @@ class RunController extends AbstractRestController implements QueryObjectTransfo
 
         // If an ID has not been given directly, only show runs before contest end.
         if (!$request->attributes->has('id') && !$request->query->has('ids')) {
-            $queryBuilder->andWhere('s.submittime < c.endtime');
-            if (!$this->useExternalRuns) {
-                $queryBuilder->andWhere('j.rejudging IS NULL OR j.valid = 1');
-            } else {
-                $queryBuilder->andWhere('j.valid = 1');
-            }
+            $queryBuilder
+                ->andWhere('s.submittime < c.endtime')
+                ->andWhere('j.valid = 1');
             if ($this->config->get('verification_required')) {
                 $queryBuilder->andWhere('j.verified = 1');
             }
