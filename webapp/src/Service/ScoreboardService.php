@@ -446,13 +446,18 @@ class ScoreboardService
 
         // Remember whether this cell used to count as solved (the rank cache has to be updated
         // when a solve is taken away) and whether it used to prevent other teams from being first to solve.
-        $previous = $this->em->getConnection()->fetchAssociative(
-            'SELECT is_correct_restricted OR is_correct_public AS was_correct, pending_restricted
-             FROM scorecache WHERE cid = :cid AND teamid = :teamid AND probid = :probid',
-            ['cid' => $contest->getCid(), 'teamid' => $team->getTeamid(), 'probid' => $problem->getProbid()]
-        );
-        $wasCorrect = $previous !== false && (bool)$previous['was_correct'];
-        $hadBlockedFirstToSolve = $wasCorrect || ($previous !== false && $previous['pending_restricted'] > 0);
+        $wasCorrect = false;
+        $hadBlockedFirstToSolve = false;
+        if (($updateRankCache && !$correctJury && !$correctPubl && !$problem->isScoringProblem())
+            || ($refreshFirstToSolvePeers && !$mayBlockFirstToSolve)) {
+            $previous = $this->em->getConnection()->fetchAssociative(
+                'SELECT is_correct_restricted OR is_correct_public AS was_correct, pending_restricted
+                 FROM scorecache WHERE cid = :cid AND teamid = :teamid AND probid = :probid',
+                ['cid' => $contest->getCid(), 'teamid' => $team->getTeamid(), 'probid' => $problem->getProbid()]
+            );
+            $wasCorrect = $previous !== false && (bool)$previous['was_correct'];
+            $hadBlockedFirstToSolve = $wasCorrect || ($previous !== false && $previous['pending_restricted'] > 0);
+        }
 
         // Use a direct upsert query to drastically speed this up. We do not use REPLACE, as that
         // deletes and reinserts the row, which also writes rows that did not change.
