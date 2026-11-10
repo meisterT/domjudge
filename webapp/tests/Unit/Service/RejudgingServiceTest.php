@@ -145,4 +145,43 @@ class RejudgingServiceTest extends BaseTestCase
         );
         static::assertEquals($otherRejudging->getRejudgingid(), $owner);
     }
+
+    public function testCreateRejudgingDetachesCreatedJudgings(): void
+    {
+        $container = static::getContainer();
+        $em = $container->get(EntityManagerInterface::class);
+
+        $message = null;
+        $submission = $container->get(SubmissionService::class)->submitSolution(
+            $em->getRepository(Team::class)->findOneBy(['name' => 'DOMjudge']),
+            null,
+            $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']),
+            $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']),
+            'c',
+            [new UploadedFile(__FILE__, 'foo.c', null, null, true)],
+            SubmissionSource::UNKNOWN, null, null, null, null, null, $message
+        );
+
+        $skipped = [];
+        $rejudging = $container->get(RejudgingService::class)->createRejudging(
+            'detach check',
+            JudgeTask::PRIORITY_DEFAULT,
+            [$submission->getJudgings()->first()],
+            false,
+            null,
+            0,
+            null,
+            $skipped
+        );
+
+        $newJudgingId = (int)$em->getConnection()->fetchOne(
+            'SELECT judgingid FROM judging WHERE submitid = ? AND rejudgingid = ?',
+            [$submission->getSubmitid(), $rejudging->getRejudgingid()]
+        );
+        self::assertGreaterThan(0, $newJudgingId);
+        self::assertArrayNotHasKey(
+            (string)$newJudgingId,
+            $em->getUnitOfWork()->getIdentityMap()[Judging::class] ?? []
+        );
+    }
 }

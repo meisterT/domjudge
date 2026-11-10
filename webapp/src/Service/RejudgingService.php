@@ -180,6 +180,7 @@ class RejudgingService
             $this->dj->maybeCreateJudgeTasks($newJudging, $priority, false, $overshoot);
 
             $this->em->getConnection()->commit();
+            $this->em->detach($newJudging);
 
             if (!$first) {
                 $log .= ', ';
