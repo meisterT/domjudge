@@ -203,6 +203,17 @@ class RejudgingControllerTest extends BaseTestCase
         self::assertResponseStatusCodeSame(404);
     }
 
+    public function testCreateAndAddRejudgingSkippedAndEmptyHandling(): void
+    {
+        $this->roles = ['admin'];
+        $this->logOut();
+        $this->logIn();
+
+        // Empty match returns a single redirect response without creating an empty rejudging.
+        $decoded = json_decode(trim($this->createRejudging('problem', 'hello')), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(['progress' => 100, 'log' => '', 'redirect' => '/jury'], $decoded);
+    }
+
     /**
      * Create a rejudging like the rejudge button does and return the progress it reported.
      */

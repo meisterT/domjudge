@@ -586,6 +586,8 @@ class RejudgingController extends BaseController
                 flush();
             };
             return $this->streamResponse($this->requestStack, function () use ($request, $progressReporter): void {
+                set_time_limit(0);
+
                 $reason = $request->request->get('reason');
                 $data   = $request->request->all();
 
@@ -593,8 +595,10 @@ class RejudgingController extends BaseController
                     ->from(Judging::class, 'j')
                     ->leftJoin('j.submission', 's')
                     ->leftJoin('s.rejudging', 'r')
+                    ->leftJoin('s.contest_problem', 'cp')
+                    ->leftJoin('s.language', 'l')
                     ->leftJoin('s.team', 't')
-                    ->select('j', 's', 'r', 't')
+                    ->select('j', 's', 'r', 'cp', 'l', 't')
                     ->andWhere('j.valid = 1');
 
                 /** @var int[] $contests */
@@ -779,6 +783,8 @@ class RejudgingController extends BaseController
         };
 
         return $this->streamResponse($this->requestStack, function () use ($priority, $progressReporter, $repeat, $reason, $overshoot, $request, $autoApply, $includeAll, $id, $table, $tablemap, $executable): void {
+            set_time_limit(0);
+
             // Only rejudge submissions in active contests.
             $contests = $this->dj->getCurrentContests();
 
@@ -787,17 +793,26 @@ class RejudgingController extends BaseController
                 ->leftJoin('j.submission', 's')
                 ->leftJoin('s.rejudging', 'r')
                 ->leftJoin('s.contest', 'c')
+                ->leftJoin('s.contest_problem', 'cp')
                 ->leftJoin('s.language', 'l')
                 ->leftJoin('s.problem', 'p')
                 ->leftJoin('s.team', 't')
                 ->leftJoin('s.user', 'u')
-                ->leftJoin('j.runs', 'jr')
-                ->leftJoin('jr.judgetask', 'jt')
-                ->select('j', 's', 'r', 'c', 'l', 'p', 't', 'u')
-                ->distinct()
+                ->select('j', 's', 'r', 'c', 'cp', 'l', 'p', 't', 'u')
                 ->andWhere('j.contest IN (:contests)')
                 ->andWhere('j.valid = 1')
                 ->setParameter('contests', $contests);
+
+            if ($table === 'judgehost') {
+                $queryBuilder
+                    ->innerJoin('j.runs', 'jr')
+                    ->innerJoin('jr.judgetask', 'jt')
+                    ->distinct();
+            } elseif ($table === 'rejudging') {
+                $queryBuilder
+                    ->innerJoin('s.judgings', 'j2')
+                    ->distinct();
+            }
 
             if ($executable !== null) {
                 $this->dj->restrictToJudgingsWithOutdatedExecutable($queryBuilder, $executable);
@@ -805,10 +820,6 @@ class RejudgingController extends BaseController
                 $queryBuilder
                     ->andWhere(sprintf('%s = :id', $tablemap[$table]))
                     ->setParameter('id', $id);
-            }
-
-            if ($table === 'rejudging') {
-                $queryBuilder->join('s.judgings', 'j2');
             }
 
             if ($includeAll && !$autoApply) {
@@ -835,6 +846,7 @@ class RejudgingController extends BaseController
                     $redirect = $this->generateUrl('jury_index');
                 }
                 $progressReporter(100, '', $redirect);
+                return;
             }
 
             $skipped = [];
