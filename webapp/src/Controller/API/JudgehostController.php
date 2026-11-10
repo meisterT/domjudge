@@ -6,6 +6,7 @@ use App\DataTransferObject\JudgehostFile;
 use App\Doctrine\DBAL\Types\JudgeTaskType;
 use App\Entity\Contest;
 use App\Entity\DebugPackage;
+use App\Entity\Event;
 use App\Entity\Executable;
 use App\Entity\ExecutableFile;
 use App\Entity\InternalError;
@@ -452,13 +453,18 @@ class JudgehostController extends AbstractFOSRestController
                 $this->dj->auditlog('judging', (string)$judgingId, 'judged',
                                     'compiler-error', $judgehost->getHostname(), $contestExternalid);
 
-                if ($claimed) {
-                    $this->maybeUpdateActiveJudging($judging);
-                }
-                if (!$this->config->get('verification_required') &&
+                $applied = $claimed && $this->maybeUpdateActiveJudging($judging);
+                if ($applied) {
+                    $this->eventLogService->log('judging', $judgingId,
+                                                EventLogService::ACTION_CREATE, $contestId);
+                    /** @var Judging $judging */
+                    $judging = $query->getOneOrNullResult();
+                } elseif ($claimed && !$this->config->get('verification_required') &&
                     $judging->getValid()) {
                     $this->eventLogService->log('judging', $judgingId,
                                                 EventLogService::ACTION_UPDATE, $contestId);
+                    /** @var Judging $judging */
+                    $judging = $query->getOneOrNullResult();
                 }
 
                 $submission = $judging->getSubmission();
@@ -477,6 +483,9 @@ class JudgehostController extends AbstractFOSRestController
             throw new BadRequestHttpException('Inconsistent data, no compilation data provided.');
         }
 
+        if (!$this->em->contains($judgehost)) {
+            $judgehost = $this->em->getRepository(Judgehost::class)->findOneBy(['hostname' => $hostname]);
+        }
         $judgehost->setPolltime(Utils::now());
         $this->em->flush();
     }
@@ -1087,7 +1096,13 @@ class JudgehostController extends AbstractFOSRestController
         // The run result has a single writer, so a plain flush is safe for it.
         $this->em->flush();
 
-        if ($judging->getValid()) {
+        if ($judging->getRejudging() !== null) {
+            $this->em->refresh($judging);
+        }
+        // Runs of a rejudging are logged in bulk after the judging's create event when the
+        // rejudging is applied; only log straggler runs individually once that event exists.
+        if ($judging->getValid() &&
+            ($judging->getRejudging() === null || $this->hasJudgingEvent($judging))) {
             $this->eventLogService->log('judging_run', $judgingRun->getRunid(),
                                         EventLogService::ACTION_CREATE, $judging->getContest()->getCid());
         }
@@ -1283,14 +1298,80 @@ class JudgehostController extends AbstractFOSRestController
                 }
             }
 
-            // Send an event for an endtime (and max runtime update).
-            if ($sendJudgingEvent && $judging->getValid()) {
+            // Send events: when auto-applying a rejudging, emit the judging create event first
+            // and then create events for all finished runs so runs never precede their judging.
+            if ($applied) {
+                $this->logAutoAppliedJudgingEvents($judging);
+            } elseif ($sendJudgingEvent && $judging->getValid()) {
                 $this->eventLogService->log('judging', $judging->getJudgingid(),
                     EventLogService::ACTION_UPDATE, $judging->getContest()->getCid());
             }
         }
 
         return $judging->getResult() === null || $judging->getJudgeCompletely() || $lazyEval === DOMJudgeService::EVAL_FULL;
+    }
+
+    private function hasJudgingEvent(Judging $judging): bool
+    {
+        return (int)$this->em->createQueryBuilder()
+            ->from(Event::class, 'e')
+            ->select('COUNT(e.eventid)')
+            ->andWhere('e.contest = :contest')
+            ->andWhere('e.endpointtype = :endpoint')
+            ->andWhere('e.endpointid = :endpointid')
+            ->andWhere('e.version = :version')
+            ->setParameter('contest', $judging->getContest())
+            ->setParameter('endpoint', 'judgements')
+            ->setParameter('endpointid', (string)$judging->getJudgingid())
+            ->setParameter('version', $this->eventLogService->getContentVersion())
+            ->getQuery()
+            ->getSingleScalarResult() > 0;
+    }
+
+    private function logAutoAppliedJudgingEvents(Judging $judging): void
+    {
+        $judgingId = $judging->getJudgingid();
+        $contestId = $judging->getContest()->getCid();
+
+        $this->eventLogService->log('judging', $judgingId,
+            EventLogService::ACTION_CREATE, $contestId);
+
+        $runData = $this->em->createQueryBuilder()
+            ->from(JudgingRun::class, 'r')
+            ->select('r.runid')
+            ->andWhere('r.judging = :judgingid')
+            ->andWhere('r.runresult IS NOT NULL')
+            ->orderBy('r.runid')
+            ->setParameter('judgingid', $judgingId)
+            ->getQuery()
+            ->getScalarResult();
+        $runIds = array_map(static fn(array $data): int => (int)$data['runid'], $runData);
+        if ($runIds === []) {
+            return;
+        }
+
+        $existingRunEventData = $this->em->createQueryBuilder()
+            ->from(Event::class, 'e')
+            ->select('e.endpointid')
+            ->andWhere('e.contest = :contest')
+            ->andWhere('e.endpointtype = :endpoint')
+            ->andWhere('e.endpointid IN (:endpointids)')
+            ->andWhere('e.version = :version')
+            ->setParameter('contest', $contestId)
+            ->setParameter('endpoint', 'runs')
+            ->setParameter('endpointids', array_map(strval(...), $runIds))
+            ->setParameter('version', $this->eventLogService->getContentVersion())
+            ->getQuery()
+            ->getScalarResult();
+        $existingRunIds = array_fill_keys(array_column($existingRunEventData, 'endpointid'), true);
+        $runIds = array_values(array_filter(
+            $runIds,
+            static fn(int $runId): bool => !isset($existingRunIds[(string)$runId])
+        ));
+        if ($runIds !== []) {
+            $this->eventLogService->log('judging_run', $runIds,
+                EventLogService::ACTION_CREATE, $contestId);
+        }
     }
 
     /**

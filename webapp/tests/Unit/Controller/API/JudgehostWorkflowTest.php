@@ -3,6 +3,7 @@
 namespace App\Tests\Unit\Controller\API;
 
 use App\Entity\Contest;
+use App\Entity\Event;
 use App\Entity\InternalError;
 use App\Entity\JudgeTask;
 use App\Entity\Judgehost;
@@ -545,6 +546,10 @@ class JudgehostWorkflowTest extends BaseTestCase
 
         $rejudging = $em->getRepository(Rejudging::class)->find($rejudgingId);
         self::assertNotNull($rejudging->getEndtime(), 'the rejudging must be finished');
+
+        $judgingEvents = $em->getRepository(Event::class)->findBy(['endpointtype' => 'judgements', 'endpointid' => (string)$newJudging->getJudgingid()]);
+        self::assertCount(1, $judgingEvents);
+        self::assertSame('create', $judgingEvents[0]->getAction());
     }
 
     public function testIntermediateRunDoesNotApplyRejudging(): void
@@ -561,6 +566,34 @@ class JudgehostWorkflowTest extends BaseTestCase
         self::assertFalse($this->judgingForTask($firstTaskId)->getValid());
         self::assertTrue($em->getRepository(Judging::class)->find($originalJudgingId)->getValid());
         self::assertNull($em->getRepository(Rejudging::class)->find($rejudgingId)->getEndtime());
+    }
+
+    public function testAutoApplyRejudgingEmitsJudgementCreateBeforeRuns(): void
+    {
+        $this->rejudgeOneCorrectSubmission('boolfind');
+        $rejudgeTasks = $this->fetchWork();
+        $firstTask = array_shift($rejudgeTasks);
+        $this->reportRun((int)$firstTask['judgetaskid'], 'correct');
+
+        $newJudgingId = $this->judgingForTask((int)$firstTask['judgetaskid'])->getJudgingid();
+        $em = $this->freshEm();
+        $runIds = array_map(
+            static fn(JudgingRun $r): string => (string)$r->getRunid(),
+            $em->getRepository(JudgingRun::class)->findBy(['judging' => $newJudgingId], ['runid' => 'ASC'])
+        );
+        self::assertSame([], $em->getRepository(Event::class)->findBy(['endpointtype' => 'runs', 'endpointid' => $runIds]));
+
+        foreach ($rejudgeTasks as $task) {
+            $this->reportRun((int)$task['judgetaskid'], 'correct');
+        }
+
+        $em = $this->freshEm();
+        $judgingEvents = $em->getRepository(Event::class)->findBy(['endpointtype' => 'judgements', 'endpointid' => (string)$newJudgingId]);
+        $runEvents = $em->getRepository(Event::class)->findBy(['endpointtype' => 'runs', 'endpointid' => $runIds], ['eventid' => 'ASC']);
+        self::assertCount(1, $judgingEvents);
+        self::assertSame('create', $judgingEvents[0]->getAction());
+        self::assertCount(count($runIds), $runEvents);
+        self::assertGreaterThan($judgingEvents[0]->getEventid(), $runEvents[0]->getEventid());
     }
 
     /**
@@ -647,6 +680,10 @@ class JudgehostWorkflowTest extends BaseTestCase
 
         $rejudging = $em->getRepository(Rejudging::class)->find($rejudgingId);
         self::assertNotNull($rejudging->getEndtime(), 'the rejudging must be finished');
+
+        $judgingEvents = $em->getRepository(Event::class)->findBy(['endpointtype' => 'judgements', 'endpointid' => (string)$newJudging->getJudgingid()]);
+        self::assertCount(1, $judgingEvents);
+        self::assertSame('create', $judgingEvents[0]->getAction());
     }
 
     public function testInternalErrorDisablesTheJudgehostAndGivesBackWork(): void
