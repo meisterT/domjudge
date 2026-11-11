@@ -131,7 +131,7 @@ class Problem extends BaseApiEntity implements
         nullable: true,
         options: ['comment' => 'Optional limit on the number of rounds; defaults to 1 for traditional problems, 2 for multi-pass problems if not specified.', 'unsigned' => true]
     )]
-    #[Assert\GreaterThan(0)]
+    #[Assert\GreaterThanOrEqual(2)]
     #[Serializer\Exclude]
     private ?int $multipassLimit = null;
 

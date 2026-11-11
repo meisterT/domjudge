@@ -12,6 +12,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Generator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\PropertyAccess\PropertyAccess;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 use ZipArchive;
 
 class ImportProblemServiceTest extends BaseTestCase
@@ -188,7 +189,13 @@ YAML;
 
     public function testCustomValidation(): void
     {
-        foreach (['custom', 'custom interactive', 'custom multi-pass'] as $mode) {
+        foreach ([
+            'custom' => 'pass-fail',
+            'custom interactive' => 'pass-fail, interactive',
+            'custom multi-pass' => 'pass-fail, multi-pass',
+            'custom interactive multi-pass' => 'pass-fail, multi-pass, interactive',
+            'custom multi-pass interactive' => 'pass-fail, multi-pass, interactive',
+        ] as $mode => $expectedTypes) {
             $yaml = <<<YAML
 name: test
 validation: $mode
@@ -201,13 +208,9 @@ YAML;
             $this->assertTrue($ret);
             $this->assertEmpty($messages);
             $this->assertEquals($mode, $validationMode);
-            if ($mode === 'custom multi-pass') {
-                $this->assertEquals('pass-fail, multi-pass', $problem->getTypesAsString());
+            $this->assertEquals($expectedTypes, $problem->getTypesAsString());
+            if (str_contains($mode, 'multi-pass')) {
                 $this->assertEquals(2, $problem->getMultipassLimit());
-            } elseif ($mode === 'custom interactive') {
-                $this->assertEquals('pass-fail, interactive', $problem->getTypesAsString());
-            } else {
-                $this->assertEquals('pass-fail', $problem->getTypesAsString());
             }
         }
     }
@@ -1179,6 +1182,97 @@ YAML;
         $freshEm = static::getContainer()->get(EntityManagerInterface::class);
         self::assertTrue($freshEm->isOpen(), 'the entity manager must have been reset');
         self::assertNotNull($freshEm->getRepository(Problem::class)->find($probId));
+    }
+
+    public function testTypesYamlSequence(): void
+    {
+        foreach ([
+            '[pass-fail, multi-pass]' => 'pass-fail, multi-pass',
+            '[multi-pass]' => 'pass-fail, multi-pass',
+            '[interactive, multi-pass]' => 'pass-fail, multi-pass, interactive',
+            '[scoring, multi-pass]' => 'scoring, multi-pass',
+        ] as $yamlType => $expectedTypes) {
+            $messages = [];
+            $validationMode = 'xxx';
+            $problem = new Problem();
+
+            self::assertTrue(ImportProblemService::parseYaml(
+                "name: test\ntype: $yamlType\n",
+                $messages,
+                $validationMode,
+                PropertyAccess::createPropertyAccessor(),
+                $problem
+            ));
+            self::assertSame($expectedTypes, $problem->getTypesAsString());
+        }
+
+        foreach (['[]', '""', '[123]', '42', '{a: pass-fail}'] as $invalidType) {
+            $messages = [];
+            $validationMode = 'xxx';
+            self::assertFalse(ImportProblemService::parseYaml(
+                "name: test\ntype: $invalidType\n",
+                $messages,
+                $validationMode,
+                PropertyAccess::createPropertyAccessor(),
+                new Problem()
+            ));
+            self::assertNotEmpty($messages['danger']);
+        }
+    }
+
+    public function testValidationPassesRejectedForNonMultipassProblem(): void
+    {
+        foreach (['pass-fail', 'interactive', 'scoring'] as $type) {
+            $messages = [];
+            $validationMode = 'xxx';
+            self::assertFalse(ImportProblemService::parseYaml(
+                "name: test\ntype: $type\nlimits:\n  validation_passes: 3\n",
+                $messages,
+                $validationMode,
+                PropertyAccess::createPropertyAccessor(),
+                new Problem()
+            ));
+            self::assertStringContainsString('only allowed for multi-pass problems', $messages['danger'][0]);
+        }
+    }
+
+    public function testImportAndReimportMultipassProblem(): void
+    {
+        /** @var ImportProblemService $service */
+        $service = static::getContainer()->get(ImportProblemService::class);
+        $baseFiles = [
+            'output_validators/val/run' => "#!/bin/sh\nexit 42\n",
+            'data/secret/1.in' => "1\n",
+            'data/secret/1.ans' => "1\n",
+        ];
+
+        $problem = $this->import($service, $baseFiles + [
+            'problem.yaml' => "name: mp\nvalidation: custom interactive multi-pass\nlimits:\n  time_limit: 2\n  validation_passes: 7\n",
+        ], null);
+        self::assertInstanceOf(Problem::class, $problem);
+        self::assertTrue($problem->isInteractiveProblem() && $problem->isMultipassProblem());
+        self::assertSame(7, $problem->getMultipassLimit());
+        self::assertNotNull($problem->getRunExecutable());
+        self::assertNull($problem->getCompareExecutable());
+
+        // Re-importing without validation_passes resets multipassLimit to the default of 2.
+        $reimported = $this->import($service, $baseFiles + [
+            'problem.yaml' => "name: mp\ntype: [pass-fail, multi-pass]\n",
+        ], $problem);
+        self::assertInstanceOf(Problem::class, $reimported);
+        self::assertFalse($reimported->isInteractiveProblem());
+        self::assertSame(2, $reimported->getMultipassLimit());
+    }
+
+    public function testProblemEntityValidatesMultipassLimitAtLeastTwo(): void
+    {
+        /** @var ValidatorInterface $validator */
+        $validator = static::getContainer()->get(ValidatorInterface::class);
+        $problem = (new Problem())->setName('test')->setTimelimit(1.0);
+
+        self::assertCount(1, $validator->validateProperty($problem->setMultipassLimit(1), 'multipassLimit'));
+        self::assertCount(0, $validator->validateProperty($problem->setMultipassLimit(2), 'multipassLimit'));
+        self::assertCount(0, $validator->validateProperty($problem->setMultipassLimit(null), 'multipassLimit'));
     }
 
     /**

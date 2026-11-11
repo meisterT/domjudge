@@ -231,6 +231,7 @@ readonly class ImportProblemService
         if ($problem->getProbid()) {
             $problem
                 ->setTypesAsString(['pass-fail'])
+                ->setMultipassLimit(null)
                 ->setCompareExecutable()
                 ->setSpecialCompareArgs('')
                 ->setRunExecutable()
@@ -1196,7 +1197,9 @@ readonly class ImportProblemService
                 $outputValidatorName = $outputValidatorName . "_" . $clashCount;
             }
 
-            $combinedRunCompare = $validationMode == 'custom interactive';
+            $validationTokens = preg_split('/\s+/', $validationMode, flags: PREG_SPLIT_NO_EMPTY) ?: [];
+            $combinedRunCompare = ($problem !== null && $problem->isInteractiveProblem())
+                || in_array('interactive', $validationTokens, true);
 
             if (!($tempzipFile = tempnam($this->dj->getDomjudgeTmpDir(), "/executable-"))) {
                 throw new ServiceUnavailableHttpException(null, 'Failed to create temporary file.');
@@ -1369,11 +1372,35 @@ readonly class ImportProblemService
 
         $validationMode = 'default';
         if (isset($yamlData['type'])) {
-            $types = explode(' ', $yamlData['type']);
+            if (is_string($yamlData['type'])) {
+                $types = preg_split('/\s+/', trim($yamlData['type']), flags: PREG_SPLIT_NO_EMPTY) ?: [];
+            } elseif (is_array($yamlData['type']) && array_is_list($yamlData['type'])) {
+                $types = [];
+                foreach ($yamlData['type'] as $typeItem) {
+                    if (!is_string($typeItem) || trim($typeItem) === '') {
+                        $messages['danger'][] = 'problem.yaml: entries in type list must be non-empty strings.';
+                        return false;
+                    }
+                    $types[] = trim($typeItem);
+                }
+            } else {
+                $messages['danger'][] = 'problem.yaml: type must be a string or a list of strings.';
+                return false;
+            }
+            if (count($types) === 0) {
+                $messages['danger'][] = 'problem.yaml: type cannot be empty.';
+                return false;
+            }
             // Validation happens later when we set the properties.
             $yamlProblemProperties['typesAsString'] = $types;
-            if (in_array('interactive', $types)) {
+            $hasInteractive = in_array('interactive', $types, true);
+            $hasMultipass = in_array('multi-pass', $types, true);
+            if ($hasInteractive && $hasMultipass) {
+                $validationMode = 'custom interactive multi-pass';
+            } elseif ($hasInteractive) {
                 $validationMode = 'custom interactive';
+            } elseif ($hasMultipass) {
+                $validationMode = 'custom multi-pass';
             }
         } else {
             $yamlProblemProperties['typesAsString'] = ['pass-fail'];
@@ -1387,17 +1414,19 @@ readonly class ImportProblemService
             }
         }
 
-        if (isset($yamlData['validation'])
-            && ($yamlData['validation'] == 'custom' ||
-                $yamlData['validation'] == 'custom interactive' ||
-                $yamlData['validation'] == 'custom multi-pass')) {
-            $validationMode = $yamlData['validation'];
-
-            if ($yamlData['validation'] == 'custom multi-pass') {
-                $yamlProblemProperties['typesAsString'][] = 'multi-pass';
-            }
-            if ($yamlData['validation'] == 'custom interactive') {
-                $yamlProblemProperties['typesAsString'][] = 'interactive';
+        if (isset($yamlData['validation']) && is_string($yamlData['validation'])) {
+            $validationTokens = preg_split('/\s+/', trim($yamlData['validation']), flags: PREG_SPLIT_NO_EMPTY) ?: [];
+            if (in_array('custom', $validationTokens, true)
+                && array_diff($validationTokens, ['custom', 'interactive', 'multi-pass']) === []) {
+                $validationMode = trim($yamlData['validation']);
+                if (in_array('multi-pass', $validationTokens, true)
+                    && !in_array('multi-pass', $yamlProblemProperties['typesAsString'], true)) {
+                    $yamlProblemProperties['typesAsString'][] = 'multi-pass';
+                }
+                if (in_array('interactive', $validationTokens, true)
+                    && !in_array('interactive', $yamlProblemProperties['typesAsString'], true)) {
+                    $yamlProblemProperties['typesAsString'][] = 'interactive';
+                }
             }
         }
 
@@ -1412,6 +1441,10 @@ readonly class ImportProblemService
                 $yamlProblemProperties['outputlimit'] = 1024 * $yamlData['limits']['output'];
             }
             if (isset($yamlData['limits']['validation_passes'])) {
+                if (!in_array('multi-pass', $yamlProblemProperties['typesAsString'], true)) {
+                    $messages['danger'][] = 'problem.yaml: limits.validation_passes is only allowed for multi-pass problems.';
+                    return false;
+                }
                 $validationPasses = $yamlData['limits']['validation_passes'];
                 // The spec requires this to be an int >= 2.
                 if (!is_int($validationPasses) || $validationPasses < 2) {
