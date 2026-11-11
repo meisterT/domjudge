@@ -281,35 +281,44 @@ program.
 Multi-pass problems
 -------------------
 Multi-pass problems allow a submission to be validated through multiple
-sequential passes.
+sequential passes on the same testcase.
 
 In a multi-pass problem, the judging process works as follows:
 
 1. The submission runs with the initial testcase input.
-2. The validator checks the output and can write a file ``nextpass.in``
-   in the feedback directory.
-3. If ``nextpass.in`` exists, the submission runs again with this new
-   input.
-4. This continues until no ``nextpass.in`` is created, or the maximum
-   number of passes is reached.
+2. The custom output validator checks the submission output and may request
+   another pass by writing ``nextpass.in`` in the feedback directory and
+   exiting with code ``42`` (accepted). Creating ``nextpass.in`` while exiting
+   with any other code is treated as an internal validator error.
+3. If ``nextpass.in`` was created, ``nextpass.in`` is removed from the
+   feedback directory and supplied as standard input to the next pass of the
+   submission.
+4. This repeats until the submission fails, the validator exits without
+   creating ``nextpass.in``, or the validator exceeds the configured pass limit
+   (which is also treated as an internal validator error).
 
-Files in the feedback directory persist between passes, allowing the
-validator to maintain state across rounds.
+All other files in the feedback directory persist between passes, allowing the
+validator to maintain state across rounds. Time and memory limits apply
+independently to each pass.
 
-When importing problems via ``problem.yaml``, use the following fields::
+When importing problems via ``problem.yaml`` (together with a custom validator
+in ``output_validators/``), configure multi-pass validation using::
 
   type: pass-fail multi-pass
-  validation: custom multi-pass
   limits:
     validation_passes: 3
 
-See also
-https://icpc.io/problem-package-format/spec/2023-07-draft.html#multi-pass-validation
+``limits.validation_passes`` must be an integer ``>= 2`` and defaults to ``2``
+when omitted. The legacy ``validation: custom multi-pass`` setting from older
+problem package drafts is also supported for backwards compatibility. See the
+``hangman`` and ``jumble`` problems in ``example_problems/`` for complete
+working examples, and
+https://icpc.io/problem-package-format/spec/2025-09.html#multi-pass-validation
+for the full specification.
 
 .. note::
 
-   Multi-pass problems cannot be combined with interactive or
-   submit-answer problem types.
+   Multi-pass problems cannot be combined with ``submit-answer`` problems.
 
 .. _printing:
 
