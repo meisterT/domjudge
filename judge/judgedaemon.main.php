@@ -210,6 +210,7 @@ class JudgeDaemon
     private bool $gracefulexitsignalled = false;
 
     private string $lastrequest = '';
+    protected ?int $lastHttpStatus = null;
     private float $waittime = self::INITIAL_WAITTIME_SEC;
 
     // Workdir with a currently set up chroot environment, if any.
@@ -522,7 +523,7 @@ class JudgeDaemon
                     $this->endpoint["waiting"] = true;
                     $this->maybeCleanupJudging();
                     logmsg(LOG_INFO, "No submissions in queue (for endpoint " . $this->endpoint['id'] . "), waiting...");
-                    $judgehosts = $this->request('judgehosts', 'GET');
+                    $judgehosts = $this->request('judgehosts', 'GET', '', false);
                     if ($judgehosts !== null) {
                         $judgehosts = dj_json_decode($judgehosts);
                         $judgehost = array_values(array_filter($judgehosts, fn ($j) => $j['hostname'] === $this->myhost))[0];
@@ -612,10 +613,13 @@ class JudgeDaemon
                 return;
             }
 
-            // Refresh config at start of each batch.
-            $this->djconfigRefresh();
-
             $this->lastWorkdir = $workdir;
+
+            // Refresh config at start of each batch.
+            if (!$this->djconfigRefresh(false)) {
+                $this->giveBackUnfinishedJudgings($workdirpath);
+                return;
+            }
         }
 
         // Make sure the workdir is accessible for the domjudge-run user.
@@ -623,16 +627,7 @@ class JudgeDaemon
         foreach ($row as $judgetask) {
             if (!$this->compileAndRunSubmission($judgetask, $workdirpath)) {
                 // Potentially return remaining outstanding judgetasks here.
-                $returnedJudgings = $this->request('judgehosts', 'POST', ['hostname' => urlencode($this->myhost)], false);
-                if ($returnedJudgings !== null) {
-                    $returnedJudgings = dj_json_decode($returnedJudgings);
-                    foreach ($returnedJudgings as $jud) {
-                        $workdir = $this->judgingDirectory($workdirpath, $jud);
-                        @chmod($workdir, 0700);
-                        logmsg(LOG_WARNING, "  🔙 Returned unfinished judging with jobid " . $jud['jobid'] .
-                            " in my name; given back unfinished runs from me.");
-                    }
-                }
+                $this->giveBackUnfinishedJudgings($workdirpath);
                 break;
             }
         }
@@ -645,6 +640,20 @@ class JudgeDaemon
             $this->closeCurlHandles();
             fclose($this->lockfile);
             exit;
+        }
+    }
+
+    private function giveBackUnfinishedJudgings(string $workdirpath): void
+    {
+        $returnedJudgings = $this->request('judgehosts', 'POST', ['hostname' => urlencode($this->myhost)], false);
+        if ($returnedJudgings !== null) {
+            $returnedJudgings = dj_json_decode($returnedJudgings);
+            foreach ($returnedJudgings as $jud) {
+                $judWorkdir = $this->judgingDirectory($workdirpath, $jud);
+                @chmod($judWorkdir, 0700);
+                logmsg(LOG_WARNING, "  🔙 Returned unfinished judging with jobid " . $jud['jobid'] .
+                    " in my name; given back unfinished runs from me.");
+            }
         }
     }
 
@@ -666,6 +675,10 @@ class JudgeDaemon
                     $run_config['hash'],
                     $judgeTask['judgetaskid']
                 );
+                if ($runpath === null || isset($error)) {
+                    unlink($tmpfile);
+                    continue;
+                }
 
                 if (!$this->runCommandSafe([$runpath, $workdir, $tmpfile])) {
                     $this->disable('run_script', 'run_script_id', $judgeTask['run_script_id'], "Running '$runpath' failed.");
@@ -722,11 +735,17 @@ class JudgeDaemon
                             $judgeTask['judgetaskid'],
                             $combined_run_compare
                         );
+                        if (!empty($this->endpoint['errorred'])) {
+                            return;
+                        }
                     }
                 }
             }
             if (!empty($judgeTask['testcase_id'])) {
                 $this->fetchTestcase($workdirpath, $judgeTask['testcase_id'], $judgeTask['judgetaskid'], $judgeTask['testcase_hash']);
+                if (!empty($this->endpoint['errorred'])) {
+                    return;
+                }
             }
         }
         logmsg(LOG_INFO, "  🔥 Pre-heating judgehost completed.");
@@ -944,7 +963,7 @@ class JudgeDaemon
     /**
      * @param array<string, string>|string $data
      */
-    private function request(string $url, string $verb = 'GET', string|array $data = '', bool $failonerror = true): string|bool|null
+    protected function request(string $url, string $verb = 'GET', string|array $data = '', bool $failonerror = true): string|bool|null
     {
         // Don't flood the log with requests for new judgings every few seconds.
         if (str_starts_with($url, 'judgehosts/fetch-work') && $verb === 'POST') {
@@ -985,13 +1004,16 @@ class JudgeDaemon
         $response = null;
         $errstr = null;
         $noRetry = false;
+        $this->lastHttpStatus = null;
 
         for ($trial = 1; $trial <= BACKOFF_STEPS; $trial++) {
             $response = curl_exec($curl_handle);
             if ($response === false) {
+                $this->lastHttpStatus = null;
                 $errstr = "Error while executing curl $verb to url " . $requestUrl . ": " . curl_error($curl_handle);
             } else {
                 $status = curl_getinfo($curl_handle, CURLINFO_HTTP_CODE);
+                $this->lastHttpStatus = $status;
                 if ($status == 401) {
                     $errstr = "Authentication failed (error $status) while contacting $requestUrl. " .
                         "Check credentials in restapi.secret.";
@@ -1055,11 +1077,14 @@ class JudgeDaemon
         return $response;
     }
 
-    private function djconfigRefresh(): void
+    private function djconfigRefresh(bool $failonerror = true): bool
     {
-        $res = $this->request('config', 'GET');
-        $res = dj_json_decode($res);
-        $this->domjudge_config = $res;
+        $res = $this->request('config', 'GET', '', $failonerror);
+        if ($res === null) {
+            return false;
+        }
+        $this->domjudge_config = dj_json_decode($res);
+        return true;
     }
 
     private function djconfigGetValue(string $name): mixed
@@ -1359,7 +1384,13 @@ class JudgeDaemon
             }
 
             logmsg(LOG_INFO, "  💾 Fetching new executable '$type/$execid' with hash '$hash'.");
-            $content = $this->request(sprintf('judgehosts/get_files/%s/%s', $type, $execid), 'GET');
+            $content = $this->request(sprintf('judgehosts/get_files/%s/%s', $type, $execid), 'GET', '', false);
+            if ($content === null) {
+                if ($this->lastHttpStatus === 404) {
+                    return [null, "Files for $type script '$execid' not found on server.", null];
+                }
+                return [null, null, null];
+            }
             $files = dj_json_decode($content);
             unset($content);
             $filesArray = [];
@@ -1538,7 +1569,7 @@ class JudgeDaemon
         }
     }
 
-    private function disable(
+    protected function disable(
         string  $kind,
         string  $idcolumn,
         mixed   $id,
@@ -1562,8 +1593,10 @@ class JudgeDaemon
             $args .= '&judgetaskid=' . urlencode((string)$judgeTaskId);
         }
 
-        $error_id = $this->request('judgehosts/internal-error', 'POST', $args);
-        logmsg(LOG_ERR, "=> internal error " . $error_id);
+        $error_id = $this->request('judgehosts/internal-error', 'POST', $args, false);
+        if ($error_id !== null) {
+            logmsg(LOG_ERR, "=> internal error " . $error_id);
+        }
     }
 
     /**
@@ -1639,7 +1672,11 @@ class JudgeDaemon
 
         // Verify compile and runner versions.
         $judgeTaskId = $judgeTask['judgetaskid'];
-        $version_verification = dj_json_decode($this->request('judgehosts/get_version_commands/' . $judgeTaskId, 'GET'));
+        $versionCommandsResponse = $this->request('judgehosts/get_version_commands/' . $judgeTaskId, 'GET', '', false);
+        if ($versionCommandsResponse === null) {
+            return false;
+        }
+        $version_verification = dj_json_decode($versionCommandsResponse);
         if (isset($version_verification['compiler_version_command']) || isset($version_verification['runner_version_command'])) {
             logmsg(LOG_INFO, "  📋 Verifying versions.");
             $versions = [];
@@ -1681,7 +1718,10 @@ class JudgeDaemon
 
         // Get the source code from the DB and store in local file(s).
         $url = sprintf('judgehosts/get_files/source/%s/%s', $judgeTask['contestid'], $judgeTask['submitid']);
-        $sources = $this->request($url, 'GET');
+        $sources = $this->request($url, 'GET', '', false);
+        if ($sources === null) {
+            return false;
+        }
         $sources = dj_json_decode($sources);
         $files = [];
         $hasFiltered = false;
@@ -1721,7 +1761,9 @@ class JudgeDaemon
                 '&output_compile=' . urlencode(base64_encode($message));
 
             $url = sprintf('judgehosts/update-judging/%s/%s', urlencode($this->myhost), urlencode((string)$judgeTask['judgetaskid']));
-            $this->request($url, 'PUT', $args);
+            if ($this->request($url, 'PUT', $args, false) === null) {
+                return false;
+            }
 
             // Revoke readablity for domjudge-run user to this workdir.
             chmod($workdir, 0700);
@@ -1740,7 +1782,7 @@ class JudgeDaemon
             $compile_config['hash'],
             $judgeTask['judgetaskid']
         );
-        if (isset($error)) {
+        if ($execrunpath === null || isset($error)) {
             return false;
         }
 
@@ -1821,7 +1863,9 @@ class JudgeDaemon
         }
 
         $url = sprintf('judgehosts/update-judging/%s/%s', urlencode($this->myhost), urlencode((string)$judgeTask['judgetaskid']));
-        $this->request($url, 'PUT', $args);
+        if ($this->request($url, 'PUT', $args, false) === null) {
+            return false;
+        }
 
         // Compile error: our job here is done.
         if (!$compile_success) {
@@ -2448,7 +2492,7 @@ class JudgeDaemon
             $judgeTask['judgetaskid'],
             $combined_run_compare
         );
-        if (isset($error)) {
+        if ($run_runpath === null || isset($error)) {
             return false;
         }
 
@@ -2464,7 +2508,7 @@ class JudgeDaemon
                 $compare_config['hash'],
                 $judgeTask['judgetaskid']
             );
-            if (isset($error)) {
+            if ($compare_runpath === null || isset($error)) {
                 return false;
             }
         }
@@ -2832,9 +2876,13 @@ class JudgeDaemon
         }
         $content = $this->request(sprintf('judgehosts/get_files/testcase/%s', $testcase_id), 'GET', '', false);
         if ($content === null) {
-            $error = 'Download of testcase failed for case ' . $testcase_id . ', check your problem integrity.';
-            logmsg(LOG_ERR, $error);
-            $this->disable('testcase', 'testcaseid', $testcase_id, $error, $judgetaskid);
+            if ($this->lastHttpStatus === 404) {
+                $error = 'Download of testcase failed for case ' . $testcase_id . ', check your problem integrity.';
+                logmsg(LOG_ERR, $error);
+                $this->disable('testcase', 'testcaseid', $testcase_id, $error, $judgetaskid);
+            } else {
+                logmsg(LOG_WARNING, 'Transient error while downloading testcase ' . $testcase_id . ', aborting run.');
+            }
             return null;
         }
         $files = dj_json_decode($content);
