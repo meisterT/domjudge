@@ -259,49 +259,36 @@ class RejudgingController extends BaseController
             }
         }
 
-        /** @var Judging[] $originalVerdicts */
-        $originalVerdicts = [];
-        /** @var Judging[] $newVerdicts */
-        $newVerdicts = [];
-
-        $this->em->wrapInTransaction(function () use ($rejudging, &$originalVerdicts, &$newVerdicts): void {
-            $expr             = $this->em->getExpressionBuilder();
-            $originalVerdicts = $this->em->createQueryBuilder()
-                ->from(Judging::class, 'j')
-                ->join('j.submission', 's')
-                ->select('j, s')
-                ->where(
-                    $expr->in('j.judgingid',
-                              $this->em->createQueryBuilder()
-                                  ->from(Judging::class, 'j2')
-                                  ->join('j2.original_judging', 'jo')
-                                  ->select('jo.judgingid')
-                                  ->andWhere('j2.rejudging = :rejudging')
-                                  ->andWhere('j2.endtime IS NOT NULL')
-                                  ->getDQL()
-                    )
-                )
-                ->setParameter('rejudging', $rejudging)
-                ->getQuery()
-                ->getResult();
-
-            $newVerdicts = $this->em->createQueryBuilder()
-                ->from(Judging::class, 'j')
-                ->join('j.submission', 's')
-                ->select('j, s')
-                ->andWhere('j.rejudging = :rejudging')
-                ->andWhere('j.endtime IS NOT NULL')
-                ->setParameter('rejudging', $rejudging)
-                ->getQuery()
-                ->getResult();
-
-            $getSubmissionId = fn(Judging $judging) => $judging->getSubmission()->getSubmitid();
-            $originalVerdicts = Utils::reindex($originalVerdicts, $getSubmissionId);
-            $newVerdicts = Utils::reindex($newVerdicts, $getSubmissionId);
-        });
+        // Fetch plain rows in one query so Doctrine's Identity Map cannot return stale
+        // Judging entities (#2471) and no transaction or per-submission entity hydration is needed.
+        $verdictRows = $this->em->createQueryBuilder()
+            ->from(Judging::class, 'j')
+            ->join('j.original_judging', 'jo')
+            ->join('j.submission', 's')
+            ->join('s.problem', 'p')
+            ->join('s.contest', 'c')
+            ->join('s.team', 't')
+            ->select(
+                's.submitid AS submitid',
+                'jo.result AS oldResult',
+                'j.result AS newResult',
+                'jo.score AS oldScore',
+                'j.score AS newScore',
+                'p.types AS problemTypes',
+                'p.name AS problemName',
+                'p.externalid AS problemExternalid',
+                'c.externalid AS contestExternalid',
+                't.teamid AS teamId',
+                'COALESCE(t.display_name, t.name) AS teamName',
+            )
+            ->andWhere('j.rejudging = :rejudging')
+            ->andWhere('j.endtime IS NOT NULL')
+            ->setParameter('rejudging', $rejudging)
+            ->getQuery()
+            ->getResult();
 
         // Helper function to add verdicts.
-        $addVerdict = function ($unknownVerdict) use ($verdicts, &$verdictTable): void {
+        $addVerdict = function (string $unknownVerdict) use (&$verdicts, &$verdictTable): void {
             // Add column to existing rows.
             foreach ($verdicts as $verdict => $abbreviation) {
                 $verdictTable[$verdict][$unknownVerdict] = [];
@@ -320,41 +307,41 @@ class RejudgingController extends BaseController
         $hasScoringProblems = false;
         $maxScore = 0;
 
-        foreach ($newVerdicts as $submitid => $newVerdict) {
-            $originalVerdict = $originalVerdicts[$submitid];
+        foreach ($verdictRows as $row) {
+            $submitid = (int)$row['submitid'];
+            $oldResult = $row['oldResult'] ?? '';
+            $newResult = $row['newResult'] ?? '';
 
             // Add verdicts to data structures if they are unknown up to now.
-            foreach ([$newVerdict, $originalVerdict] as $verdict) {
-                if (!array_key_exists($verdict->getResult(), $verdicts)) {
-                    $addVerdict($verdict->getResult());
+            foreach ([$newResult, $oldResult] as $result) {
+                if (!array_key_exists($result, $verdicts)) {
+                    $addVerdict($result);
                 }
             }
 
             // Mark them as used, so we can filter out unused cols/rows later.
-            $used[$originalVerdict->getResult()] = true;
-            $used[$newVerdict->getResult()]      = true;
+            $used[$oldResult] = true;
+            $used[$newResult] = true;
 
             // Append submitid to list of orig->new verdicts.
-            $verdictTable[$originalVerdict->getResult()][$newVerdict->getResult()][] = $submitid;
+            $verdictTable[$oldResult][$newResult][] = $submitid;
 
             // Collect score change data for scoring problems.
-            $submission = $newVerdict->getSubmission();
-            $problem = $submission->getProblem();
-            if ($problem->isScoringProblem()) {
+            if ((int)$row['problemTypes'] & Problem::TYPE_SCORING) {
                 $hasScoringProblems = true;
-                $oldScore = (float)$originalVerdict->getScore();
-                $newScore = (float)$newVerdict->getScore();
+                $oldScore = (float)$row['oldScore'];
+                $newScore = (float)$row['newScore'];
                 $delta = $newScore - $oldScore;
                 $absDelta = abs($delta);
                 $maxScore = max($maxScore, $oldScore, $newScore);
 
                 $scoreChanges[] = [
                     'submitId' => $submitid,
-                    'contestId' => $submission->getContest()->getExternalid(),
-                    'teamName' => $submission->getTeam()->getEffectiveName(),
-                    'teamId' => $submission->getTeam()->getTeamid(),
-                    'problemName' => $problem->getName(),
-                    'problemId' => $problem->getExternalid(),
+                    'contestId' => $row['contestExternalid'],
+                    'teamName' => $row['teamName'],
+                    'teamId' => (int)$row['teamId'],
+                    'problemName' => $row['problemName'],
+                    'problemId' => $row['problemExternalid'],
                     'oldScore' => $oldScore,
                     'newScore' => $newScore,
                     'delta' => $delta,
