@@ -1538,7 +1538,7 @@ class JudgeDaemon
         }
     }
 
-    private function disable(
+    protected function disable(
         string  $kind,
         string  $idcolumn,
         mixed   $id,
@@ -1564,6 +1564,22 @@ class JudgeDaemon
 
         $error_id = $this->request('judgehosts/internal-error', 'POST', $args);
         logmsg(LOG_ERR, "=> internal error " . $error_id);
+    }
+
+    /**
+     * @param array{judgetaskid: int, run_script_id: ?string, compare_script_id: ?string} $judgeTask
+     */
+    private function disableValidator(bool $combined_run_compare, array $judgeTask, string $reason): void
+    {
+        if ($combined_run_compare) {
+            $description = sprintf('combined run/compare script %s %s', $judgeTask['run_script_id'], $reason);
+            logmsg(LOG_ERR, $description);
+            $this->disable('run_script', 'run_script_id', $judgeTask['run_script_id'], $description, $judgeTask['judgetaskid']);
+        } else {
+            $description = sprintf('compare script %s %s', $judgeTask['compare_script_id'], $reason);
+            logmsg(LOG_ERR, $description);
+            $this->disable('compare_script', 'compare_script_id', $judgeTask['compare_script_id'], $description, $judgeTask['judgetaskid']);
+        }
     }
 
     /**
@@ -2127,7 +2143,10 @@ class JudgeDaemon
                 // A combined run and compare script may now already need the
                 // feedback directory, and perhaps access to the test answers (but
                 // only the original that lives outside the chroot).
-                mkdir('feedback', 0755, true);
+                if (!is_dir('feedback') && !mkdir('feedback', 0755, true)) {
+                    logmsg(LOG_WARNING, "Could not create 'feedback'.");
+                    return Verdict::INTERNAL_ERROR;
+                }
                 array_push($run_args, "$output", 'compare.meta', 'feedback');
             }
 
@@ -2630,13 +2649,11 @@ class JudgeDaemon
                     $scoreValue = '0';
                 }
                 if (!is_numeric($scoreValue)) {
-                    $description = sprintf(
-                        "compare script %s produced invalid (non-numeric) score: '%s'",
-                        $judgeTask['compare_script_id'],
-                        substr($scoreValue, 0, 100)
+                    $this->disableValidator(
+                        $combined_run_compare,
+                        $judgeTask,
+                        sprintf("produced invalid (non-numeric) score: '%s'", substr($scoreValue, 0, 100))
                     );
-                    logmsg(LOG_ERR, $description);
-                    $this->disable('compare_script', 'compare_script_id', $judgeTask['compare_script_id'], $description, $judgeTask['judgetaskid']);
                     return false;
                 }
                 // Normalize scientific notation (e.g. "1e-3") to fixed-point
@@ -2651,13 +2668,11 @@ class JudgeDaemon
                     }
                 }
                 if (bccomp($scoreValue, '0', 9) < 0) {
-                    $description = sprintf(
-                        "compare script %s produced negative score: '%s'",
-                        $judgeTask['compare_script_id'],
-                        $scoreValue
+                    $this->disableValidator(
+                        $combined_run_compare,
+                        $judgeTask,
+                        sprintf("produced negative score: '%s'", $scoreValue)
                     );
-                    logmsg(LOG_ERR, $description);
-                    $this->disable('compare_script', 'compare_script_id', $judgeTask['compare_script_id'], $description, $judgeTask['judgetaskid']);
                     return false;
                 }
                 $new_judging_run['score'] = base64_encode($scoreValue);
@@ -2678,14 +2693,15 @@ class JudgeDaemon
                 $compareMeta = $this->readMetadata($passdir . '/compare.meta');
                 /** @var MetaData_Compare $compareMeta */
                 if ((int)$compareMeta['exitcode'] !== self::COMPARE_EXITCODE_CORRECT) {
-                    $description = sprintf(
-                        "compare script %s created 'nextpass.in' but exited with code %s, expected %d",
-                        $judgeTask['compare_script_id'],
-                        $compareMeta['exitcode'],
-                        self::COMPARE_EXITCODE_CORRECT
+                    $this->disableValidator(
+                        $combined_run_compare,
+                        $judgeTask,
+                        sprintf(
+                            "created 'nextpass.in' but exited with code %s, expected %d",
+                            $compareMeta['exitcode'],
+                            self::COMPARE_EXITCODE_CORRECT
+                        )
                     );
-                    logmsg(LOG_ERR, $description);
-                    $this->disable('compare_script', 'compare_script_id', $judgeTask['compare_script_id'], $description, $judgeTask['judgetaskid']);
                     return false;
                 }
             }
@@ -2701,8 +2717,11 @@ class JudgeDaemon
             }
         }
         if ($nextPass) {
-            $description = "validator produced more passes than allowed ($passLimit)";
-            $this->disable('compare_script', 'compare_script_id', $judgeTask['compare_script_id'], $description, $judgeTask['judgetaskid']);
+            $this->disableValidator(
+                $combined_run_compare,
+                $judgeTask,
+                "produced more passes than allowed ($passLimit)"
+            );
             return false;
         }
 
