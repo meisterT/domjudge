@@ -40,7 +40,7 @@
             {% for problem in problems %}
                 <div class="col">
                                 {% set numsamples = samples[problem.probid] %}
-                                {% if problem.problem.interactiveProblem %}
+                                {% if problem.problem.interactiveProblem or problem.problem.multipassProblem %}
                                     {% set numsamples = 0 %}
                                 {% endif %}
                                 <div class="card">

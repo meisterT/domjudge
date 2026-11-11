@@ -195,6 +195,30 @@ class ProblemControllerTest extends BaseTestCase
         self::assertEquals(404, $response->getStatusCode());
     }
 
+    public function testMultipassSamplesHidden(): void
+    {
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        /** @var Problem $problem */
+        $problem = $em->getRepository(Problem::class)->findOneBy(['externalid' => 'fltcmp']);
+        $problem->setTypesAsString(['pass-fail', 'multi-pass']);
+        $problem->getTestcases()->get(0)->setSample(true);
+        $em->flush();
+
+        $this->logIn();
+
+        $card = $this->client->request('GET', '/team/problems')->filter('.card-body')->eq(1);
+        self::assertSame(0, $card->filter('.list-group .list-group-item')->count());
+        self::assertNotSame('samples', $card->filter('a')->eq(1)->text(null, true));
+
+        $this->client->request('GET', '/team/fltcmp/samples.zip');
+        self::assertEquals(404, $this->client->getResponse()->getStatusCode());
+
+        $this->client->request('GET', '/api/contests/demo/samples.zip');
+        $contestSamples = $this->unzipString($this->client->getInternalResponse()->getContent());
+        $shortname = $problem->getContestProblems()->first()->getShortname();
+        self::assertArrayNotHasKey($shortname . '/1.in', $contestSamples);
+    }
+
     /**
      * Test that problems teams cannot submit to are not accessible by team and public routes.
      */

@@ -855,7 +855,7 @@ class DOMJudgeService implements ResetInterface
      */
     public function getSamplesZipContent(ContestProblem $contestProblem): string
     {
-        if ($contestProblem->getProblem()->isInteractiveProblem()) {
+        if ($contestProblem->getProblem()->isInteractiveProblem() || $contestProblem->getProblem()->isMultipassProblem()) {
             throw new NotFoundHttpException(sprintf('Problem p%d has no downloadable samples', $contestProblem->getProbid()));
         }
 
@@ -951,15 +951,15 @@ class DOMJudgeService implements ResetInterface
             return true;
         }
 
-        /** @var Problem[] $nonInteractiveProblems */
-        $nonInteractiveProblems = (clone $contestQuery)
+        /** @var Problem[] $problemsWithDownloadableSamples */
+        $problemsWithDownloadableSamples = (clone $contestQuery)
             ->innerJoin('p.testcases', 'tc')
             ->andWhere('tc.sample = 1')
-            ->andWhere('BIT_AND(p.types, :interactiveType) = 0')
-            ->setParameter('interactiveType', Problem::TYPE_INTERACTIVE)
+            ->andWhere('BIT_AND(p.types, :excludedTypes) = 0')
+            ->setParameter('excludedTypes', Problem::TYPE_INTERACTIVE | Problem::TYPE_MULTI_PASS)
             ->getQuery()
             ->getResult();
-        if (!empty($nonInteractiveProblems)) {
+        if (!empty($problemsWithDownloadableSamples)) {
             return true;
         }
 
@@ -1016,8 +1016,8 @@ class DOMJudgeService implements ResetInterface
 
         /** @var ContestProblem $problem */
         foreach ($contest->getProblems() as $problem) {
-            // We don't include the samples for interactive problems.
-            if (!$problem->getProblem()->isInteractiveProblem()) {
+            // We don't include the samples for interactive or multi-pass problems.
+            if (!$problem->getProblem()->isInteractiveProblem() && !$problem->getProblem()->isMultipassProblem()) {
                 $this->addSamplesToZip($zip, $problem, $problem->getShortname());
             }
 
