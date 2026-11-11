@@ -998,6 +998,29 @@
                                                     ({{ passData.runtime | number_format(3) }}s)
                                                 {% endif %}
                                             </a>
+                                            <div style="float: right;">
+                                                {% if passData.has_input %}
+                                                    <a class="btn btn-sm btn-outline-secondary" href="{{ path('jury_submission_pass_input', {'contestId': submission.contest.externalid, 'submission': submission.externalid, 'run': run.firstJudgingRun.runid, 'pass': passData.pass}) }}">
+                                                        <i class="fas fa-download"></i>
+                                                        Validator Input
+                                                    </a>
+                                                {% endif %}
+                                                {% if passData.runresult is not null %}
+                                                    <a class="btn btn-sm btn-outline-secondary" href="{{ path('jury_submission_pass_team_output', {'contestId': submission.contest.externalid, 'submission': submission.externalid, 'run': run.firstJudgingRun.runid, 'pass': passData.pass}) }}">
+                                                        <i class="fas fa-download"></i>
+                                                        {% if passData.is_output_run_truncated_in_db %}
+                                                            Truncated
+                                                        {% endif %}
+                                                        Team Output
+                                                    </a>
+                                                    {% if passData.is_output_run_truncated_in_db %}
+                                                        <a class="btn btn-sm btn-outline-secondary" href="{{ path('request_output', {'jid': run.firstJudgingRun.judgingid, 'jrid': run.firstJudgingRun.runid, 'pass': passData.pass}) }}">
+                                                            <i class="fas fa-upload"></i>
+                                                            Retrieve Full Team Output
+                                                        </a>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
                                         </div>
                                         <div class="collapse" id="collapsePass-{{ runIdx }}-{{ passData.pass }}">
                                             <div class="card-body">

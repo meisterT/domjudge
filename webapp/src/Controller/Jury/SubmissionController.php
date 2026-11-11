@@ -508,6 +508,7 @@ class SubmissionController extends BaseController
                     ->leftJoin('jrp.output', 'jrpo')
                     ->select('IDENTITY(jrp.run) AS runid', 'jrp.pass', 'jrp.runresult', 'jrp.runtime')
                     ->addSelect('jrpo.metadata', 'jrpo.validatorMetadata AS validator_metadata')
+                    ->addSelect('CASE WHEN jrpo.input IS NOT NULL THEN 1 ELSE 0 END AS has_input')
                     ->andWhere('pjr.judging = :judging')
                     ->setParameter('judging', $selectedJudging)
                     ->orderBy('jrp.pass');
@@ -522,10 +523,17 @@ class SubmissionController extends BaseController
                 }
                 if ($outputDisplayLimit >= 0) {
                     $passQueryBuilder
+                        ->addSelect('RIGHT(jrpo.output_run, 50) AS output_run_last_bytes')
                         ->setParameter('outputDisplayLimit', $outputDisplayLimit)
                         ->setParameter('outputTruncateMessage', $outputTruncateMessage);
                 }
                 foreach ($passQueryBuilder->getQuery()->getArrayResult() as $passRow) {
+                    $passRow['has_input'] = (bool)$passRow['has_input'];
+                    $passRow['is_output_run_truncated_in_db'] = (bool)preg_match(
+                        '/\[output storage truncated after \d* B\]/',
+                        $outputDisplayLimit >= 0 ?
+                            (string)($passRow['output_run_last_bytes'] ?? '') : (string)($passRow['output_run'] ?? '')
+                    );
                     $passesPerRun[$passRow['runid']][] = $passRow;
                 }
             }
@@ -943,6 +951,63 @@ class SubmissionController extends BaseController
 
         $outputRun = $run->getOutput()->getOutputRun();
         return Utils::streamAsBinaryFile($outputRun, $filename);
+    }
+
+    #[Route(path: '/contests/{contestId}/submissions/{submission}/runs/{run}/passes/{pass<\d+>}/team-output', name: 'jury_submission_pass_team_output')]
+    public function passTeamOutputAction(
+        string $contestId,
+        #[MapEntity(mapping: ['submission' => 'externalid'])]
+        Submission $submission,
+        JudgingRun $run,
+        int $pass,
+    ): StreamedResponse {
+        return $this->streamPassFile($contestId, $submission, $run, $pass, false);
+    }
+
+    #[Route(path: '/contests/{contestId}/submissions/{submission}/runs/{run}/passes/{pass<\d+>}/input', name: 'jury_submission_pass_input')]
+    public function passInputAction(
+        string $contestId,
+        #[MapEntity(mapping: ['submission' => 'externalid'])]
+        Submission $submission,
+        JudgingRun $run,
+        int $pass,
+    ): StreamedResponse {
+        return $this->streamPassFile($contestId, $submission, $run, $pass, true);
+    }
+
+    private function streamPassFile(
+        string $contestId,
+        Submission $submission,
+        JudgingRun $run,
+        int $pass,
+        bool $isInput,
+    ): StreamedResponse {
+        $contest = $this->dj->getContestByExternalId($contestId);
+        if ($run->getJudging()->getSubmission()->getSubmitid() !== $submission->getSubmitid() || $submission->getContest()->getCid() !== $contest->getCid()) {
+            throw new BadRequestHttpException('Integrity problem while fetching pass output.');
+        }
+
+        $passOutput = $this->em->getRepository(JudgingRunPass::class)->findOneBy([
+            'run' => $run,
+            'pass' => $pass,
+        ])?->getOutput();
+        $content = $isInput ? $passOutput?->getInput() : $passOutput?->getOutputRun();
+        if ($content === null) {
+            throw new NotFoundHttpException('No pass data available (yet).');
+        }
+
+        $filename = sprintf(
+            '%s.t%d.%s.run%d.pass%d.%s.%s',
+            $submission->getProblem()->getExternalid(),
+            $run->getTestcase()->getRank(),
+            $submission->getContestProblem()->getShortname(),
+            $run->getRunid(),
+            $pass,
+            $submission->getTeam()->getExternalid(),
+            $isInput ? 'in' : 'out'
+        );
+
+        return Utils::streamAsBinaryFile($content, $filename);
     }
 
     private function allowEdit(): bool {

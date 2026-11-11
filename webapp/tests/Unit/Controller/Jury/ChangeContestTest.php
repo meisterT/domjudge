@@ -67,6 +67,8 @@ class ChangeContestTest extends BaseTestCase
             'submissions/42'                    => 'submissions',
             'submissions/42/source?fetch=0'     => 'submissions',
             'submissions/42/runs/7/team-output' => 'submissions',
+            'submissions/42/runs/7/passes/1/team-output' => 'submissions',
+            'submissions/42/runs/7/passes/2/input' => 'submissions',
             'clarifications/42'                 => 'clarifications',
             'clarifications/42#answer'          => 'clarifications',
             'clarifications/send'               => 'clarifications/send',
