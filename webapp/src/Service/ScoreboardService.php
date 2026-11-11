@@ -27,6 +27,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
 use Doctrine\ORM\Query\Expr\Join;
+use Doctrine\ORM\QueryBuilder;
 use Exception;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -37,6 +38,17 @@ class ScoreboardService
     final public const SHOW_TEAM_ALWAYS = 0;
     final public const SHOW_TEAM_AFTER_LOGIN = 1;
     final public const SHOW_TEAM_AFTER_SUBMIT = 2;
+
+    private const SCORE_CACHE_UPDATE_COLUMNS = [
+        'submissions_restricted', 'pending_restricted', 'solvetime_restricted', 'runtime_restricted',
+        'is_correct_restricted', 'score_restricted', 'submissions_public', 'pending_public',
+        'solvetime_public', 'runtime_public', 'is_correct_public', 'score_public', 'is_first_to_solve',
+    ];
+
+    private const RANK_CACHE_UPDATE_COLUMNS = [
+        'points_restricted', 'totaltime_restricted', 'totalruntime_restricted', 'score_restricted', 'sort_key_restricted',
+        'points_public', 'totaltime_public', 'totalruntime_public', 'score_public', 'sort_key_public',
+    ];
 
     public function __construct(
         protected readonly EntityManagerInterface $em,
@@ -213,179 +225,22 @@ class ScoreboardService
 
         // Determine whether we will use external judgements instead of judgings.
         $useExternalJudgements = $contest->isExternalSourceUseJudgements();
+        $compilePenalty = (bool)$this->config->get('compile_penalty');
+        $verificationRequired = (bool)$this->config->get('verification_required');
 
-        // Note the clause 's.submittime < c.endtime': this is used to
-        // filter out TOO-LATE submissions from pending, but it also means
-        // that these will not count as solved. Correct submissions with
-        // submittime after contest end should never happen, unless one
-        // resets the contest time after successful judging.
-        //
-        // We only select the few columns we need instead of loading entities, as judgings
-        // can carry large compile output. The maximum runtime is only needed for correct judgings.
-        $queryBuilder = $this->em->createQueryBuilder()
-            ->from(Submission::class, 's')
-            ->select('s.submittime AS submittime')
-            ->join('s.contest', 'c')
+        /** @var list<array{submittime: string, result: ?string, verified?: bool|int|string, score: ?string, max_runtime: string|float|null}> $submissions */
+        $submissions = $this->buildSubmissionsQueryBuilder($contest)
             ->andWhere('s.team = :team')
             ->andWhere('s.problem = :problem')
-            ->andWhere('s.contest = :contest')
-            ->andWhere('s.valid = 1')
-            ->andWhere('s.submittime < c.endtime')
             ->setParameter('team', $team)
             ->setParameter('problem', $problem)
-            ->setParameter('contest', $contest)
-            ->setParameter('correctResult', Judging::RESULT_CORRECT)
-            ->orderBy('s.submittime')
-            ->addOrderBy('s.submitid');
+            ->getQuery()
+            ->getScalarResult();
 
-        if ($useExternalJudgements) {
-            $queryBuilder
-                ->addSelect('ej.result AS result', 'ej.score AS score')
-                ->addSelect('(SELECT MAX(er.runtime) FROM ' . ExternalRun::class . ' er
-                              WHERE er.external_judgement = ej AND ej.result = :correctResult) AS max_runtime')
-                ->leftJoin('s.external_judgements', 'ej', Join::WITH, 'ej.valid = 1');
-        } else {
-            $queryBuilder
-                ->addSelect('j.result AS result', 'j.verified AS verified', 'j.score AS score')
-                ->addSelect('(SELECT MAX(jr.runtime) FROM ' . JudgingRun::class . ' jr
-                              WHERE jr.judging = j AND j.result = :correctResult) AS max_runtime')
-                ->leftJoin('s.judgings', 'j', Join::WITH, 'j.valid = 1');
-        }
-
-        /** @var array<array{submittime: string, result: ?string, verified?: bool, score: ?string, max_runtime: string|float|null}> $submissions */
-        $submissions = $queryBuilder->getQuery()->getScalarResult();
-
-        // Check if we need to count compile error as a penalty.
-        $compilePenalty = $this->config->get('compile_penalty');
-
-        $verificationRequired = $this->config->get('verification_required');
-
-        // Initialize variables.
-        $submissionsJury = $pendingJury = $timeJury = 0;
-        $submissionsPubl = $pendingPubl = $timePubl = 0;
-        $correctJury     = false;
-        $correctPubl     = false;
-        $runtimeJury     = PHP_INT_MAX;
-        $runtimePubl     = PHP_INT_MAX;
-
-        $contestStartTime = $contest->getStarttime(false);
-
-        $pointsJury      = "0";
-        $pointsPubl      = "0";
-
-        $firstAbsSubmitTime = null;
-
-        $freezeTime = $contest->getFreezetime();
-
-        // Whether this team has a submission that is pending or correct, and thus may prevent
-        // submissions of other teams from being first to solve.
-        $mayBlockFirstToSolve = false;
-
-        foreach ($submissions as $submission) {
-            $result        = $submission['result'];
-            $isAfterFreeze = $freezeTime !== null && (float)$submission['submittime'] >= $freezeTime;
-
-            if ($problem->isScoringProblem()) {
-                $score = $submission['score'];
-                if ($score !== null) {
-                    if (bccomp($pointsJury, $score, scale: self::SCALE) < 0) {
-                        $pointsJury = $score;
-                    }
-                    if (!$isAfterFreeze &&
-                        bccomp($pointsPubl, $score, scale: self::SCALE) < 0) {
-                        $pointsPubl = $score;
-                    }
-                }
-            }
-
-            // three things will happen in the loop in this order:
-            // 1. update fastest runtime
-            // 2. count submissions until correct submission
-            // 3. determine time of first correct submission
-
-            // STEP 1:
-            // runtime improvements should be possible for all correct submissions
-            if ($result == Judging::RESULT_CORRECT) {
-                $runtime = (int) floor(1000*(float)$submission['max_runtime']); // round to milliseconds
-                $runtimeJury = min($runtimeJury, $runtime);
-                if (!$isAfterFreeze) {
-                    $runtimePubl = min($runtimePubl, $runtime);
-                }
-            }
-
-            // If there is a public and correct submission, we can stop counting
-            // submissions or looking for a correct one (skip steps 2,3)
-            if (!$problem->isScoringProblem() && $correctPubl) {
-                continue;
-            }
-
-            // STEP 2:
-            // Check if this submission has a publicly visible judging result:
-            if (empty($result) ||
-                (!$useExternalJudgements && $verificationRequired && !$submission['verified'])) {
-                // For the jury: only consider it pending if we don't have a
-                // correct one yet. This is needed because during the freeze
-                // we consider submissions after the correct one for the
-                // public to not leak any info.
-                if (!$correctJury) {
-                    $pendingJury++;
-                }
-                $pendingPubl++;
-                $mayBlockFirstToSolve = true;
-                // Don't do any more counting for this submission.
-                continue;
-            }
-
-            // We need to count the submission always, except when we don't want
-            // to count compiler penalties and the judging is a compiler error.
-            $countSubmission = $compilePenalty || $result != Judging::RESULT_COMPILER_ERROR;
-
-            if (($problem->isScoringProblem() || !$correctJury) && $countSubmission) {
-                // For the jury: only consider it as a submission if we don't
-                // have a correct one yet. This is needed because during the
-                // freeze we consider submissions after the correct one for
-                // the public to not leak any info. Note that this only holds for pass-fail problems.
-                $submissionsJury++;
-            }
-            if ($isAfterFreeze) {
-                // Show submissions after freeze as pending to the public (if
-                // SHOW_PENDING is enabled). Note that we even show these
-                // submissions if they are a compiler-error and
-                // compile_penalty is set to false, to not leak any info.
-                $pendingPubl++;
-            } elseif ($countSubmission) {
-                $submissionsPubl++;
-            }
-
-            // If we encountered a correct submission during the whole contest,
-            // do not consider the submissions after that one for correctness.
-            if (!$problem->isScoringProblem() && $correctJury) {
-                continue;
-            }
-
-            // STEP 3:
-            $absSubmitTime = (float)$submission['submittime'];
-            // Negative numbers don't make sense on the scoreboard, cap them to the contest start.
-            $absSubmitTime = max($absSubmitTime, $contestStartTime);
-            $submitTime    = $contest->getContestTime($absSubmitTime);
-
-            // For scoring problems we consider submissions after the first correct one. So we need to
-            // keep track of when the first correct submission occurred.
-            // TODO: is this actually what 'first to solve' for scoring problems means?
-            if ($firstAbsSubmitTime === null) {
-                $firstAbsSubmitTime = $absSubmitTime;
-            }
-
-            if ($result == Judging::RESULT_CORRECT) {
-                $mayBlockFirstToSolve = true;
-                $correctJury = true;
-                $timeJury    = $submitTime;
-                if (!$isAfterFreeze) {
-                    $correctPubl = true;
-                    $timePubl    = $submitTime;
-                }
-            }
-        }
+        $cell = $this->evaluateCellSubmissions($contest, $problem, $submissions, $compilePenalty, $verificationRequired);
+        $correctJury = $cell['is_correct_restricted'];
+        $correctPubl = $cell['is_correct_public'];
+        $mayBlockFirstToSolve = $cell['may_block_first_to_solve'];
 
         // See if this submission was the first to solve this problem.
         // Only relevant if it was correct in the first place.
@@ -395,8 +250,7 @@ class ScoreboardService
                 'cid' => $contest->getCid(),
                 'probid' => $problem->getProbid(),
                 'teamSortOrder' => $team->getSortorder(),
-                /** @phpstan-ignore-next-line $absSubmitTime is always set when $correctJury is true */
-                'submitTime' => $absSubmitTime,
+                'submitTime' => $cell['abs_submittime'],
                 'correctResult' => Judging::RESULT_CORRECT,
                 'scoring' => TeamCategory::TYPE_SCORING,
             ];
@@ -454,41 +308,29 @@ class ScoreboardService
         $wasCorrect = $previous !== false && (bool)$previous['was_correct'];
         $hadBlockedFirstToSolve = $wasCorrect || ($previous !== false && $previous['pending_restricted'] > 0);
 
-        // Use a direct upsert query to drastically speed this up. We do not use REPLACE, as that
-        // deletes and reinserts the row, which also writes rows that did not change.
-        $params = [
-            'cid' => $contest->getCid(),
-            'teamid' => $team->getTeamid(),
-            'probid' => $problem->getProbid(),
-            'submissionsRestricted' => $submissionsJury,
-            'pendingRestricted' => $pendingJury,
-            'solvetimeRestricted' => (int)$timeJury,
-            'runtimeRestricted' => $runtimeJury === PHP_INT_MAX ? 0 : $runtimeJury,
-            'isCorrectRestricted' => (int)$correctJury,
-            'scoreRestricted' => $pointsJury,
-            'submissionsPublic' => $submissionsPubl,
-            'pendingPublic' => $pendingPubl,
-            'solvetimePublic' => (int)$timePubl,
-            'runtimePublic' => $runtimePubl === PHP_INT_MAX ? 0 : $runtimePubl,
-            'isCorrectPublic' => (int)$correctPubl,
-            'scorePublic' => $pointsPubl,
-            'isFirstToSolve' => (int)$firstToSolve,
-        ];
-        $scoreCacheColumns = [
-            'submissions_restricted', 'pending_restricted', 'solvetime_restricted', 'runtime_restricted',
-            'is_correct_restricted', 'score_restricted', 'submissions_public', 'pending_public',
-            'solvetime_public', 'runtime_public', 'is_correct_public', 'score_public', 'is_first_to_solve',
-        ];
-        $this->em->getConnection()->executeQuery('INSERT INTO scorecache
-            (cid, teamid, probid,
-             submissions_restricted, pending_restricted, solvetime_restricted, runtime_restricted, is_correct_restricted, score_restricted,
-             submissions_public, pending_public, solvetime_public, runtime_public, is_correct_public, score_public, is_first_to_solve)
-            VALUES (:cid, :teamid, :probid, :submissionsRestricted, :pendingRestricted, :solvetimeRestricted, :runtimeRestricted, :isCorrectRestricted, :scoreRestricted,
-            :submissionsPublic, :pendingPublic, :solvetimePublic, :runtimePublic, :isCorrectPublic, :scorePublic, :isFirstToSolve)
-            ON DUPLICATE KEY UPDATE ' . implode(', ', array_map(
-                static fn(string $column) => "$column = VALUES($column)",
-                $scoreCacheColumns
-            )), $params);
+        $this->upsertCacheRows(
+            'scorecache',
+            ['cid', 'teamid', 'probid'],
+            self::SCORE_CACHE_UPDATE_COLUMNS,
+            [[
+                $contest->getCid(),
+                $team->getTeamid(),
+                $problem->getProbid(),
+                $cell['submissions_restricted'],
+                $cell['pending_restricted'],
+                $cell['solvetime_restricted'],
+                $cell['runtime_restricted'],
+                (int)$correctJury,
+                $cell['score_restricted'],
+                $cell['submissions_public'],
+                $cell['pending_public'],
+                $cell['solvetime_public'],
+                $cell['runtime_public'],
+                (int)$correctPubl,
+                $cell['score_public'],
+                (int)$firstToSolve,
+            ]]
+        );
 
         if ($this->em->getConnection()->fetchOne('SELECT RELEASE_LOCK(:lock)',
                                                     ['lock' => $lockString]) != 1) {
@@ -596,26 +438,9 @@ class ScoreboardService
             throw new Exception(sprintf("ScoreboardService::updateRankCache failed to obtain lock '%s'", $lockString));
         }
 
-        // Initialize our data
-        $variants  = ['public' => false, 'restricted' => true];
-        $numPoints = [];
-        $totalTime = [];
-        $totalRuntime = [];
-        $timeOfLastCorrect = [];
-        $score = [];
-        foreach ($variants as $variant => $isRestricted) {
-            $numPoints[$variant] = 0;
-            $totalTime[$variant] = $team->getPenalty();
-            $totalRuntime[$variant] = 0;
-            $timeOfLastCorrect[$variant] = 0;
-            $score[$variant] = "0";
-        }
-
-        $penaltyTime      = $contest->getPenaltyTime();
-        $scoreIsInSeconds = (bool)$this->config->get('score_in_seconds');
-
         // Fetch the score cache cells of the problems that are in the contest. This only needs a
         // few columns, so do not load entities for them.
+        /** @var list<array{points: int|string, is_correct_restricted: bool|int|string, submissions_restricted: int|string, solvetime_restricted: float|int|string, runtime_restricted: int|string, score_restricted: float|string, is_correct_public: bool|int|string, submissions_public: int|string, solvetime_public: float|int|string, runtime_public: int|string, score_public: float|string}> $scoreCacheCells */
         $scoreCacheCells = $this->em->createQueryBuilder()
             ->from(ScoreCache::class, 's')
             ->join(ContestProblem::class, 'cp', Join::WITH, 'cp.contest = s.contest AND cp.problem = s.problem')
@@ -637,91 +462,13 @@ class ScoreboardService
             ->getQuery()
             ->getScalarResult();
 
-        // Process all score cache cells.
-        foreach ($scoreCacheCells as $scoreCacheCell) {
-            foreach ($variants as $variant => $isRestricted) {
-                $suffix = $isRestricted ? 'restricted' : 'public';
-                $isCorrect = (bool)$scoreCacheCell['is_correct_' . $suffix];
-                $cellScore = (string)$scoreCacheCell['score_' . $suffix];
-
-                // For scoring contests, add the score even if not fully correct (partial scores)
-                if ($contest->getScoreboardType() === ScoreboardType::SCORE) {
-                    $score[$variant] = bcadd($score[$variant], $cellScore, self::SCALE);
-                }
-
-                // For pass-fail contests (and correct submissions in scoring contests), add points/time
-                if ($isCorrect) {
-                    $penalty = Utils::calcPenaltyTime($isCorrect,
-                                                      (int)$scoreCacheCell['submissions_' . $suffix],
-                                                      $penaltyTime, $scoreIsInSeconds);
-
-                    $numPoints[$variant] += (int)$scoreCacheCell['points'];
-                    $solveTimeForProblem = Utils::scoretime(
-                        (float)$scoreCacheCell['solvetime_' . $suffix],
-                        $scoreIsInSeconds
-                    );
-                    $timeOfLastCorrect[$variant] = max($timeOfLastCorrect[$variant], $solveTimeForProblem);
-                    $totalTime[$variant] += $solveTimeForProblem + $penalty;
-                    $totalRuntime[$variant] += (int)$scoreCacheCell['runtime_' . $suffix];
-                    // For pass-fail contests, also add the score here (even though it's not really used)
-                    if ($contest->getScoreboardType() !== ScoreboardType::SCORE) {
-                        $score[$variant] = bcadd($score[$variant], $cellScore, self::SCALE);
-                    }
-                }
-            }
-        }
-
-        foreach ($variants as $variant => $isRestricted) {
-            if ($contest->getScoreboardType() === ScoreboardType::PASS_FAIL) {
-                if ($contest->getRuntimeAsScoreTiebreaker()) {
-                    $scoreKey[$variant] = self::getRuntimeScoreKey(
-                        $numPoints[$variant],
-                        $totalRuntime[$variant]
-                    );
-                } else {
-                    $scoreKey[$variant] = self::getICPCScoreKey(
-                        $numPoints[$variant],
-                        $totalTime[$variant],
-                        $timeOfLastCorrect[$variant]
-                    );
-                }
-            } else {
-                // TODO: Any tie breakers?
-                $scoreKey[$variant] = self::getScoringScoreKey(
-                    $score[$variant],
-                );
-            }
-        }
-
-        // Use a direct upsert query to drastically speed this up.
-        $params = [
-            'cid' => $contest->getCid(),
-            'teamid' => $team->getTeamid(),
-            'pointsRestricted' => $numPoints['restricted'],
-            'totalTimeRestricted' => $totalTime['restricted'],
-            'totalRuntimeRestricted' => $totalRuntime['restricted'],
-            'pointsPublic' => $numPoints['public'],
-            'totalTimePublic' => $totalTime['public'],
-            'totalRuntimePublic' => $totalRuntime['public'],
-            'sortKeyRestricted' => $scoreKey['restricted'],
-            'sortKeyPublic' => $scoreKey['public'],
-            'scoreRestricted' => $score['restricted'],
-            'scorePublic' => $score['public'],
-        ];
-        $rankCacheColumns = [
-            'points_restricted', 'totaltime_restricted', 'totalruntime_restricted', 'score_restricted',
-            'points_public', 'totaltime_public', 'totalruntime_public', 'sort_key_restricted',
-            'sort_key_public', 'score_public',
-        ];
-        $this->em->getConnection()->executeQuery('INSERT INTO rankcache (cid, teamid,
-            points_restricted, totaltime_restricted, totalruntime_restricted, score_restricted,
-            points_public, totaltime_public, totalruntime_public, sort_key_restricted, sort_key_public, score_public)
-            VALUES (:cid, :teamid, :pointsRestricted, :totalTimeRestricted, :totalRuntimeRestricted, :scoreRestricted,
-            :pointsPublic, :totalTimePublic, :totalRuntimePublic, :sortKeyRestricted, :sortKeyPublic, :scorePublic)
-            ON DUPLICATE KEY UPDATE ' . implode(', ', array_map(
-                static fn(string $column) => "$column = VALUES($column)",
-                $rankCacheColumns
-            )), $params);
+        $scoreIsInSeconds = (bool)$this->config->get('score_in_seconds');
+        $this->upsertCacheRows(
+            'rankcache',
+            ['cid', 'teamid'],
+            self::RANK_CACHE_UPDATE_COLUMNS,
+            [$this->computeRankCacheRow($contest, $team, $scoreCacheCells, $scoreIsInSeconds)]
+        );
 
         if ($this->em->getConnection()->fetchOne('SELECT RELEASE_LOCK(:lock)',
                                                     ['lock' => $lockString]) != 1) {
@@ -840,7 +587,8 @@ class ScoreboardService
 
         $queryBuilder = $this->em->createQueryBuilder()
             ->from(Team::class, 't')
-            ->select('t')
+            ->leftJoin('t.categories', 'tc')
+            ->select('t, tc')
             ->distinct()
             ->orderBy('t.teamid');
         if (!$contest->isOpenToAllTeams()) {
@@ -853,11 +601,11 @@ class ScoreboardService
         }
         /** @var Team[] $teams */
         $teams = $queryBuilder->getQuery()->getResult();
-        /** @var Problem[] $problems */
-        $problems = $this->em->createQueryBuilder()
-            ->from(Problem::class, 'p')
-            ->join('p.contest_problems', 'cp')
-            ->select('p')
+        /** @var ContestProblem[] $contestProblems */
+        $contestProblems = $this->em->createQueryBuilder()
+            ->from(ContestProblem::class, 'cp')
+            ->innerJoin('cp.problem', 'p')
+            ->select('cp, p')
             ->andWhere('cp.contest = :contest')
             ->setParameter('contest', $contest)
             ->orderBy('cp.shortname')
@@ -868,15 +616,63 @@ class ScoreboardService
             $progressReporter(100, '', 'No teams defined, doing nothing.');
             return;
         }
-        if (count($problems) == 0) {
+        if (count($contestProblems) == 0) {
             $progressReporter(100, '', 'No problems defined, doing nothing.');
             return;
         }
 
+        $cid = $contest->getCid();
+        $useExternalJudgements = $contest->isExternalSourceUseJudgements();
+        $compilePenalty = (bool)$this->config->get('compile_penalty');
+        $verificationRequired = (bool)$this->config->get('verification_required');
+        $scoreIsInSeconds = (bool)$this->config->get('score_in_seconds');
+
+        /** @var list<array{teamid: int|string, probid: int|string, submittime: string, result: ?string, verified?: bool|int|string, score: ?string, max_runtime: string|float|null}> $allSubmissions */
+        $allSubmissions = $this->buildSubmissionsQueryBuilder($contest)
+            ->addSelect('IDENTITY(s.team) AS teamid', 'IDENTITY(s.problem) AS probid')
+            ->getQuery()
+            ->getScalarResult();
+
+        $submissionsByCell = [];
+        foreach ($allSubmissions as $submission) {
+            $submissionsByCell[(int)$submission['teamid']][(int)$submission['probid']][] = $submission;
+        }
+
+        $earliestFtsBlocker = [];
+        if ($submissionsByCell) {
+            $ftsSql = $useExternalJudgements
+                ? 'SELECT s.probid, tc.sortorder, MIN(ROUND(s.submittime, 4)) AS min_submittime
+                   FROM submission s
+                   LEFT JOIN external_judgement ej ON s.submitid = ej.submitid AND ej.valid = 1
+                   INNER JOIN team_category_team tcc USING (teamid)
+                   INNER JOIN team_category tc ON tc.categoryid = tcc.categoryid AND (tc.types & :scoring) = :scoring
+                   WHERE s.valid = 1 AND s.cid = :cid
+                       AND (ej.extjudgementid IS NULL OR ej.result IS NULL OR ej.result = :correctResult)
+                   GROUP BY s.probid, tc.sortorder'
+                : 'SELECT s.probid, tc.sortorder, MIN(ROUND(s.submittime, 4)) AS min_submittime
+                   FROM submission s
+                   LEFT JOIN judging j ON s.submitid = j.submitid AND j.valid = 1
+                   INNER JOIN team_category_team tcc USING (teamid)
+                   INNER JOIN team_category tc ON tc.categoryid = tcc.categoryid AND (tc.types & :scoring) = :scoring
+                   WHERE s.valid = 1 AND s.cid = :cid
+                       AND (j.judgingid IS NULL OR j.result IS NULL OR j.result = :correctResult'
+                       . ($verificationRequired ? ' OR j.verified = 0' : '') . ')
+                   GROUP BY s.probid, tc.sortorder';
+            $ftsRows = $this->em->getConnection()->fetchAllAssociative($ftsSql, [
+                'cid' => $cid,
+                'correctResult' => Judging::RESULT_CORRECT,
+                'scoring' => TeamCategory::TYPE_SCORING,
+            ]);
+            foreach ($ftsRows as $row) {
+                $earliestFtsBlocker[(int)$row['probid']][(int)$row['sortorder']] = (float)$row['min_submittime'];
+            }
+        }
+
         $first = true;
         $log = '';
+        $scoreCacheRows = [];
+        $rankCacheRows = [];
 
-        // for each team, fetch the status of each problem.
         foreach ($teams as $index => $team) {
             if (!$first) {
                 $log .= ', ';
@@ -886,24 +682,61 @@ class ScoreboardService
             $progress = (int)round($index / count($teams) * 100);
             $progressReporter($progress, $log);
 
-            // for each problem fetch the result
-            foreach ($problems as $problem) {
-                $this->calculateScoreRow(
-                    $contest, $team, $problem,
-                    updateRankCache: false,
-                    refreshFirstToSolvePeers: false
-                );
+            $teamId = $team->getTeamid();
+            $teamCells = [];
+            if ($team->getScoringCategory()) {
+                $teamSortOrder = $team->getSortorder();
+                foreach ($contestProblems as $cp) {
+                    $problem = $cp->getProblem();
+                    $probId = $problem->getProbid();
+                    $cell = $this->evaluateCellSubmissions(
+                        $contest,
+                        $problem,
+                        $submissionsByCell[$teamId][$probId] ?? [],
+                        $compilePenalty,
+                        $verificationRequired
+                    );
+                    $firstToSolve = $cell['is_correct_restricted']
+                        && (!isset($earliestFtsBlocker[$probId][$teamSortOrder])
+                            || $cell['abs_submittime'] <= $earliestFtsBlocker[$probId][$teamSortOrder]);
+
+                    $scoreCacheRows[] = [
+                        $cid,
+                        $teamId,
+                        $probId,
+                        $cell['submissions_restricted'],
+                        $cell['pending_restricted'],
+                        $cell['solvetime_restricted'],
+                        $cell['runtime_restricted'],
+                        (int)$cell['is_correct_restricted'],
+                        $cell['score_restricted'],
+                        $cell['submissions_public'],
+                        $cell['pending_public'],
+                        $cell['solvetime_public'],
+                        $cell['runtime_public'],
+                        (int)$cell['is_correct_public'],
+                        $cell['score_public'],
+                        (int)$firstToSolve,
+                    ];
+                    $cell['points'] = $cp->getPoints();
+                    $teamCells[] = $cell;
+                }
+            } else {
+                $this->logger->warning("Team '%d' has no category, skipping", [$teamId]);
             }
 
-            $this->updateRankCache($contest, $team);
+            $rankCacheRows[] = $this->computeRankCacheRow($contest, $team, $teamCells, $scoreIsInSeconds);
         }
 
+        $this->upsertCacheRows('scorecache', ['cid', 'teamid', 'probid'], self::SCORE_CACHE_UPDATE_COLUMNS, $scoreCacheRows);
+        $this->upsertCacheRows('rankcache', ['cid', 'teamid'], self::RANK_CACHE_UPDATE_COLUMNS, $rankCacheRows);
+
         // Drop all teams and problems that do not exist in the contest.
-        $problemIds = array_map(fn(Problem $problem) => $problem->getProbid(), $problems);
-        $teamIds = array_map(fn(Team $team) => $team->getTeamid(), $teams);
+        $problemIds = array_map(static fn(ContestProblem $cp) => $cp->getProblem()->getProbid(), $contestProblems);
+        $teamIds = array_map(static fn(Team $team) => $team->getTeamid(), $teams);
 
         $params = [
-            'cid' => $contest->getCid(),
+            'cid' => $cid,
             'problemIds' => $problemIds,
         ];
         $types  = [
@@ -915,7 +748,7 @@ class ScoreboardService
             $params, $types);
 
         $params = [
-            'cid' => $contest->getCid(),
+            'cid' => $cid,
             'teamIds' => $teamIds,
         ];
         $this->em->getConnection()->executeQuery(
@@ -1356,5 +1189,294 @@ class ScoreboardService
         }
 
         return $queryBuilder->getQuery()->getResult();
+    }
+
+    /**
+     * Build the base scalar query for valid in-time submissions of a contest.
+     */
+    private function buildSubmissionsQueryBuilder(Contest $contest): QueryBuilder
+    {
+        // Note the clause 's.submittime < c.endtime': this is used to
+        // filter out TOO-LATE submissions from pending, but it also means
+        // that these will not count as solved. Correct submissions with
+        // submittime after contest end should never happen, unless one
+        // resets the contest time after successful judging.
+        //
+        // We only select the few columns we need instead of loading entities, as judgings
+        // can carry large compile output. The maximum runtime is only needed for correct judgings.
+        $queryBuilder = $this->em->createQueryBuilder()
+            ->from(Submission::class, 's')
+            ->select('s.submittime AS submittime')
+            ->join('s.contest', 'c')
+            ->andWhere('s.contest = :contest')
+            ->andWhere('s.valid = 1')
+            ->andWhere('s.submittime < c.endtime')
+            ->setParameter('contest', $contest)
+            ->setParameter('correctResult', Judging::RESULT_CORRECT)
+            ->orderBy('s.submittime')
+            ->addOrderBy('s.submitid');
+
+        if ($contest->isExternalSourceUseJudgements()) {
+            $queryBuilder
+                ->addSelect('ej.result AS result', 'ej.score AS score')
+                ->addSelect('(SELECT MAX(er.runtime) FROM ' . ExternalRun::class . ' er
+                              WHERE er.external_judgement = ej AND ej.result = :correctResult) AS max_runtime')
+                ->leftJoin('s.external_judgements', 'ej', Join::WITH, 'ej.valid = 1');
+        } else {
+            $queryBuilder
+                ->addSelect('j.result AS result', 'j.verified AS verified', 'j.score AS score')
+                ->addSelect('(SELECT MAX(jr.runtime) FROM ' . JudgingRun::class . ' jr
+                              WHERE jr.judging = j AND j.result = :correctResult) AS max_runtime')
+                ->leftJoin('s.judgings', 'j', Join::WITH, 'j.valid = 1');
+        }
+
+        return $queryBuilder;
+    }
+
+    /**
+     * @param list<array{submittime: string, result: ?string, verified?: bool|int|string, score: ?string, max_runtime: string|float|null}> $submissions
+     * @return array{
+     *     submissions_restricted: int,
+     *     pending_restricted: int,
+     *     solvetime_restricted: int,
+     *     runtime_restricted: int,
+     *     is_correct_restricted: bool,
+     *     score_restricted: string,
+     *     submissions_public: int,
+     *     pending_public: int,
+     *     solvetime_public: int,
+     *     runtime_public: int,
+     *     is_correct_public: bool,
+     *     score_public: string,
+     *     abs_submittime: float,
+     *     may_block_first_to_solve: bool,
+     * }
+     */
+    private function evaluateCellSubmissions(
+        Contest $contest,
+        Problem $problem,
+        array $submissions,
+        bool $compilePenalty,
+        bool $verificationRequired,
+    ): array {
+        $useExternalJudgements = $contest->isExternalSourceUseJudgements();
+        $isScoringProblem = $problem->isScoringProblem();
+        $contestStartTime = (float)$contest->getStarttime(false);
+        $freezeTime = $contest->getFreezetime();
+
+        $submissionsJury = $pendingJury = $timeJury = 0;
+        $submissionsPubl = $pendingPubl = $timePubl = 0;
+        $correctJury = false;
+        $correctPubl = false;
+        $runtimeJury = PHP_INT_MAX;
+        $runtimePubl = PHP_INT_MAX;
+        $pointsJury = '0';
+        $pointsPubl = '0';
+        $absSubmitTime = 0.0;
+        $mayBlockFirstToSolve = false;
+
+        foreach ($submissions as $submission) {
+            $result = $submission['result'];
+            $isAfterFreeze = $freezeTime !== null && (float)$submission['submittime'] >= $freezeTime;
+
+            if ($isScoringProblem) {
+                $score = $submission['score'];
+                if ($score !== null) {
+                    if (bccomp($pointsJury, $score, scale: self::SCALE) < 0) {
+                        $pointsJury = $score;
+                    }
+                    if (!$isAfterFreeze && bccomp($pointsPubl, $score, scale: self::SCALE) < 0) {
+                        $pointsPubl = $score;
+                    }
+                }
+            }
+
+            // STEP 1: runtime improvements should be possible for all correct submissions
+            if ($result == Judging::RESULT_CORRECT) {
+                $runtime = (int)floor(1000 * (float)$submission['max_runtime']);
+                $runtimeJury = min($runtimeJury, $runtime);
+                if (!$isAfterFreeze) {
+                    $runtimePubl = min($runtimePubl, $runtime);
+                }
+            }
+
+            if (!$isScoringProblem && $correctPubl) {
+                continue;
+            }
+
+            // STEP 2: check if this submission has a publicly visible judging result
+            if (empty($result) || (!$useExternalJudgements && $verificationRequired && empty($submission['verified']))) {
+                if (!$correctJury) {
+                    $pendingJury++;
+                }
+                $pendingPubl++;
+                $mayBlockFirstToSolve = true;
+                continue;
+            }
+
+            $countSubmission = $compilePenalty || $result != Judging::RESULT_COMPILER_ERROR;
+            if (($isScoringProblem || !$correctJury) && $countSubmission) {
+                $submissionsJury++;
+            }
+            if ($isAfterFreeze) {
+                $pendingPubl++;
+            } elseif ($countSubmission) {
+                $submissionsPubl++;
+            }
+
+            if (!$isScoringProblem && $correctJury) {
+                continue;
+            }
+
+            // STEP 3: determine time of first correct submission
+            $absSubmitTime = max((float)$submission['submittime'], $contestStartTime);
+            $submitTime = $contest->getContestTime($absSubmitTime);
+
+            if ($result == Judging::RESULT_CORRECT) {
+                $mayBlockFirstToSolve = true;
+                $correctJury = true;
+                $timeJury = $submitTime;
+                if (!$isAfterFreeze) {
+                    $correctPubl = true;
+                    $timePubl = $submitTime;
+                }
+            }
+        }
+
+        return [
+            'submissions_restricted' => $submissionsJury,
+            'pending_restricted' => $pendingJury,
+            'solvetime_restricted' => (int)$timeJury,
+            'runtime_restricted' => $runtimeJury === PHP_INT_MAX ? 0 : $runtimeJury,
+            'is_correct_restricted' => $correctJury,
+            'score_restricted' => $pointsJury,
+            'submissions_public' => $submissionsPubl,
+            'pending_public' => $pendingPubl,
+            'solvetime_public' => (int)$timePubl,
+            'runtime_public' => $runtimePubl === PHP_INT_MAX ? 0 : $runtimePubl,
+            'is_correct_public' => $correctPubl,
+            'score_public' => $pointsPubl,
+            'abs_submittime' => $absSubmitTime,
+            'may_block_first_to_solve' => $mayBlockFirstToSolve,
+        ];
+    }
+
+    /**
+     * @param list<array{
+     *     points: int|string,
+     *     submissions_restricted: int|string,
+     *     solvetime_restricted: float|int|string,
+     *     runtime_restricted: int|string,
+     *     is_correct_restricted: bool|int|string,
+     *     score_restricted: float|string,
+     *     submissions_public: int|string,
+     *     solvetime_public: float|int|string,
+     *     runtime_public: int|string,
+     *     is_correct_public: bool|int|string,
+     *     score_public: float|string,
+     * }> $cells
+     * @return list<int|string>
+     */
+    private function computeRankCacheRow(Contest $contest, Team $team, array $cells, bool $scoreIsInSeconds): array
+    {
+        $variants = ['restricted', 'public'];
+        $numPoints = [];
+        $totalTime = [];
+        $totalRuntime = [];
+        $timeOfLastCorrect = [];
+        $score = [];
+        foreach ($variants as $variant) {
+            $numPoints[$variant] = 0;
+            $totalTime[$variant] = $team->getPenalty();
+            $totalRuntime[$variant] = 0;
+            $timeOfLastCorrect[$variant] = 0;
+            $score[$variant] = '0';
+        }
+
+        $penaltyTime = $contest->getPenaltyTime();
+        $isScoringContest = $contest->getScoreboardType() === ScoreboardType::SCORE;
+
+        foreach ($cells as $cell) {
+            foreach ($variants as $variant) {
+                $cellScore = (string)$cell['score_' . $variant];
+                $isCorrect = (bool)$cell['is_correct_' . $variant];
+                if ($isScoringContest) {
+                    $score[$variant] = bcadd($score[$variant], $cellScore, self::SCALE);
+                }
+                if ($isCorrect) {
+                    $penalty = Utils::calcPenaltyTime(
+                        true,
+                        (int)$cell['submissions_' . $variant],
+                        $penaltyTime,
+                        $scoreIsInSeconds
+                    );
+                    $numPoints[$variant] += (int)$cell['points'];
+                    $solveTime = Utils::scoretime((float)$cell['solvetime_' . $variant], $scoreIsInSeconds);
+                    $timeOfLastCorrect[$variant] = max($timeOfLastCorrect[$variant], $solveTime);
+                    $totalTime[$variant] += $solveTime + $penalty;
+                    $totalRuntime[$variant] += (int)$cell['runtime_' . $variant];
+                    if (!$isScoringContest) {
+                        $score[$variant] = bcadd($score[$variant], $cellScore, self::SCALE);
+                    }
+                }
+            }
+        }
+
+        $scoreKey = [];
+        foreach ($variants as $variant) {
+            if ($contest->getScoreboardType() === ScoreboardType::PASS_FAIL) {
+                $scoreKey[$variant] = $contest->getRuntimeAsScoreTiebreaker()
+                    ? self::getRuntimeScoreKey($numPoints[$variant], $totalRuntime[$variant])
+                    : self::getICPCScoreKey($numPoints[$variant], $totalTime[$variant], $timeOfLastCorrect[$variant]);
+            } else {
+                $scoreKey[$variant] = self::getScoringScoreKey($score[$variant]);
+            }
+        }
+
+        return [
+            $contest->getCid(),
+            $team->getTeamid(),
+            $numPoints['restricted'],
+            $totalTime['restricted'],
+            $totalRuntime['restricted'],
+            $score['restricted'],
+            $scoreKey['restricted'],
+            $numPoints['public'],
+            $totalTime['public'],
+            $totalRuntime['public'],
+            $score['public'],
+            $scoreKey['public'],
+        ];
+    }
+
+    /**
+     * Upsert cache rows in chunks without rewriting unchanged columns via DELETE+INSERT.
+     *
+     * @param list<string>           $keyColumns
+     * @param list<string>           $updateColumns
+     * @param list<list<int|string>> $rows
+     */
+    private function upsertCacheRows(string $table, array $keyColumns, array $updateColumns, array $rows): void
+    {
+        if (!$rows) {
+            return;
+        }
+        $columns = array_merge($keyColumns, $updateColumns);
+        $rowPlaceholder = '(' . implode(', ', array_fill(0, count($columns), '?')) . ')';
+        $updates = implode(', ', array_map(
+            static fn(string $column) => "$column = VALUES($column)",
+            $updateColumns
+        ));
+        $sqlPrefix = sprintf('INSERT INTO %s (%s) VALUES ', $table, implode(', ', $columns));
+        $sqlSuffix = ' ON DUPLICATE KEY UPDATE ' . $updates;
+
+        $connection = $this->em->getConnection();
+        foreach (array_chunk($rows, 1000) as $batch) {
+            $placeholders = implode(', ', array_fill(0, count($batch), $rowPlaceholder));
+            $connection->executeStatement(
+                $sqlPrefix . $placeholders . $sqlSuffix,
+                array_merge(...$batch)
+            );
+        }
     }
 }

@@ -521,6 +521,36 @@ class ScoreboardIntegrationTest extends KernelTestCase
         static::assertEquals(0, $score->totalTime, 'Solve time should be capped to 0');
     }
 
+    public function testRefreshCacheMatchesIncrementalCalculation(): void
+    {
+        $this->contest->setOpenToAllTeams(false)->setFreezetimeString('+01:10:00');
+        foreach ($this->teams as $team) {
+            $team->addContest($this->contest);
+        }
+        $this->teams[2]->setPenalty(15);
+        $this->createDefaultSubmissions();
+        $this->em->flush();
+
+        foreach ($this->teams as $team) {
+            foreach ($this->problems as $problem) {
+                $this->ss->calculateScoreRow($this->contest, $team, $problem, false, false);
+            }
+            $this->ss->updateRankCache($this->contest, $team);
+        }
+
+        $conn = $this->em->getConnection();
+        $cid = $this->contest->getCid();
+        $expectedScore = $conn->fetchAllAssociative('SELECT * FROM scorecache WHERE cid = ? ORDER BY teamid, probid', [$cid]);
+        $expectedRank = $conn->fetchAllAssociative('SELECT * FROM rankcache WHERE cid = ? ORDER BY teamid', [$cid]);
+
+        $conn->executeStatement('DELETE FROM scorecache WHERE cid = ?', [$cid]);
+        $conn->executeStatement('DELETE FROM rankcache WHERE cid = ?', [$cid]);
+        $this->ss->refreshCache($this->contest);
+
+        self::assertSame($expectedScore, $conn->fetchAllAssociative('SELECT * FROM scorecache WHERE cid = ? ORDER BY teamid, probid', [$cid]));
+        self::assertSame($expectedRank, $conn->fetchAllAssociative('SELECT * FROM rankcache WHERE cid = ? ORDER BY teamid', [$cid]));
+    }
+
     /**
      * Test that with the runtime tiebreaker enabled, teams are ranked by total runtime
      * instead of by penalty time.
