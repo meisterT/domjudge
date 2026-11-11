@@ -485,6 +485,57 @@ class JudgehostWorkflowTest extends BaseTestCase
     }
 
     /**
+     * Only the judgehost that claims a compile error records a compiler-error verdict. A
+     * contradicting compile error after a successful compile (or a duplicate compile error
+     * after another judgehost already claimed it) must not log the judging as judged or emit
+     * a premature judging update event.
+     */
+    public function testUnclaimedCompileErrorDoesNotEmitVerdictSideEffects(): void
+    {
+        $this->registerJudgehost();
+        $this->registerJudgehost('broken-judgehost');
+        $this->fetchWork();
+        $this->fetchWork('broken-judgehost');
+        $this->addSubmission(problem: 'boolfind');
+
+        $healthyBatch = $this->fetchWork();
+        $brokenBatch = $this->fetchWork('broken-judgehost');
+        $judgingId = $this->judgingForTask((int)$healthyBatch[0]['judgetaskid'])->getJudgingid();
+
+        $this->updateJudging((int)$healthyBatch[0]['judgetaskid'], [
+            'compile_success' => 1,
+            'output_compile' => base64_encode('ok'),
+            'compile_metadata' => base64_encode('meta'),
+        ]);
+
+        $this->request(
+            'PUT',
+            sprintf('/judgehosts/update-judging/%s/%d', 'broken-judgehost', (int)$brokenBatch[0]['judgetaskid']),
+            [
+                'compile_success' => 0,
+                'output_compile' => base64_encode('compiler crashed'),
+                'compile_metadata' => base64_encode('meta'),
+            ],
+            204
+        );
+
+        $em = $this->freshEm();
+        $judging = $em->getRepository(Judging::class)->find($judgingId);
+        self::assertNull($judging->getResult(), 'the judging is still in progress');
+        self::assertNotNull($judging->getInternalError(), 'the contradiction must be flagged');
+        self::assertFalse(
+            $em->getRepository(Judgehost::class)->findOneBy(['hostname' => 'broken-judgehost'])->getEnabled()
+        );
+        self::assertSame(0, $this->judgedCount($judgingId), 'a contradicting compile error is not a verdict');
+
+        $updateEvents = (int)$em->getConnection()->fetchOne(
+            'SELECT COUNT(*) FROM event WHERE endpointtype = :type AND endpointid = :id AND action = :action',
+            ['type' => 'judgings', 'id' => (string)$judgingId, 'action' => 'update']
+        );
+        self::assertSame(0, $updateEvents, 'no judging update event may be emitted before a verdict exists');
+    }
+
+    /**
      * As above, for the end time: the other judgehost sets it between this one seeing it unset
      * and writing it. The end time it set must stand.
      */

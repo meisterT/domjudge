@@ -433,6 +433,31 @@ class JudgehostController extends AbstractFOSRestController
                         /** @var Judging $judging */
                         $judging = $query->getOneOrNullResult();
                     }
+
+                    $judgingId = $judging->getJudgingid();
+                    $contestId = $judging->getSubmission()->getContest()->getCid();
+                    $contestExternalid = $judging->getSubmission()->getContest()->getExternalid();
+                    $this->dj->auditlog('judging', (string)$judgingId, 'judged',
+                                        'compiler-error', $judgehost->getHostname(), $contestExternalid);
+
+                    $this->maybeUpdateActiveJudging($judging);
+                    if (!$this->config->get('verification_required') &&
+                        $judging->getValid()) {
+                        $this->eventLogService->log('judging', $judgingId,
+                                                    EventLogService::ACTION_UPDATE, $contestId);
+                    }
+
+                    $submission = $judging->getSubmission();
+                    $contest    = $submission->getContest();
+                    $team       = $submission->getTeam();
+                    $problem    = $submission->getProblem();
+                    // Outside any transaction, as ScoreboardService requires: it takes a MariaDB
+                    // advisory lock and would otherwise hold it across the caller's row locks.
+                    $this->scoreboardService->calculateScoreRow($contest, $team, $problem);
+
+                    $message = sprintf("submission %s, judging %d: compiler-error",
+                                       $submission->getExternalid(), $judging->getJudgingid());
+                    $this->dj->alert('reject', $message);
                 } elseif ($judging->getResult() !== Judging::RESULT_COMPILER_ERROR) {
                     // The new result contradicts a former one, that's not good.
                     // Since at least one other judgehost was successful, but we were not, assume that the
@@ -445,31 +470,6 @@ class JudgehostController extends AbstractFOSRestController
 
                     $this->em->flush();
                 }
-
-                $judgingId = $judging->getJudgingid();
-                $contestId = $judging->getSubmission()->getContest()->getCid();
-                $contestExternalid = $judging->getSubmission()->getContest()->getExternalid();
-                $this->dj->auditlog('judging', (string)$judgingId, 'judged',
-                                    'compiler-error', $judgehost->getHostname(), $contestExternalid);
-
-                $this->maybeUpdateActiveJudging($judging);
-                if (!$this->config->get('verification_required') &&
-                    $judging->getValid()) {
-                    $this->eventLogService->log('judging', $judgingId,
-                                                EventLogService::ACTION_UPDATE, $contestId);
-                }
-
-                $submission = $judging->getSubmission();
-                $contest    = $submission->getContest();
-                $team       = $submission->getTeam();
-                $problem    = $submission->getProblem();
-                // Outside any transaction, as ScoreboardService requires: it takes a MariaDB
-                // advisory lock and would otherwise hold it across the caller's row locks.
-                $this->scoreboardService->calculateScoreRow($contest, $team, $problem);
-
-                $message = sprintf("submission %s, judging %d: compiler-error",
-                                   $submission->getExternalid(), $judging->getJudgingid());
-                $this->dj->alert('reject', $message);
             }
         } else {
             throw new BadRequestHttpException('Inconsistent data, no compilation data provided.');
