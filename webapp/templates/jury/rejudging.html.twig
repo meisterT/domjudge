@@ -235,7 +235,7 @@
                 <select style="width: 100%" class="select2 form-control" name="oldverdict" id="oldverdict">
                     <option value="all" {% if oldverdict == 'all' %}selected{% endif %}>all</option>
                     {%- for verdict, abbreviation in verdicts %}
-                        <option value="{% if verdict == '' %}judging{% else %}{{ verdict }}{% endif %}" {% if oldverdict == verdict %}selected{% endif %}>
+                        <option value="{% if verdict == '' %}judging{% else %}{{ verdict }}{% endif %}" {% if oldverdict == verdict or (verdict == '' and oldverdict == 'judging') %}selected{% endif %}>
                             {% if verdict == '' %}
                                 still judging
                             {% else %}
@@ -251,7 +251,7 @@
                 <select style="width: 100%" class="select2 form-control" name="newverdict" id="newverdict">
                     <option value="all" {% if newverdict == 'all' %}selected{% endif %}>all</option>
                     {%- for verdict, abbreviation in verdicts %}
-                        <option value="{% if verdict == '' %}judging{% else %}{{ verdict }}{% endif %}" {% if newverdict == verdict %}selected{% endif %}>
+                        <option value="{% if verdict == '' %}judging{% else %}{{ verdict }}{% endif %}" {% if newverdict == verdict or (verdict == '' and newverdict == 'judging') %}selected{% endif %}>
                             {% if verdict == '' %}
                                 still judging
                             {% else %}

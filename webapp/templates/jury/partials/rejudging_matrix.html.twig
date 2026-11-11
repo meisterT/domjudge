@@ -24,7 +24,7 @@
                                 {% set class = 'zero' %}
                             {% else %}
                                 {% set class = 'changed' %}
-                                {% set link = path('jury_rejudging', {rejudgingId: rejudging.rejudgingid, view: 'all', oldverdict: originalVerdict, newverdict: newVerdict}) %}
+                                {% set link = path('jury_rejudging', {rejudgingId: rejudging.rejudgingid, view: 'all', oldverdict: originalVerdict == '' ? 'judging' : originalVerdict, newverdict: newVerdict == '' ? 'judging' : newVerdict}) %}
                             {% endif %}
                             <td class="{{ class }}">
                                 {% if link is not null %}

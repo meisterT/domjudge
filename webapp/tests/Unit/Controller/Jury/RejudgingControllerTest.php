@@ -203,6 +203,64 @@ class RejudgingControllerTest extends BaseTestCase
         self::assertResponseStatusCodeSame(404);
     }
 
+    public function testAddRejudgingAutoApplyAndIncludePending(): void
+    {
+        $this->roles = ['jury'];
+        $this->logOut();
+        $this->logIn();
+        $this->verifyPageResponse('GET', '/jury/rejudgings/add', 200);
+        self::assertSelectorExists('#rejudging_auto_apply');
+        self::assertSelectorNotExists('#rejudging_include_pending');
+        $this->client->xmlHttpRequest('POST', '/jury/rejudgings/add', ['include_pending' => '1']);
+        self::assertResponseStatusCodeSame(400);
+
+        $this->roles = ['admin'];
+        $this->logOut();
+        $this->logIn();
+
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $conn = $em->getConnection();
+        $message = null;
+        $pending = static::getContainer()->get(SubmissionService::class)->submitSolution(
+            $em->getRepository(Team::class)->findOneBy(['name' => 'DOMjudge']),
+            null,
+            $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']),
+            $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']),
+            'c',
+            [new UploadedFile(__FILE__, 'foo.c', null, null, true)],
+            SubmissionSource::UNKNOWN, null, null, null, null, null, $message
+        );
+        $pendingSubmitId = $pending->getSubmitid();
+
+        $rejudgingId = $this->submitAddRejudgingForm([
+            'rejudging[reason]' => 'auto apply pending',
+            'rejudging[verdicts]' => [],
+            'rejudging[auto_apply]' => '1',
+            'rejudging[include_pending]' => '1',
+        ]);
+        self::assertSame($rejudgingId, $this->getRejudgingOfSubmission($pendingSubmitId));
+        self::assertSame(1, (int)$conn->fetchOne(
+            'SELECT auto_apply FROM rejudging WHERE rejudgingid = ?',
+            [$rejudgingId]
+        ));
+    }
+
+    /**
+     * @param array<string, mixed> $formValues
+     */
+    private function submitAddRejudgingForm(array $formValues): int
+    {
+        $crawler = $this->client->request('GET', '/jury/rejudgings/add');
+        $this->client->submit($crawler->selectButton('Add')->form($formValues));
+        preg_match("/body: '([^']*)'/", (string)$this->client->getResponse()->getContent(), $bodyMatch);
+        parse_str($bodyMatch[1], $xhrData);
+
+        $this->client->xmlHttpRequest('POST', '/jury/rejudgings/add', $xhrData);
+        preg_match('#"redirect":"/jury/rejudgings/(\d+)"#', $this->client->getInternalResponse()->getContent(), $redirectMatch);
+
+        return (int)$redirectMatch[1];
+    }
+
     /**
      * Create a rejudging like the rejudge button does and return the progress it reported.
      */

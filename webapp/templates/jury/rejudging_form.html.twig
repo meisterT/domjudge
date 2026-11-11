@@ -23,6 +23,19 @@
 {% block extrafooter %}
     <script>
         $(function () {
+            var $autoApply = $('#rejudging_auto_apply');
+            var $repeatRow = $('#rejudging_repeat').closest('.mb-3');
+            function updateRepeatVisibility() {
+                if ($autoApply.is(':checked')) {
+                    $repeatRow.addClass('d-none');
+                    $('#rejudging_repeat').val(1);
+                } else {
+                    $repeatRow.removeClass('d-none');
+                }
+            }
+            $autoApply.on('change', updateRepeatVisibility);
+            updateRepeatVisibility();
+
             var $contests = $('#rejudging_contests');
             $contests.on('change', function () {
                 var $problems = $('#rejudging_problems');

@@ -322,20 +322,22 @@ class RejudgingController extends BaseController
 
         foreach ($newVerdicts as $submitid => $newVerdict) {
             $originalVerdict = $originalVerdicts[$submitid];
+            $oldResult = $originalVerdict->getResult() ?? '';
+            $newResult = $newVerdict->getResult() ?? '';
 
             // Add verdicts to data structures if they are unknown up to now.
-            foreach ([$newVerdict, $originalVerdict] as $verdict) {
-                if (!array_key_exists($verdict->getResult(), $verdicts)) {
-                    $addVerdict($verdict->getResult());
+            foreach ([$newResult, $oldResult] as $result) {
+                if (!array_key_exists($result, $verdicts)) {
+                    $addVerdict($result);
                 }
             }
 
             // Mark them as used, so we can filter out unused cols/rows later.
-            $used[$originalVerdict->getResult()] = true;
-            $used[$newVerdict->getResult()]      = true;
+            $used[$oldResult] = true;
+            $used[$newResult] = true;
 
             // Append submitid to list of orig->new verdicts.
-            $verdictTable[$originalVerdict->getResult()][$newVerdict->getResult()][] = $submitid;
+            $verdictTable[$oldResult][$newResult][] = $submitid;
 
             // Collect score change data for scoring problems.
             $submission = $newVerdict->getSubmission();
@@ -541,38 +543,40 @@ class RejudgingController extends BaseController
         if ($isNormalPost && $form->isSubmitted() && $form->isValid()) {
             $formData = $form->getData();
             $data = [
-                'reason'     => $formData['reason'],
-                'priority'   => JudgeTask::parsePriority($formData['priority']),
-                'repeat'     => $formData['repeat'],
-                'contests'   => array_map(
+                'reason'          => $formData['reason'],
+                'priority'        => JudgeTask::parsePriority($formData['priority']),
+                'repeat'          => $formData['repeat'],
+                'auto_apply'      => $formData['auto_apply'],
+                'include_pending' => !empty($formData['include_pending']),
+                'contests'        => array_map(
                     fn(Contest $contest) => $contest->getCid(),
                     $formData['contests'] ? $formData['contests']->toArray() : []
                 ),
-                'problems'   => array_map(
+                'problems'        => array_map(
                     fn(Problem $problem) => $problem->getProbid(),
                     $formData['problems'] ? $formData['problems']->toArray() : []
                 ),
-                'languages'  => array_map(
+                'languages'       => array_map(
                     fn(Language $language) => $language->getLangid(),
                     $formData['languages'] ? $formData['languages']->toArray() : []
                 ),
-                'teams'      => array_map(
+                'teams'           => array_map(
                     fn(Team $team) => $team->getTeamid(),
                     $formData['teams'] ? $formData['teams']->toArray() : []
                 ),
-                'users'      => array_map(
+                'users'           => array_map(
                     fn(User $user) => $user->getUserid(),
                     $formData['users'] ? $formData['users']->toArray() : []
                 ),
-                'judgehosts' => array_map(
+                'judgehosts'      => array_map(
                     fn(Judgehost $judgehost) => $judgehost->getJudgehostid(),
                     $formData['judgehosts'] ? $formData['judgehosts']->toArray() : []
                 ),
-                'verdicts'   => array_values($formData['verdicts']),
-                'before'     => $formData['before'],
-                'after'      => $formData['after'],
-                'referer'    => $request->headers->get('referer'),
-                'overshoot'  => $formData['overshoot'],
+                'verdicts'        => array_values($formData['verdicts']),
+                'before'          => $formData['before'],
+                'after'           => $formData['after'],
+                'referer'         => $request->headers->get('referer'),
+                'overshoot'       => $formData['overshoot'],
             ];
             return $this->render('jury/rejudging_add.html.twig', [
                 'data'    => http_build_query($data),
@@ -580,6 +584,9 @@ class RejudgingController extends BaseController
             ]);
         }
         if ($isCreateRejudgingAjax) {
+            if ($request->request->getBoolean('include_pending') && !$this->authService->checkRole('admin')) {
+                throw new BadRequestHttpException('Rejudging pending submissions requires admin rights');
+            }
             $progressReporter = function (int $progress, string $log, ?string $redirect = null): void {
                 echo Utils::jsonEncode(['progress' => $progress, 'log' => htmlspecialchars($log), 'redirect' => $redirect]);
                 Utils::ob_flush_if_possible();
@@ -643,11 +650,22 @@ class RejudgingController extends BaseController
                         ->distinct();
                 }
                 /** @var string[] $verdicts */
-                $verdicts = $data['verdicts'] ?? [];
-                if (count($verdicts)) {
+                $verdicts       = $data['verdicts'] ?? [];
+                $includePending = $request->request->getBoolean('include_pending');
+                if (count($verdicts) && $includePending) {
+                    $queryBuilder
+                        ->andWhere('j.result IN (:verdicts) OR j.result IS NULL')
+                        ->setParameter('verdicts', $verdicts);
+                } elseif (count($verdicts)) {
                     $queryBuilder
                         ->andWhere('j.result IN (:verdicts)')
                         ->setParameter('verdicts', $verdicts);
+                } elseif ($includePending) {
+                    $queryBuilder->andWhere('j.result IS NULL');
+                } else {
+                    $this->addFlash('danger', 'No judgings matched.');
+                    $progressReporter(100, '', $this->generateUrl('jury_rejudging_add'));
+                    return;
                 }
                 $before = $data['before'] ?? null;
                 $after  = $data['after'] ?? null;
@@ -684,9 +702,11 @@ class RejudgingController extends BaseController
                     return;
                 }
 
-                $skipped = [];
-                $res     = $this->rejudgingService->createRejudging(
-                    $reason, (int)$data['priority'], $judgings, false, (int)($data['repeat'] ?? 1), (int) ($data['overshoot'] ?? 0), null, $skipped, $progressReporter);
+                $autoApply = $request->request->getBoolean('auto_apply');
+                $repeat    = $autoApply ? 1 : (int)($data['repeat'] ?? 1);
+                $skipped   = [];
+                $res       = $this->rejudgingService->createRejudging(
+                    $reason, (int)$data['priority'], $judgings, $autoApply, $repeat, (int) ($data['overshoot'] ?? 0), null, $skipped, $progressReporter);
                 $this->generateFlashMessagesForSkippedJudgings($skipped);
 
                 if ($res === null) {

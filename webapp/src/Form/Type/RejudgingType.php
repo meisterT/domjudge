@@ -8,11 +8,13 @@ use App\Entity\Language;
 use App\Entity\Problem;
 use App\Entity\Team;
 use App\Entity\User;
+use App\Service\AuthorizedUserService;
 use App\Service\ConfigurationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Symfony\Bridge\Doctrine\Form\Type\EntityType;
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\IntegerType;
 use Symfony\Component\Form\Extension\Core\Type\SubmitType;
@@ -21,12 +23,17 @@ use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormEvent;
 use Symfony\Component\Form\FormEvents;
 use Symfony\Component\Form\FormInterface;
+use Symfony\Component\Validator\Constraints\Callback;
 use Symfony\Component\Validator\Constraints\Regex;
+use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
 class RejudgingType extends AbstractType
 {
-    public function __construct(protected readonly ConfigurationService $config, protected readonly EntityManagerInterface $em)
-    {
+    public function __construct(
+        protected readonly ConfigurationService $config,
+        protected readonly EntityManagerInterface $em,
+        protected readonly AuthorizedUserService $authService,
+    ) {
     }
 
     public function buildForm(FormBuilderInterface $builder, array $options): void
@@ -42,10 +49,24 @@ class RejudgingType extends AbstractType
                 'data' => 'default',
             ]
         );
+        $builder->add('auto_apply', CheckboxType::class, [
+            'label' => 'Automatically apply judging(s) when ready',
+            'required' => false,
+        ]);
         $builder->add('repeat', IntegerType::class, [
             'label' => 'Number of times to repeat this rejudging',
             'data' => 1,
-            'attr' => ['min' => 1, 'max' => 99]
+            'attr' => ['min' => 1, 'max' => 99],
+            'constraints' => [
+                new Callback(function (mixed $value, ExecutionContextInterface $context): void {
+                    /** @var FormInterface $form */
+                    $form = $context->getRoot();
+                    if ($form->get('auto_apply')->getData() && $value > 1) {
+                        $context->buildViolation('Cannot repeat a rejudging that is automatically applied.')
+                            ->addViolation();
+                    }
+                }),
+            ],
         ]);
         $builder->add('contests', EntityType::class, [
             'label' => 'Contest',
@@ -118,7 +139,27 @@ class RejudgingType extends AbstractType
             'multiple' => true,
             'required' => false,
             'choices' => array_combine($verdicts, $verdicts),
+            'constraints' => [
+                new Callback(function (mixed $value, ExecutionContextInterface $context): void {
+                    /** @var FormInterface $form */
+                    $form = $context->getRoot();
+                    $includePending = $form->has('include_pending') && $form->get('include_pending')->getData();
+                    if (empty($value) && !$includePending) {
+                        $message = $form->has('include_pending')
+                            ? 'Select at least one verdict or include pending submissions.'
+                            : 'Select at least one verdict.';
+                        $context->buildViolation($message)
+                            ->addViolation();
+                    }
+                }),
+            ],
         ]);
+        if ($this->authService->checkRole('admin')) {
+            $builder->add('include_pending', CheckboxType::class, [
+                'label' => 'Include pending submissions',
+                'required' => false,
+            ]);
+        }
         $relativeTimeConstraints = [
             new Regex(
                 pattern: '/^[+-][0-9]+:[0-9]{2}(:[0-9]{2}(\.[0-9]{0,6})?)?$/',

@@ -473,16 +473,23 @@ class SubmissionService
 
             if (isset($restrictions->rejudgingDifference)) {
                 if ($restrictions->rejudgingDifference) {
-                    $queryBuilder->andWhere('j.result != COALESCE(jold.result, jold2.result)');
+                    $queryBuilder->andWhere("j.result != COALESCE(jold.result, jold2.result, '-')");
                 } else {
-                    $queryBuilder->andWhere('j.result = COALESCE(jold.result, jold2.result)');
+                    $queryBuilder->andWhere(
+                        '(j.result IS NULL AND COALESCE(jold.result, jold2.result) IS NULL) '
+                        . 'OR j.result = COALESCE(jold.result, jold2.result)'
+                    );
                 }
             }
 
             if (isset($restrictions->oldResult)) {
-                $queryBuilder
-                    ->andWhere('COALESCE(jold.result, jold2.result) = :oldresult')
-                    ->setParameter('oldresult', $restrictions->oldResult);
+                if ($restrictions->oldResult === 'judging') {
+                    $queryBuilder->andWhere('COALESCE(jold.result, jold2.result) IS NULL');
+                } else {
+                    $queryBuilder
+                        ->andWhere('COALESCE(jold.result, jold2.result) = :oldresult')
+                        ->setParameter('oldresult', $restrictions->oldResult);
+                }
             }
         } else {
             $queryBuilder->leftJoin('s.judgings', 'j', Join::WITH, 'j.valid = 1');
