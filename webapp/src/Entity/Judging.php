@@ -27,6 +27,7 @@ class Judging extends AbstractJudgement
 {
     final public const RESULT_CORRECT = 'correct';
     final public const RESULT_COMPILER_ERROR = 'compiler-error';
+    final public const RESULT_ABORTED = 'aborted';
 
     #[ORM\Id]
     #[ORM\GeneratedValue]

@@ -948,7 +948,7 @@ class JudgehostController extends AbstractFOSRestController
             } else {
                 // Give back only the unfinished runs that this judgehost had claimed; runs
                 // that already have a result stay where they are.
-                $this->em->getConnection()->executeStatement(
+                $returned = $this->em->getConnection()->executeStatement(
                     'UPDATE judgetask jt
                         INNER JOIN judging_run jr ON jr.judgetaskid = jt.judgetaskid
                         SET jt.judgehostid = NULL, jt.starttime = NULL
@@ -960,6 +960,9 @@ class JudgehostController extends AbstractFOSRestController
                         'judgehostid' => $judgehost->getJudgehostid(),
                     ]
                 );
+                if ($returned > 0) {
+                    $this->ensureQueueTaskForJudging($judgingId);
+                }
             }
 
             if ($judgehost === null) {
@@ -985,6 +988,85 @@ class JudgehostController extends AbstractFOSRestController
                 . ($judgehost === null ? '' : ' for judgehost ' . $judgehost->getHostname()), null,
                 $judgehost?->getHostname(), $judging->getContest()->getExternalid());
         }
+    }
+
+    /**
+     * Ensure that a judging whose unclaimed valid judge tasks were just restored has an
+     * unstarted queue task so fetch-work can hand those tasks out again.
+     */
+    private function ensureQueueTaskForJudging(int $judgingId): void
+    {
+        $conn = $this->em->getConnection();
+
+        $judgingRow = $conn->fetchAssociative(
+            'SELECT result, submitid FROM judging WHERE judgingid = :jobid',
+            ['jobid' => $judgingId]
+        );
+        if (
+            $judgingRow === false
+            || $judgingRow['result'] === Judging::RESULT_ABORTED
+            || $judgingRow['result'] === Judging::RESULT_COMPILER_ERROR
+        ) {
+            return;
+        }
+
+        $priority = $conn->fetchOne(
+            'SELECT MIN(priority) FROM judgetask
+              WHERE jobid = :jobid
+                AND type = :type
+                AND valid = 1
+                AND judgehostid IS NULL',
+            [
+                'jobid' => $judgingId,
+                'type' => JudgeTaskType::JUDGING_RUN,
+            ]
+        );
+        if ($priority === null) {
+            return;
+        }
+
+        $existingQueueTaskId = $conn->fetchOne(
+            'SELECT queuetaskid FROM queuetask WHERE judgingid = :jobid LIMIT 1',
+            ['jobid' => $judgingId]
+        );
+        if ($existingQueueTaskId !== false) {
+            // Clearing starttime lets another judgehost pick up the judging when
+            // enable_parallel_judging is disabled; if another host claimed it in the meantime,
+            // a second host could briefly join (the same race fetch-work already accepts).
+            $updated = $conn->executeStatement(
+                'UPDATE queuetask SET starttime = NULL WHERE judgingid = :jobid AND starttime IS NOT NULL',
+                ['jobid' => $judgingId]
+            );
+            if ($updated > 0) {
+                $this->dj->auditlog('queuetask', (string)$judgingId, 'starttime reset');
+            }
+            return;
+        }
+
+        $submissionRow = $conn->fetchAssociative(
+            'SELECT teamid, submittime FROM submission WHERE submitid = :submitid',
+            ['submitid' => $judgingRow['submitid']]
+        );
+        if ($submissionRow === false) {
+            return;
+        }
+
+        // Use MIN(priority) of the remaining unclaimed tasks (keeping undecided judgings at
+        // their original priority while leaving post-verdict EVAL_FULL tasks at PRIORITY_LOW)
+        // and raw submittime for teampriority, following JudgeRemainingTrait.
+        // Two concurrent give-backs for the same judging can each insert a row here;
+        // fetch-work updates and deletes queuetask by judgingid, so a duplicate is harmless.
+        $conn->executeStatement(
+            'INSERT INTO queuetask (judgingid, priority, teamid, teampriority, starttime)
+             VALUES (:judgingid, :priority, :teamid, :teampriority, NULL)',
+            [
+                'judgingid' => $judgingId,
+                'priority' => (int)$priority,
+                'teamid' => $submissionRow['teamid'] !== null ? (int)$submissionRow['teamid'] : null,
+                'teampriority' => (int)$submissionRow['submittime'],
+            ]
+        );
+        $this->dj->auditlog('queuetask', (string)$judgingId, 'restored');
     }
 
     /**

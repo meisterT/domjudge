@@ -761,4 +761,125 @@ class JudgehostWorkflowTest extends BaseTestCase
         self::assertCount(1, $active, 'exactly one version stays active per judgehost and language');
         self::assertSame('gcc 14.1.0', $active[0]->getCompilerVersion());
     }
+
+    /**
+     * Once all judge tasks of a judging have been claimed, a subsequent fetch-work deletes its
+     * queue task. Giving unfinished runs back afterwards must restore a queue task so another
+     * judgehost can pick them up and finish the judging.
+     */
+    public function testGiveBackRestoresDeletedQueueTask(): void
+    {
+        $this->registerJudgehost();
+        $this->registerJudgehost('second-judgehost');
+        $this->addSubmission();
+
+        $tasks = $this->fetchWork();
+        self::assertNotEmpty($tasks);
+        $judgeTaskId = (int)$tasks[0]['judgetaskid'];
+        $judging = $this->judgingForTask($judgeTaskId);
+        $judgingId = $judging->getJudgingid();
+
+        // All tasks are claimed, so another fetch-work cleans up the queue task.
+        self::assertSame([], $this->fetchWork('second-judgehost'));
+        self::assertNull(
+            $this->freshEm()->getRepository(QueueTask::class)->findOneBy(['judging' => $judgingId]),
+            'the queue task is removed once no unclaimed judge tasks remain'
+        );
+
+        // Disabling the first judgehost gives its unfinished task back.
+        $this->request('POST', '/judgehosts/internal-error', [
+            'description' => 'disk full during judging',
+            'judgehostlog' => base64_encode('a log'),
+            'disabled' => json_encode(['kind' => 'judgehost', 'hostname' => self::HOSTNAME]),
+            'judgetaskid' => $judgeTaskId,
+            'hostname' => self::HOSTNAME,
+        ]);
+
+        $restoredQueueTask = $this->freshEm()->getRepository(QueueTask::class)
+            ->findOneBy(['judging' => $judgingId]);
+        self::assertNotNull($restoredQueueTask, 'giving back valid tasks must restore a queue task');
+        self::assertNull($restoredQueueTask->getStartTime());
+        self::assertSame(
+            ['deleted', 'restored'],
+            $this->em()->getConnection()->fetchFirstColumn(
+                'SELECT action FROM auditlog WHERE datatype = :type AND dataid = :id ORDER BY logid',
+                ['type' => 'queuetask', 'id' => (string)$judgingId]
+            ),
+            'the deleted/restored queue task lifecycle must be recorded in the audit log'
+        );
+
+        $reclaimed = $this->fetchWork('second-judgehost');
+        self::assertCount(count($tasks), $reclaimed, 'another judgehost must be able to fetch the returned work');
+        foreach ($reclaimed as $task) {
+            $this->request(
+                'POST',
+                sprintf('/judgehosts/add-judging-run/%s/%d', 'second-judgehost', (int)$task['judgetaskid']),
+                [
+                    'runresult' => 'correct',
+                    'runtime' => '0.01',
+                    'output_run' => base64_encode('run'),
+                    'output_diff' => base64_encode('diff'),
+                    'output_error' => base64_encode(''),
+                    'output_system' => base64_encode(''),
+                    'metadata' => base64_encode(''),
+                    'start_time' => (string)(microtime(true) - 1),
+                    'end_time' => (string)microtime(true),
+                ]
+            );
+        }
+
+        $completed = $this->judgingForTask($judgeTaskId);
+        self::assertSame(Judging::RESULT_CORRECT, $completed->getResult());
+    }
+
+    /**
+     * When parallel judging is disabled, only queue tasks with startTime IS NULL can be picked
+     * up by a judgehost that has not contributed yet. Giving back unfinished work must clear
+     * startTime on an existing queue task so another judgehost can take over.
+     */
+    public function testGiveBackResetsQueueTaskStartTimeWhenParallelJudgingDisabled(): void
+    {
+        $this->withChangedConfiguration('enable_parallel_judging', false, function (): void {
+            $this->registerJudgehost();
+            $this->registerJudgehost('second-judgehost');
+            self::assertSame([], $this->fetchWork('second-judgehost'));
+            $this->addSubmission(problem: 'boolfind');
+
+            $tasks = $this->fetchWork();
+            self::assertCount(5, $tasks);
+            $judgeTaskId = (int)$tasks[0]['judgetaskid'];
+            $judgingId = $this->judgingForTask($judgeTaskId)->getJudgingid();
+
+            $queueTask = $this->freshEm()->getRepository(QueueTask::class)
+                ->findOneBy(['judging' => $judgingId]);
+            self::assertNotNull($queueTask);
+            self::assertNotNull($queueTask->getStartTime());
+
+            // While the first judgehost holds the started queue task, the second may not join in.
+            self::assertSame([], $this->fetchWork('second-judgehost'));
+
+            $this->request('POST', '/judgehosts/internal-error', [
+                'description' => 'judgehost failed mid-judging',
+                'judgehostlog' => base64_encode('a log'),
+                'disabled' => json_encode(['kind' => 'judgehost', 'hostname' => self::HOSTNAME]),
+                'judgetaskid' => $judgeTaskId,
+                'hostname' => self::HOSTNAME,
+            ]);
+
+            $queueTask = $this->freshEm()->getRepository(QueueTask::class)
+                ->findOneBy(['judging' => $judgingId]);
+            self::assertNotNull($queueTask);
+            self::assertNull($queueTask->getStartTime(), 'giving back work must clear startTime');
+            self::assertSame(
+                ['starttime reset'],
+                $this->em()->getConnection()->fetchFirstColumn(
+                    'SELECT action FROM auditlog WHERE datatype = :type AND dataid = :id ORDER BY logid',
+                    ['type' => 'queuetask', 'id' => (string)$judgingId]
+                )
+            );
+
+            $takenOver = $this->fetchWork('second-judgehost');
+            self::assertNotEmpty($takenOver, 'a second judgehost must be able to take over the judging');
+        });
+    }
 }
