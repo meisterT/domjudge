@@ -459,28 +459,8 @@ class JudgeDaemon
             if (function_exists('pcntl_signal_dispatch')) {
                 pcntl_signal_dispatch();
             }
-            if (function_exists('pcntl_waitpid')) {
-                // Reap any finished child processes.
-                while (true) {
-                    $ret = pcntl_waitpid(-1, $status, WNOHANG);
-                    if ($ret <= 0) {
-                        if ($ret < 0) {
-                            $errno = pcntl_get_last_error();
-                            // 10 is ECHLD (not defined in PHP unfortunately),
-                            // indicating that we didn't find any child to be
-                            // reaped
-                            if ($errno != 10) {
-                                logmsg(
-                                    LOG_WARNING,
-                                    "pcntl_waitpid returned $ret when trying to reap child processes: "
-                                    . pcntl_strerror($errno)
-                                );
-                            }
-                        }
-
-                        break;
-                    }
-                }
+            if ($this->reapChildren()) {
+                $this->registerJudgehost(force: true);
             }
             if ($this->exitsignalled) {
                 logmsg(LOG_NOTICE, "Received signal, exiting.");
@@ -510,7 +490,7 @@ class JudgeDaemon
                 // As a side-effect, registerJudgehost will
                 // - give back any work that has been assigned to us,
                 // - and set up a new curl handle (which is what we want in these situations anyway).
-                $this->registerJudgehost();
+                $this->registerJudgehost(force: true);
                 continue;
             } else {
                 $row = dj_json_decode($row);
@@ -944,7 +924,7 @@ class JudgeDaemon
     /**
      * @param array<string, string>|string $data
      */
-    private function request(string $url, string $verb = 'GET', string|array $data = '', bool $failonerror = true): string|bool|null
+    protected function request(string $url, string $verb = 'GET', string|array $data = '', bool $failonerror = true): string|bool|null
     {
         // Don't flood the log with requests for new judgings every few seconds.
         if (str_starts_with($url, 'judgehosts/fetch-work') && $verb === 'POST') {
@@ -1499,13 +1479,13 @@ class JudgeDaemon
         return [$execrunpath, null, null];
     }
 
-    private function registerJudgehost(): void
+    private function registerJudgehost(bool $force = false): void
     {
         $endpoint = &$this->endpoint;
 
-        // Only try to register every 30s.
+        // Only try to register every 30s unless giving back work explicitly.
         $now = time();
-        if ($now - $endpoint['last_attempt'] < 30) {
+        if (!$force && $now - $endpoint['last_attempt'] < 30) {
             $endpoint['waiting'] = true;
             return;
         }
@@ -1536,6 +1516,66 @@ class JudgeDaemon
                     " in my name; given back unfinished runs from me.");
             }
         }
+    }
+
+    /**
+     * Reap finished child processes (forked by asynchronous reportJudgingRun).
+     * Returns true if any child exited abnormally so unreported runs can be given back.
+     */
+    private function reapChildren(): bool
+    {
+        if (!function_exists('pcntl_waitpid')) {
+            return false;
+        }
+
+        $childFailed = false;
+        while (true) {
+            $ret = pcntl_waitpid(-1, $status, WNOHANG);
+            if ($ret <= 0) {
+                if ($ret < 0) {
+                    $errno = pcntl_get_last_error();
+                    // 10 is ECHILD (not defined in PHP unfortunately),
+                    // indicating that we didn't find any child to be reaped.
+                    if ($errno != 10) {
+                        logmsg(
+                            LOG_WARNING,
+                            "pcntl_waitpid returned $ret when trying to reap child processes: "
+                            . pcntl_strerror($errno)
+                        );
+                    }
+                }
+
+                break;
+            }
+
+            if (!pcntl_wifexited($status) || pcntl_wexitstatus($status) !== 0) {
+                $exitDesc = pcntl_wifexited($status)
+                    ? 'exit status ' . pcntl_wexitstatus($status)
+                    : (pcntl_wifsignaled($status) ? 'signal ' . pcntl_wtermsig($status) : 'abnormal status');
+                logmsg(
+                    LOG_WARNING,
+                    "Asynchronous child process $ret terminated with $exitDesc; giving back any unreported judging runs."
+                );
+                $childFailed = true;
+            }
+        }
+
+        if ($childFailed) {
+            // Wait for any remaining in-flight reportJudgingRun children to finish before
+            // calling registerJudgehost(), so giving back unclaimed runs does not race with
+            // sibling children still uploading their results.
+            while (true) {
+                $ret = pcntl_waitpid(-1, $status);
+                if ($ret <= 0) {
+                    break;
+                }
+                if (!pcntl_wifexited($status) || pcntl_wexitstatus($status) !== 0) {
+                    logmsg(LOG_WARNING, "Asynchronous child process $ret also terminated abnormally.");
+                }
+            }
+        }
+
+        return $childFailed;
     }
 
     private function disable(
