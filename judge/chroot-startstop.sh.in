@@ -42,6 +42,9 @@ fi
 CHROOTORIGINAL="@judgehost_chrootdir@"
 
 dj_umount() {
+	if ! mountpoint -q "$1"; then
+		return 0
+	fi
 	set +e
 	if ! sudo -n umount "$1" < /dev/null; then
 		>&2 echo "umount '$1' didn't succeed, trying harder"

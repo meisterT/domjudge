@@ -243,6 +243,7 @@ class JudgeDaemon
             logmsg(LOG_NOTICE, "SIGHUP received, restarting.");
             $this->exitsignalled = true;
         } elseif ($signal === SIGUSR1) {
+            $this->exitsignalled = true;
             $this->gracefulexitsignalled = true;
             logmsg(LOG_NOTICE, "SIGUSR1 received, finishing current judging and exiting.");
         } else {
@@ -418,6 +419,7 @@ class JudgeDaemon
         }
 
         $this->registerJudgehost();
+        $this->cleanupStaleChroots(JUDGEDIR . "/$this->myhost/endpoint-" . $this->endpoint['id']);
 
         // Populate the DOMjudge configuration initially
         $this->djconfigRefresh();
@@ -483,10 +485,7 @@ class JudgeDaemon
                 }
             }
             if ($this->exitsignalled) {
-                logmsg(LOG_NOTICE, "Received signal, exiting.");
-                $this->closeCurlHandles();
-                fclose($this->lockfile);
-                exit;
+                $this->shutdownOnSignal();
             }
 
             if ($this->endpoint['errorred']) {
@@ -558,40 +557,43 @@ class JudgeDaemon
         $success_file = "$workdir/.uuid_pid";
         $expected_uuid_pid = $row[0]['uuid'] . '_' . (string)getmypid();
 
-        $needs_cleanup = false;
-        if ($this->lastWorkdir !== $workdir) {
-            // Switching between workdirs requires cleanup.
-            $needs_cleanup = true;
-        }
+        $is_stale_workdir = false;
         if (file_exists($workdir)) {
-            // If the workdir still exists we need to check whether it may be a left-over from a previous database.
-            // If that is the case, we need to rename it and potentially clean up.
+            // If the workdir still exists we need to check whether it may be a left-over from a previous database
+            // or an interrupted judging run.
             if (file_exists($success_file)) {
                 $old_uuid_pid = file_get_contents($success_file);
                 if ($old_uuid_pid !== $expected_uuid_pid) {
-                    $needs_cleanup = true;
+                    $is_stale_workdir = true;
                     unlink($success_file);
                 }
             } else {
-                $old_uuid_pid = 'n/a';
-                $needs_cleanup = true;
-            }
-
-            // Either the file didn't exist or we deleted it above.
-            if (!file_exists($success_file)) {
-                $oldworkdir = $workdir . '-old-' . getmypid() . '-' . date('Y-m-d_H:i');
-                if (!rename($workdir, $oldworkdir)) {
-                    error("Could not rename stale working directory to '$oldworkdir'.");
-                }
-                @chmod($oldworkdir, 0700);
-                warning("Found stale working directory; renamed to '$oldworkdir'.");
+                $is_stale_workdir = true;
             }
         }
 
-        if ($needs_cleanup) {
+        if ($this->lastWorkdir !== $workdir || $is_stale_workdir) {
+            // Stop the active chroot before renaming any stale workdir so chroot-startstop.sh
+            // runs while $this->lastWorkdir still exists at its original path.
             $this->maybeCleanupJudging();
         }
 
+        if ($is_stale_workdir) {
+            if ($this->hasMountsUnder($workdir)) {
+                logmsg(LOG_WARNING, "Stale working directory '$workdir' still has active mounts, cleaning up before rename.");
+                @chmod($workdir, 0700);
+                if (!$this->stopChroot($workdir)) {
+                    return;
+                }
+            }
+
+            $oldworkdir = $workdir . '-old-' . getmypid() . '-' . date('Y-m-d_H:i');
+            if (!rename($workdir, $oldworkdir)) {
+                error("Could not rename stale working directory to '$oldworkdir'.");
+            }
+            @chmod($oldworkdir, 0700);
+            warning("Found stale working directory; renamed to '$oldworkdir'.");
+        }
 
         if (!$this->runCommandSafe(['mkdir', '-p', "$workdir/compile"])) {
             error("Could not create '$workdir/compile'");
@@ -608,14 +610,16 @@ class JudgeDaemon
             logmsg(LOG_INFO, "  🔒 Executing chroot script: '" . self::CHROOT_SCRIPT . " start'");
             if (!$this->runCommandSafe([LIBJUDGEDIR . '/' . self::CHROOT_SCRIPT, 'start'], $retval, cwd: $workdir)) {
                 logmsg(LOG_ERR, "chroot script exited with exitcode $retval");
+                if ($this->hasMountsUnder($workdir)) {
+                    $this->runCommandSafe([LIBJUDGEDIR . '/' . self::CHROOT_SCRIPT, 'stop'], cwd: $workdir);
+                }
                 $this->disable('judgehost', 'hostname', $this->myhost, "chroot script exited with exitcode $retval on $this->myhost");
                 return;
             }
+            $this->lastWorkdir = $workdir;
 
             // Refresh config at start of each batch.
             $this->djconfigRefresh();
-
-            $this->lastWorkdir = $workdir;
         }
 
         // Make sure the workdir is accessible for the domjudge-run user.
@@ -641,10 +645,7 @@ class JudgeDaemon
 
         // Check if we were interrupted while judging, if so, exit (to avoid sleeping)
         if ($this->exitsignalled) {
-            logmsg(LOG_NOTICE, "Received signal, exiting.");
-            $this->closeCurlHandles();
-            fclose($this->lockfile);
-            exit;
+            $this->shutdownOnSignal();
         }
     }
 
@@ -782,6 +783,7 @@ class JudgeDaemon
         $free_space = disk_free_space(JUDGEDIR);
         $allowed_free_space = $this->djconfigGetValue('diskspace_error'); // in kB
         if ($free_space < 1024 * $allowed_free_space) {
+            $this->maybeCleanupJudging();
             $after = disk_free_space(JUDGEDIR);
             if (!isset($this->options['diskspace-error'])) {
                 $candidateDirs = [];
@@ -1600,14 +1602,16 @@ class JudgeDaemon
         $workdir = $this->lastWorkdir;
         $this->lastWorkdir = null;
 
+        if (!is_dir($workdir)) {
+            logmsg(LOG_WARNING, "Chroot workdir '$workdir' no longer exists while cleaning up.");
+            return;
+        }
+
         // revoke readablity for domjudge-run user to this workdir
         chmod($workdir, 0700);
 
         // destroy chroot environment
-        logmsg(LOG_INFO, "  🔓 Executing chroot script: '" . self::CHROOT_SCRIPT . " stop'");
-        if (!$this->runCommandSafe([LIBJUDGEDIR . '/' . self::CHROOT_SCRIPT, 'stop'], $retval, cwd: $workdir)) {
-            logmsg(LOG_ERR, "chroot script exited with exitcode $retval");
-            $this->disable('judgehost', 'hostname', $this->myhost, "chroot script exited with exitcode $retval on $this->myhost");
+        if (!$this->stopChroot($workdir)) {
             // Just continue here: even though we might continue a current
             // compile/test-run cycle, we don't know whether we're in one here,
             // and worst case, the chroot script will fail the next time when
@@ -1618,6 +1622,165 @@ class JudgeDaemon
         if (!$this->runCommandSafe([LIBJUDGEDIR . '/evict', '-x', $workdir])) {
             warning("evict script failed, continuing gracefully");
         }
+    }
+
+    private function stopChroot(string $workdir): bool
+    {
+        logmsg(LOG_INFO, "  🔓 Executing chroot script: '" . self::CHROOT_SCRIPT . " stop'");
+        if (!$this->runCommandSafe([LIBJUDGEDIR . '/' . self::CHROOT_SCRIPT, 'stop'], $retval, cwd: $workdir)) {
+            logmsg(LOG_ERR, "chroot script exited with exitcode $retval");
+            $this->disable('judgehost', 'hostname', $this->myhost, "chroot script exited with exitcode $retval on $this->myhost");
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Unmount any leftover chroot mounts left inside judging workdirs (e.g. after a crash).
+     */
+    private function cleanupStaleChroots(string $workdirpath, string $mountinfoPath = '/proc/self/mountinfo'): void
+    {
+        foreach ($this->findMountedWorkdirs($workdirpath, $mountinfoPath) as $mountedWorkdir) {
+            if (!is_dir($mountedWorkdir)) {
+                continue;
+            }
+            logmsg(LOG_WARNING, "Found leftover chroot mounts in '$mountedWorkdir', cleaning up.");
+            @chmod($mountedWorkdir, 0700);
+            $this->stopChroot($mountedWorkdir);
+        }
+    }
+
+    /**
+     * Return unique judging workdirs under $workdirpath that currently contain mountpoints.
+     *
+     * @return list<string>
+     */
+    private function findMountedWorkdirs(string $workdirpath, string $mountinfoPath = '/proc/self/mountinfo'): array
+    {
+        if (!is_readable($mountinfoPath)) {
+            return [];
+        }
+        $base = self::canonicalizePath($workdirpath);
+        if ($base === '' || $base === '/') {
+            return [];
+        }
+
+        $lines = file($mountinfoPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines === false) {
+            return [];
+        }
+
+        $workdirs = [];
+        foreach ($lines as $line) {
+            $fields = explode(' ', $line, 6);
+            if (count($fields) < 5) {
+                continue;
+            }
+            $mountPoint = self::unescapeMountinfoPath($fields[4]);
+            if (!str_starts_with($mountPoint, $base . '/')) {
+                continue;
+            }
+            $relative = substr($mountPoint, strlen($base) + 1);
+            $parts = explode('/', $relative, 3);
+            if (count($parts) < 3) {
+                continue;
+            }
+            [$submitDir, $jobDir] = $parts;
+            if (in_array($submitDir, ['.', '..', 'testcase', 'executable'], true) ||
+                preg_match(self::EXTERNAL_IDENTIFIER_REGEX, $submitDir) !== 1 ||
+                preg_match('/^\d+(-old-.+)?$/', $jobDir) !== 1) {
+                continue;
+            }
+            $workdirs["$base/$submitDir/$jobDir"] = true;
+        }
+
+        return array_keys($workdirs);
+    }
+
+    /**
+     * Check whether any mountpoint exists at or inside $dir.
+     */
+    private function hasMountsUnder(string $dir, string $mountinfoPath = '/proc/self/mountinfo'): bool
+    {
+        if (!is_readable($mountinfoPath)) {
+            return false;
+        }
+        $target = self::canonicalizePath($dir);
+        if ($target === '' || $target === '/') {
+            return false;
+        }
+
+        $lines = file($mountinfoPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines === false) {
+            return false;
+        }
+
+        foreach ($lines as $line) {
+            $fields = explode(' ', $line, 6);
+            if (count($fields) < 5) {
+                continue;
+            }
+            $mountPoint = self::unescapeMountinfoPath($fields[4]);
+            if ($mountPoint === $target || str_starts_with($mountPoint, $target . '/')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Resolve symlinks in $path (or in its deepest existing ancestor if $path does not exist yet).
+     */
+    private static function canonicalizePath(string $path): string
+    {
+        $trimmed = rtrim($path, '/');
+        if ($trimmed === '') {
+            return $path === '' ? '' : '/';
+        }
+
+        $suffix = '';
+        $current = $trimmed;
+        while ($current !== '/' && $current !== '.') {
+            $real = realpath($current);
+            if ($real !== false) {
+                return rtrim($real, '/') . $suffix;
+            }
+            $suffix = '/' . basename($current) . $suffix;
+            $parent = dirname($current);
+            if ($parent === $current) {
+                break;
+            }
+            $current = $parent;
+        }
+
+        return $trimmed;
+    }
+
+    private static function unescapeMountinfoPath(string $path): string
+    {
+        return (string)preg_replace_callback(
+            '/\\\\([0-7]{3})/',
+            static fn (array $m): string => chr((int)octdec($m[1])),
+            $path
+        );
+    }
+
+    private function shutdownOnSignal(): never
+    {
+        logmsg(LOG_NOTICE, "Received signal, exiting.");
+        $this->maybeCleanupJudging();
+        if (function_exists('pcntl_waitpid')) {
+            while (pcntl_waitpid(-1, $status) > 0) {
+                // Wait for any forked reportJudgingRun children to finish before exiting.
+            }
+        }
+        $this->closeCurlHandles();
+        if (is_resource($this->lockfile)) {
+            fclose($this->lockfile);
+        }
+        exit;
     }
 
     /**
@@ -1876,11 +2039,13 @@ class JudgeDaemon
             logmsg(LOG_NOTICE, "Received HARD exit signal, aborting current judging.");
 
             // Make sure the domserver knows that we didn't finish this judging.
-            $unfinished = $this->request('judgehosts', 'POST', ['hostname' => urlencode($this->myhost)]);
-            $unfinished = dj_json_decode($unfinished);
-            foreach ($unfinished as $jud) {
-                logmsg(LOG_WARNING, "Aborted judging task " . $jud['judgetaskid'] .
-                    " due to signal");
+            $unfinished = $this->request('judgehosts', 'POST', ['hostname' => urlencode($this->myhost)], false);
+            if ($unfinished !== null) {
+                $unfinished = dj_json_decode($unfinished);
+                foreach ($unfinished as $jud) {
+                    logmsg(LOG_WARNING, "Aborted judging with jobid " . $jud['jobid'] .
+                        " due to signal");
+                }
             }
             return false;
         }
