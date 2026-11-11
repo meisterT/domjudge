@@ -948,7 +948,7 @@ class JudgehostController extends AbstractFOSRestController
             } else {
                 // Give back only the unfinished runs that this judgehost had claimed; runs
                 // that already have a result stay where they are.
-                $this->em->getConnection()->executeStatement(
+                $returned = $this->em->getConnection()->executeStatement(
                     'UPDATE judgetask jt
                         INNER JOIN judging_run jr ON jr.judgetaskid = jt.judgetaskid
                         SET jt.judgehostid = NULL, jt.starttime = NULL
@@ -960,6 +960,44 @@ class JudgehostController extends AbstractFOSRestController
                         'judgehostid' => $judgehost->getJudgehostid(),
                     ]
                 );
+
+                if ($returned > 0) {
+                    // Reset starttime when no other judgehost is actively working on this
+                    // judging, so Case 2a of fetch-work can hand it out even with parallel
+                    // judging disabled; and re-insert the queue task if fetch-work had
+                    // already deleted it once the last batch was claimed.
+                    $this->em->getConnection()->executeStatement(
+                        'UPDATE queuetask qt
+                            SET qt.starttime = NULL
+                          WHERE qt.judgingid = :jobid
+                            AND NOT EXISTS (
+                                SELECT 1 FROM judgetask jt
+                                 INNER JOIN judging_run jr ON jr.judgetaskid = jt.judgetaskid
+                                 WHERE jt.jobid = :jobid
+                                   AND jt.judgehostid IS NOT NULL
+                                   AND jr.runresult IS NULL
+                            )',
+                        ['jobid' => $judgingId]
+                    );
+                    $this->em->getConnection()->executeStatement(
+                        'INSERT INTO queuetask (judgingid, priority, teamid, teampriority, starttime)
+                         SELECT j.judgingid, MIN(jt.priority), s.teamid, CAST(TRUNCATE(s.submittime, 0) AS SIGNED), NULL
+                           FROM judging j
+                           INNER JOIN submission s ON s.submitid = j.submitid
+                           INNER JOIN judgetask jt ON jt.jobid = j.judgingid
+                           LEFT JOIN queuetask qt ON qt.judgingid = j.judgingid
+                          WHERE j.judgingid = :jobid
+                            AND jt.valid = 1
+                            AND jt.judgehostid IS NULL
+                            AND jt.type = :type
+                            AND qt.queuetaskid IS NULL
+                          GROUP BY j.judgingid, s.teamid, s.submittime',
+                        [
+                            'jobid' => $judgingId,
+                            'type' => JudgeTaskType::JUDGING_RUN,
+                        ]
+                    );
+                }
             }
 
             if ($judgehost === null) {

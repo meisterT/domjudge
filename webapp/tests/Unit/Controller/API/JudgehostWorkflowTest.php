@@ -666,6 +666,68 @@ class JudgehostWorkflowTest extends BaseTestCase
     }
 
     /**
+     * Once every batch of a judging has been handed out, the next fetch-work call deletes its
+     * queue task. If a judgehost later gives its unfinished runs back (for example on a
+     * contradicting compile error), the queue task must be restored so the healthy judgehost
+     * can pick them up and finish the judging.
+     */
+    public function testGivenBackWorkIsRequeuedAfterQueueTaskWasDeleted(): void
+    {
+        $this->registerJudgehost();
+        $this->registerJudgehost('broken-judgehost');
+        // Poll once before submitting so both judgehosts have a recent polltime and
+        // fetch-work splits the 10 test cases of boolfind into batches of 5.
+        $this->fetchWork();
+        $this->fetchWork('broken-judgehost');
+        $this->addSubmission(problem: 'boolfind');
+
+        $healthyBatch = $this->fetchWork();
+        $brokenBatch = $this->fetchWork('broken-judgehost');
+        self::assertCount(5, $healthyBatch);
+        self::assertCount(5, $brokenBatch);
+
+        $judgingId = $this->judgingForTask((int)$healthyBatch[0]['judgetaskid'])->getJudgingid();
+
+        $this->updateJudging((int)$healthyBatch[0]['judgetaskid'], [
+            'compile_success' => 1,
+            'output_compile' => base64_encode('ok'),
+            'compile_metadata' => base64_encode('meta'),
+        ]);
+        foreach ($healthyBatch as $task) {
+            $this->reportRun((int)$task['judgetaskid'], 'correct');
+        }
+
+        // All 10 judge tasks are claimed, so polling for more work deletes the queue task.
+        self::assertSame([], $this->fetchWork());
+        self::assertNull(
+            $this->freshEm()->getRepository(QueueTask::class)->findOneBy(['judging' => $judgingId]),
+            'the queue task is deleted once no unclaimed judge tasks remain'
+        );
+
+        // Now the second judgehost fails compilation, triggering giveBackJudging().
+        $this->request(
+            'PUT',
+            sprintf('/judgehosts/update-judging/%s/%d', 'broken-judgehost', (int)$brokenBatch[0]['judgetaskid']),
+            [
+                'compile_success' => 0,
+                'output_compile' => base64_encode('broken compiler'),
+                'compile_metadata' => base64_encode('meta'),
+            ],
+            204
+        );
+
+        $requeuedBatch = $this->fetchWork();
+        self::assertCount(5, $requeuedBatch, 'the given-back tasks must be handed out again');
+        foreach ($requeuedBatch as $task) {
+            $this->reportRun((int)$task['judgetaskid'], 'correct');
+        }
+
+        $judging = $this->freshEm()->getRepository(Judging::class)->find($judgingId);
+        self::assertSame(Judging::RESULT_CORRECT, $judging->getResult());
+        self::assertNotNull($judging->getEndtime());
+    }
+
+    /**
      * An internal error blamed on a compile script takes every unclaimed judge task that uses
      * that script out of the queue and flags their judgings.
      */
