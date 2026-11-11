@@ -552,10 +552,33 @@ class JudgehostController extends AbstractFOSRestController
             }
 
             $outputRun = base64_decode($request->request->get('output_run'));
+            $taskPass = $judgeTask->getPass();
+            $updated = false;
 
-            /** @var JudgingRunOutput $judgingRunOutput */
-            $judgingRunOutput = $judgingRun->getOutput();
-            $judgingRunOutput->setOutputRun($outputRun);
+            if ($taskPass === null || $judgingRun->getPass() === null || $taskPass === $judgingRun->getPass()) {
+                /** @var JudgingRunOutput $judgingRunOutput */
+                $judgingRunOutput = $judgingRun->getOutput();
+                $judgingRunOutput->setOutputRun($outputRun);
+                $updated = true;
+            }
+
+            if ($taskPass !== null) {
+                foreach ($judgingRun->getPasses() as $judgingRunPass) {
+                    if ($judgingRunPass->getPass() === $taskPass) {
+                        $judgingRunPass->getOutput()?->setOutputRun($outputRun);
+                        $updated = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!$updated) {
+                throw new BadRequestHttpException(sprintf(
+                    'Inconsistent data, no pass %d known for judging run with jid = %d.',
+                    $taskPass,
+                    $judgeTask->getJobId()
+                ));
+            }
         }
         $this->em->flush();
     }
@@ -755,6 +778,12 @@ class JudgehostController extends AbstractFOSRestController
                 ->setOutputSystem($decode('output_system'))
                 ->setMetadata($decode('metadata'))
                 ->setValidatorMetadata($decode('compare_metadata'));
+        }
+
+        foreach ($existing as $number => $judgingRunPass) {
+            if (!isset($seen[$number])) {
+                $judgingRun->removePass($judgingRunPass);
+            }
         }
     }
 
@@ -1056,6 +1085,10 @@ class JudgehostController extends AbstractFOSRestController
 
         if ($passes !== null) {
             $this->storeJudgingRunPasses($judgingRun, $passes, $judgeTaskId);
+        } else {
+            foreach ($judgingRun->getPasses()->toArray() as $judgingRunPass) {
+                $judgingRun->removePass($judgingRunPass);
+            }
         }
 
         if ($teamMessage) {

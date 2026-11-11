@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\Doctrine\DBAL\Types\JudgeTaskType;
 use App\Entity\Contest;
 use App\Entity\InternalError;
 use App\Entity\JudgeTask;
@@ -9,6 +10,7 @@ use App\Entity\Judgehost;
 use App\Entity\Judging;
 use App\Entity\JudgingRun;
 use App\Entity\JudgingRunPass;
+use App\Entity\JudgingRunPassOutput;
 use App\Entity\Problem;
 use App\Entity\QueueTask;
 use App\Entity\Rejudging;
@@ -178,7 +180,7 @@ class JudgehostWorkflowTest extends BaseTestCase
         return $this->request(
             'POST',
             sprintf('/judgehosts/add-judging-run/%s/%d', self::HOSTNAME, $judgeTaskId),
-            [
+            array_merge([
                 'runresult' => $runResult,
                 'runtime' => '0.01',
                 'output_run' => base64_encode('run'),
@@ -189,7 +191,7 @@ class JudgehostWorkflowTest extends BaseTestCase
                 // Mandatory, and a real judgedaemon always sends them.
                 'start_time' => (string)(microtime(true) - 1),
                 'end_time' => (string)microtime(true),
-            ] + $extra,
+            ], $extra),
             $expectedStatus
         );
     }
@@ -415,6 +417,95 @@ class JudgehostWorkflowTest extends BaseTestCase
         $this->reportRun($judgeTaskId, 'correct', ['passes' => json_encode(['pass' => 1])], 400);
         $this->reportRun($judgeTaskId, 'correct', ['passes' => json_encode([['runresult' => 'correct']])], 400);
         $this->reportRun($judgeTaskId, 'correct', ['passes' => json_encode([['pass' => 1], ['pass' => 1]])], 400);
+    }
+
+    private function reportDebugOutput(int $origTaskId, ?int $pass, string $output, int $expectedStatus = 204): void
+    {
+        $em = $this->freshEm();
+        $orig = $em->getRepository(JudgeTask::class)->find($origTaskId);
+        $debugTask = (new JudgeTask())
+            ->setType(JudgeTaskType::DEBUG_INFO)
+            ->setJudgehost($orig->getJudgehost())
+            ->setSubmission($orig->getSubmission())
+            ->setPriority(JudgeTask::PRIORITY_HIGH)
+            ->setJobId($orig->getJobId())
+            ->setUuid($orig->getUuid())
+            ->setPass($pass)
+            ->setTestcaseId($orig->getTestcaseId())
+            ->setTestcaseHash($orig->getTestcaseHash());
+        $em->persist($debugTask);
+        $em->flush();
+
+        $this->request(
+            'POST',
+            sprintf('/judgehosts/add-debug-info/%s/%d', self::HOSTNAME, $debugTask->getJudgetaskid()),
+            ['output_run' => base64_encode($output)],
+            $expectedStatus
+        );
+    }
+
+    public function testRunReplacementRemovesStalePasses(): void
+    {
+        $judgeTaskId = (int)$this->claimWorkForOneSubmission()[0]['judgetaskid'];
+
+        $twoPasses = [
+            ['pass' => 1, 'runresult' => 'correct', 'output_run' => base64_encode('run 1')],
+            ['pass' => 2, 'runresult' => 'wrong-answer', 'output_run' => base64_encode('run 2')],
+        ];
+        $this->reportRun($judgeTaskId, 'wrong-answer', ['pass' => '2', 'passes' => json_encode($twoPasses)]);
+
+        $onePass = [['pass' => 1, 'runresult' => 'wrong-answer', 'output_run' => base64_encode('retry 1')]];
+        $this->reportRun($judgeTaskId, 'wrong-answer', ['pass' => '1', 'passes' => json_encode($onePass)]);
+
+        $em = $this->freshEm();
+        $run = $em->getRepository(JudgingRun::class)->findOneBy(['judgetaskid' => $judgeTaskId]);
+        self::assertCount(1, $run->getPasses());
+        self::assertSame('retry 1', $run->getPasses()->first()->getOutput()->getOutputRun());
+        self::assertCount(1, $em->getRepository(JudgingRunPass::class)->findAll());
+        self::assertCount(1, $em->getRepository(JudgingRunPassOutput::class)->findAll());
+
+        $this->reportRun($judgeTaskId, 'wrong-answer');
+        $run = $this->freshEm()->getRepository(JudgingRun::class)->findOneBy(['judgetaskid' => $judgeTaskId]);
+        self::assertCount(0, $run->getPasses());
+    }
+
+    public function testAddDebugInfoUpdatesMatchingPassOutput(): void
+    {
+        $judgeTaskId = (int)$this->claimWorkForOneSubmission()[0]['judgetaskid'];
+
+        $passes = [
+            ['pass' => 1, 'runresult' => 'correct', 'output_run' => base64_encode('trunc 1')],
+            ['pass' => 2, 'runresult' => 'wrong-answer', 'output_run' => base64_encode('trunc 2')],
+        ];
+        $this->reportRun($judgeTaskId, 'wrong-answer', [
+            'output_run' => base64_encode('trunc 2'),
+            'pass' => '2',
+            'passes' => json_encode($passes),
+        ]);
+
+        // Pass 1 debug output updates pass 1 without clobbering JudgingRunOutput (pass 2).
+        $this->reportDebugOutput($judgeTaskId, 1, 'full 1');
+        $run = $this->freshEm()->getRepository(JudgingRun::class)->findOneBy(['judgetaskid' => $judgeTaskId]);
+        self::assertSame('trunc 2', $run->getOutput()->getOutputRun());
+        self::assertSame('full 1', $run->getPasses()->get(0)->getOutput()->getOutputRun());
+
+        // Final pass debug output updates both JudgingRunOutput and pass 2.
+        $this->reportDebugOutput($judgeTaskId, 2, 'full 2');
+        $run = $this->freshEm()->getRepository(JudgingRun::class)->findOneBy(['judgetaskid' => $judgeTaskId]);
+        self::assertSame('full 2', $run->getOutput()->getOutputRun());
+        self::assertSame('full 2', $run->getPasses()->get(1)->getOutput()->getOutputRun());
+
+        $this->reportDebugOutput($judgeTaskId, 99, 'bogus', 400);
+    }
+
+    public function testAddDebugInfoUpdatesSinglePassRun(): void
+    {
+        $judgeTaskId = (int)$this->claimWorkForOneSubmission()[0]['judgetaskid'];
+        $this->reportRun($judgeTaskId, 'wrong-answer', ['output_run' => base64_encode('trunc')]);
+
+        $this->reportDebugOutput($judgeTaskId, 1, 'full');
+        $run = $this->freshEm()->getRepository(JudgingRun::class)->findOneBy(['judgetaskid' => $judgeTaskId]);
+        self::assertSame('full', $run->getOutput()->getOutputRun());
     }
 
     /**

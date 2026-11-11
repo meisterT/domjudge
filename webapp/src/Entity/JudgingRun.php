@@ -334,6 +334,12 @@ class JudgingRun extends AbstractRun
         return $this;
     }
 
+    public function removePass(JudgingRunPass $pass): JudgingRun
+    {
+        $this->passes->removeElement($pass);
+        return $this;
+    }
+
     /**
      * @return Collection<int, JudgingRunPass>
      */
