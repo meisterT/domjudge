@@ -178,6 +178,13 @@ class JudgeTask
     #[Serializer\Exclude]
     private ?Version $version = null;
 
+    #[ORM\Column(
+        nullable: true,
+        options: ['comment' => 'Whether compilation succeeded for this judge task']
+    )]
+    #[Serializer\Exclude]
+    private ?bool $compile_success = null;
+
     public function __construct()
     {
         $this->judging_runs  = new ArrayCollection();
@@ -417,5 +424,16 @@ class JudgeTask
     public function getVersion(): ?Version
     {
         return $this->version;
+    }
+
+    public function setCompileSuccess(?bool $compileSuccess): JudgeTask
+    {
+        $this->compile_success = $compileSuccess;
+        return $this;
+    }
+
+    public function getCompileSuccess(): ?bool
+    {
+        return $this->compile_success;
     }
 }

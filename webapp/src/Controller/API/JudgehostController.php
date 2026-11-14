@@ -371,18 +371,21 @@ class JudgehostController extends AbstractFOSRestController
                     }
                 } elseif ($judging->getResult() === Judging::RESULT_COMPILER_ERROR) {
                     // The new result contradicts a former one, that's not good.
-                    // Since the other judgehosts were not successful, but we were, assume that the other judgehosts
-                    // are broken and disable them.
-                    $disableHostnames = [];
-                    /** @var JudgingRun $run */
-                    foreach ($judging->getRuns() as $run) {
-                        if ($run->getJudgeTask() &&
-                            $run->getJudgeTask()->getJudgehost() &&
-                            $run->getJudgeTask()->getJudgehost()->getHostname() !== $judgehost->getHostname()) {
-                            $otherHostname = $run->getJudgeTask()->getJudgehost()->getHostname();
-                            $disableHostnames[$otherHostname] = $otherHostname;
-                        }
-                    }
+                    // Disable only the other judgehosts that actually reported a compile failure
+                    // on this judging, leaving innocent judgehosts that also claimed batches enabled.
+                    /** @var list<string> $disableHostnames */
+                    $disableHostnames = $this->em->getConnection()->fetchFirstColumn(
+                        'SELECT DISTINCT jh.hostname
+                           FROM judgetask jt
+                           INNER JOIN judgehost jh ON jh.judgehostid = jt.judgehostid
+                          WHERE jt.jobid = :jobid
+                            AND jt.compile_success = 0
+                            AND jh.hostname != :hostname',
+                        [
+                            'jobid' => $judging->getJudgingid(),
+                            'hostname' => $judgehost->getHostname(),
+                        ]
+                    );
 
                     foreach ($disableHostnames as $disableHostname) {
                         $this->disableJudgehostForContradiction(
@@ -394,6 +397,11 @@ class JudgehostController extends AbstractFOSRestController
                     $this->em->flush();
                 }
             } else {
+                $this->em->getConnection()->executeStatement(
+                    'UPDATE judgetask SET compile_success = 0 WHERE judgetaskid = :judgetaskid',
+                    ['judgetaskid' => $judgetaskid]
+                );
+
                 $compileMetadata = $request->request->get('compile_metadata');
 
                 // Claim the compile error with one guarded update: only the first judgehost to
@@ -2122,7 +2130,7 @@ class JudgehostController extends AbstractFOSRestController
 
         $now = Utils::now();
         $numUpdated = $this->em->getConnection()->executeStatement(
-            'UPDATE judgetask SET judgehostid = :judgehostid, starttime = :starttime WHERE starttime IS NULL AND valid = 1 AND judgetaskid IN (:ids)',
+            'UPDATE judgetask SET judgehostid = :judgehostid, starttime = :starttime, compile_success = NULL WHERE starttime IS NULL AND valid = 1 AND judgetaskid IN (:ids)',
             [
                 'judgehostid' => $judgehost->getJudgehostid(),
                 'starttime' => $now,

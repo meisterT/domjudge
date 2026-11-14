@@ -336,6 +336,71 @@ class JudgehostWorkflowTest extends BaseTestCase
         self::assertSame([], $remaining, 'a compile error must invalidate the remaining judge tasks');
     }
 
+    /**
+     * When three judgehosts claim batches on the same judging and one reports a compile error
+     * before another reports a successful compile, only the judgehost that actually failed
+     * compilation may be disabled — not the third judgehost that merely claimed a batch.
+     */
+    public function testCompileContradictionDisablesOnlyJudgehostsThatFailedCompilation(): void
+    {
+        $this->registerJudgehost();
+        $this->registerJudgehost('broken-judgehost');
+        $this->registerJudgehost('innocent-judgehost');
+        $this->fetchWork();
+        $this->fetchWork('broken-judgehost');
+        $this->fetchWork('innocent-judgehost');
+        // jumble has 18 test cases, enough for all three judgehosts to claim a batch of 5.
+        $this->addSubmission(problem: 'jumble');
+
+        $healthyBatch = $this->fetchWork();
+        $brokenBatch = $this->fetchWork('broken-judgehost');
+        $innocentBatch = $this->fetchWork('innocent-judgehost');
+        self::assertCount(5, $healthyBatch);
+        self::assertCount(5, $brokenBatch);
+        self::assertCount(5, $innocentBatch);
+
+        $judgingId = $this->judgingForTask((int)$healthyBatch[0]['judgetaskid'])->getJudgingid();
+
+        // The broken judgehost finishes first and records a compiler-error verdict.
+        $this->request(
+            'PUT',
+            sprintf('/judgehosts/update-judging/%s/%d', 'broken-judgehost', (int)$brokenBatch[0]['judgetaskid']),
+            [
+                'compile_success' => 0,
+                'output_compile' => base64_encode('missing compiler'),
+                'compile_metadata' => base64_encode('meta'),
+            ],
+            204
+        );
+
+        // Now the first healthy judgehost reports a successful compile; innocent-judgehost
+        // has not reported a compile failure.
+        $this->updateJudging((int)$healthyBatch[0]['judgetaskid'], [
+            'compile_success' => 1,
+            'output_compile' => base64_encode('compiled fine'),
+            'compile_metadata' => base64_encode('meta'),
+        ]);
+
+        $em = $this->freshEm();
+        self::assertFalse(
+            $em->getRepository(Judgehost::class)->findOneBy(['hostname' => 'broken-judgehost'])->getEnabled(),
+            'the judgehost that reported the compile error must be disabled'
+        );
+        self::assertTrue(
+            $em->getRepository(Judgehost::class)->findOneBy(['hostname' => 'innocent-judgehost'])->getEnabled(),
+            'a judgehost that did not fail compilation must remain enabled'
+        );
+        self::assertTrue(
+            $em->getRepository(Judgehost::class)->findOneBy(['hostname' => self::HOSTNAME])->getEnabled()
+        );
+
+        $errors = $em->getRepository(InternalError::class)->findBy([
+            'description' => 'Compilation results are different for j' . $judgingId,
+        ]);
+        self::assertCount(1, $errors);
+        self::assertSame('broken-judgehost', $errors[0]->getDisabled()['hostname']);
+    }
+
     public function testJudgingIsCompletedOnceEveryRunIsReported(): void
     {
         $tasks = $this->claimWorkForOneSubmission();
