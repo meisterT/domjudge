@@ -17,7 +17,7 @@ class SelfRegisteredUserFixture extends AbstractTestDataFixture
             ->setUsername('selfregister')
             ->setName('selfregistered user for example team')
             ->setPlainPassword('demo')
-            ->setTeam($manager->getRepository(Team::class)->findOneBy(['name' => 'exteam']))
+            ->setTeam($manager->getRepository(Team::class)->findOneBy(['externalid' => 'exteam']))
             ->addUserRole($manager->getRepository(Role::class)->findOneBy(['dj_role' => 'team']));
 
         $manager->persist($user);
