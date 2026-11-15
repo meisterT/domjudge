@@ -228,22 +228,25 @@ unit, integration and functional tests to make sure the system works.
 
 These tests live in the ``webapp/tests`` directory.
 
-To run them, follow the following steps:
+To run them, you need a working DOMjudge installation and the ``mysql`` and
+``mysqldump`` clients. The tests set up their database themselves:
 
-* Make sure you have a working DOMjudge installation.
-* Run ``webapp/tests/setup-test-database.sh``. It installs the data the tests
-  build on, the pass-fail example contest without the example submissions, into
-  a database with the same name as your normal database, but postfixed with
-  ``_test``, which is the one the tests use. Your normal database is not
-  touched. Use ``-f`` to replace an existing test database.
+* The first run builds the data the tests build on, the pass-fail example
+  contest without the example submissions, with
+  ``webapp/tests/setup-test-database.sh``, and keeps a dump of it in
+  ``webapp/var/test-database``. It is built again when one of the files it is
+  made from changes, like the migrations or the example problems.
+* Every run starts by restoring that dump into a database with the same name as
+  your normal database, but postfixed with ``_test``, and moves the demo
+  contest to the start of the run. Your normal database is not touched.
 
-At the start of a run the tests check that the test database matches this data
-and report what differs if it does not. Installing the examples with
-``dj_setup_database install`` does not match, as it also adds the scoring
-contest and example submissions.
-
-Note that you don't have to drop and recreate the database every time you run the
-tests; every test runs in a transaction that is rolled back afterwards.
+The clients connect to the server configured in ``etc/dbpasswords.secret`` with
+the account of the current user, which needs to be allowed to create databases,
+for example by setting the user and password in ``~/.my.cnf``. If the application user cannot use the test database, the tests
+try to grant that, and tell you what to run as a database user who is allowed to
+if that does not work. Set ``DOMJUDGE_TEST_DATABASE=keep`` to use the test
+database as it is. Either way, the tests stop with an explanation if it does not
+match the data they rely on.
 
 The file ``webapp/.env.test`` (and ``webapp/.env.test.local`` if it
 exists) are loaded when you run the unit tests. You can thus place any
@@ -269,6 +272,17 @@ Note that most IDEs have support for running tests inside of them, so you don't
 have to type these filters manually. If you use such an IDE, just make sure to
 specify the `webapp/phpunit.xml.dist` file as a PHPUnit configuration file and
 it should work.
+
+To run the tests in parallel with ParaTest, run::
+
+  webapp/vendor/bin/paratest -p 4 -c webapp/phpunit.xml.dist webapp/tests/Unit \
+    --exclude-group no-parallel
+  webapp/bin/phpunit -c webapp/phpunit.xml.dist webapp/tests/Unit --group no-parallel
+
+Every worker restores the data into a database of its own, named like the test
+database followed by the number of the worker. The tests in the group
+``no-parallel`` change files that all workers share, so they run afterwards on
+their own.
 
 Test data
 ---------

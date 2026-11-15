@@ -13,6 +13,7 @@ use App\Entity\Submission;
 use App\Entity\Team;
 use App\Entity\TeamAffiliation;
 use App\Entity\User;
+use App\Utils\Utils;
 use Doctrine\Persistence\ObjectManager;
 use LogicException;
 
@@ -189,6 +190,21 @@ final class BaselineData
                 self::TEAM_SYSTEM_NAME,
                 $admin->getTeam()?->getName() ?? 'no team'
             );
+        }
+
+        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => self::CONTEST_SHORTNAME]);
+        if ($contest !== null) {
+            $start = $contest->getStarttime();
+            $end = $contest->getEndtime();
+            $now = Utils::now();
+            if ($start === null || $end === null || $now < $start || $now >= $end) {
+                $deviations[] = sprintf(
+                    "expected the contest '%s' to be running, it runs from %s to %s",
+                    self::CONTEST_SHORTNAME,
+                    Utils::absTime($start) ?? 'no start',
+                    Utils::absTime($end) ?? 'no end'
+                );
+            }
         }
 
         return $deviations;

@@ -2,6 +2,9 @@
 #
 # Build the baseline the tests run against into the test database.
 #
+# The tests run this themselves when the baseline needs to be built (see
+# App\Tests\Support\TestDatabase), so there is normally no need to run it by hand.
+#
 # The baseline (see App\DataFixtures\Test\BaselineData) is a bare install plus
 # the pass-fail examples, without the example submissions, and with the admin
 # user in the DOMjudge team. The test environment appends '_test' to the

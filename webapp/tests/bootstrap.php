@@ -35,4 +35,8 @@ if ($cacheLock !== false) {
     fclose($cacheLock);
 }
 
-(new TestDatabase())->prepare();
+(new TestDatabase(
+    dirname(__DIR__),
+    $_ENV['DATABASE_URL'] ?? $_SERVER['DATABASE_URL'],
+    ETCDIR . '/dbpasswords.secret'
+))->prepare();

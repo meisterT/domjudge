@@ -27,6 +27,11 @@ cd /opt/domjudge/domserver
 # The tests add a '_test' suffix to the database name already.
 sed -i "s!:domjudge_test:!:domjudge:!" /opt/domjudge/domserver/etc/dbpasswords.secret
 
+# baseinstall.sh installed the data the tests rely on into the test database,
+# and the ParaTest workers get a copy of it below. Let the tests use these
+# databases as they are, instead of building and restoring the data themselves.
+export DOMJUDGE_TEST_DATABASE=keep
+
 if [ "$unittest" = "Unit" ]; then
     # Run the tests in parallel with ParaTest. Every worker uses its own
     # database domjudge_test<TEST_TOKEN>, so clone the test database.
