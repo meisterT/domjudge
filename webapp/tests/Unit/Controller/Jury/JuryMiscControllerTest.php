@@ -7,14 +7,7 @@ use App\DataFixtures\Test\SampleSubmissionsFixture;
 use App\DataFixtures\Test\SampleSubmissionsMultipleTriesFixture;
 use App\DataFixtures\Test\SampleSubmissionsThreeTriesCorrectFixture;
 use App\DataFixtures\Test\SampleSubmissionsThreeTriesCorrectSameLanguageFixture;
-use App\DataFixtures\Test\DemoNonPublicContestFixture;
-use App\DataFixtures\Test\DemoPostDeactivateContestFixture;
-use App\DataFixtures\Test\DemoPreActivationContestFixture;
-use App\DataFixtures\Test\DemoPreDeactivateContestFixture;
-use App\DataFixtures\Test\DemoPreEndContestFixture;
-use App\DataFixtures\Test\DemoPreFreezeContestFixture;
-use App\DataFixtures\Test\DemoPreStartContestFixture;
-use App\DataFixtures\Test\DemoPreUnfreezeContestFixture;
+use App\Tests\Support\DemoContestState;
 use App\Entity\Contest;
 use App\Service\ScoreboardService;
 use App\Tests\Unit\BaseTestCase;
@@ -148,28 +141,28 @@ class JuryMiscControllerTest extends BaseTestCase
 
     public static function provideContestStageForBalloon(): Generator
     {
-        foreach (['preActivation'=>[DemoPreActivationContestFixture::class],
-                  'preStart'=>[DemoPreStartContestFixture::class],
-                  'preFreeze'=>[DemoPreFreezeContestFixture::class,SampleSubmissionsThreeTriesCorrectFixture::class],
-                  'preEnd'=>[DemoPreEndContestFixture::class,
+        foreach (['preActivation'=>[DemoContestState::PreActivation],
+                  'preStart'=>[DemoContestState::PreStart],
+                  'preFreeze'=>[DemoContestState::PreFreeze,SampleSubmissionsThreeTriesCorrectFixture::class],
+                  'preEnd'=>[DemoContestState::PreEnd,
                              SampleSubmissionsMultipleTriesFixture::class,
                              SampleSubmissionsThreeTriesCorrectFixture::class,
                              SampleSubmissionsThreeTriesCorrectSameLanguageFixture::class],
-                  'preUnfreeze'=>[DemoPreUnfreezeContestFixture::class,
+                  'preUnfreeze'=>[DemoContestState::PreUnfreeze,
                                   SampleSubmissionsMultipleTriesFixture::class,
                                   SampleSubmissionsThreeTriesCorrectFixture::class,
                                   SampleSubmissionsThreeTriesCorrectSameLanguageFixture::class],
-                  'preDeactivate'=>[DemoPreDeactivateContestFixture::class,
+                  'preDeactivate'=>[DemoContestState::PreDeactivate,
                                     SampleSubmissionsMultipleTriesFixture::class,
                                     SampleSubmissionsThreeTriesCorrectFixture::class,
                                     SampleSubmissionsThreeTriesCorrectSameLanguageFixture::class],
-                  'postDeactivate'=>[DemoPostDeactivateContestFixture::class,
+                  'postDeactivate'=>[DemoContestState::PostDeactivate,
                                      SampleSubmissionsMultipleTriesFixture::class,
                                      SampleSubmissionsThreeTriesCorrectFixture::class,
                                      SampleSubmissionsThreeTriesCorrectSameLanguageFixture::class]
             ] as $ident => $timeFixture) {
             foreach ([true,false] as $public) {
-                $fixture = $public ? [] : [DemoNonPublicContestFixture::class];
+                $fixture = $public ? [] : [DemoContestState::NonPublic];
                 yield [array_merge($fixture, $timeFixture),$public, $ident];
             }
         }

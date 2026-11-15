@@ -267,6 +267,17 @@ have to type these filters manually. If you use such an IDE, just make sure to
 specify the `webapp/phpunit.xml.dist` file as a PHPUnit configuration file and
 it should work.
 
+Test data
+---------
+Tests build on the example data of an installation. Beyond that data:
+
+* Use a case of ``DemoContestState`` to put the demo contest in a certain
+  state. It can be passed to ``loadFixtures()`` in the same list as fixtures.
+* Use a fixture from ``webapp/src/DataFixtures/Test`` for data that several
+  tests share, in particular when they refer to it from static properties or
+  data providers, like ``SampleSubmissionsFixture``.
+* Create data that only one test needs in that test.
+
 Loading development fixture data
 --------------------------------
 To debug failing Unit tests the fixtures can be loaded with:

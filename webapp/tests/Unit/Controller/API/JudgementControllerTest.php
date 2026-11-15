@@ -3,8 +3,7 @@
 namespace App\Tests\Unit\Controller\API;
 
 use App\DataFixtures\Test\AnotherVisibleTeamSubmissionFixture;
-use App\DataFixtures\Test\DemoPreFreezeContestFixture;
-use App\DataFixtures\Test\DemoPreUnfreezeContestFixture;
+use App\Tests\Support\DemoContestState;
 use App\DataFixtures\Test\RemoveTeamFromDemoUserFixture;
 use App\DataFixtures\Test\SampleSubmissionsThreeTriesCorrectFixture;
 use App\Entity\Contest;
@@ -77,7 +76,7 @@ class JudgementControllerTest extends BaseTestCase
 
     public function testTeamSeesSimplifiedOnlyForOtherTeamsWhenNotFrozen(): void
     {
-        $this->loadFixtures([DemoPreFreezeContestFixture::class, AnotherVisibleTeamSubmissionFixture::class]);
+        $this->loadFixtures([DemoContestState::PreFreeze, AnotherVisibleTeamSubmissionFixture::class]);
 
         $judgements = $this->getJudgementsPerTeam('demo');
         static::assertNotEmpty($judgements['exteam'] ?? []);
@@ -91,7 +90,7 @@ class JudgementControllerTest extends BaseTestCase
 
     public function testTeamSeesOnlyOwnDuringFreeze(): void
     {
-        $this->loadFixtures([DemoPreUnfreezeContestFixture::class, AnotherVisibleTeamSubmissionFixture::class]);
+        $this->loadFixtures([DemoContestState::PreUnfreeze, AnotherVisibleTeamSubmissionFixture::class]);
 
         $judgements = $this->getJudgementsPerTeam('demo');
         static::assertSame(['exteam'], array_keys($judgements));
@@ -99,7 +98,7 @@ class JudgementControllerTest extends BaseTestCase
 
     public function testTeamSeesOnlyOwnBefore2026(): void
     {
-        $this->loadFixtures([DemoPreFreezeContestFixture::class, AnotherVisibleTeamSubmissionFixture::class]);
+        $this->loadFixtures([DemoContestState::PreFreeze, AnotherVisibleTeamSubmissionFixture::class]);
 
         $this->withChangedConfiguration('ccs_api_version', '2023-06', function (): void {
             $judgements = $this->getJudgementsPerTeam('demo');
@@ -109,7 +108,7 @@ class JudgementControllerTest extends BaseTestCase
 
     public function testTeamSeesOnlyOwnWithoutRanking(): void
     {
-        $this->loadFixtures([DemoPreFreezeContestFixture::class, AnotherVisibleTeamSubmissionFixture::class]);
+        $this->loadFixtures([DemoContestState::PreFreeze, AnotherVisibleTeamSubmissionFixture::class]);
 
         $this->withChangedConfiguration('enable_ranking', false, function (): void {
             $judgements = $this->getJudgementsPerTeam('demo');
@@ -119,7 +118,7 @@ class JudgementControllerTest extends BaseTestCase
 
     public function testResultFilterDoesNotRevealOtherTeams(): void
     {
-        $this->loadFixtures([DemoPreFreezeContestFixture::class, AnotherVisibleTeamSubmissionFixture::class]);
+        $this->loadFixtures([DemoContestState::PreFreeze, AnotherVisibleTeamSubmissionFixture::class]);
 
         $contestId = $this->getDemoContestId();
         $submissions = $this->verifyApiJsonResponse('GET', "/contests/$contestId/submissions", 200, 'admin');
@@ -142,7 +141,7 @@ class JudgementControllerTest extends BaseTestCase
 
     public function testTeamNeverSeesHiddenTeamJudgements(): void
     {
-        $this->loadFixtures([DemoPreFreezeContestFixture::class]);
+        $this->loadFixtures([DemoContestState::PreFreeze]);
         // Team DOMjudge is in the hidden System category.
         $em = static::getContainer()->get(EntityManagerInterface::class);
         $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
@@ -172,7 +171,7 @@ class JudgementControllerTest extends BaseTestCase
     public function testTeamUserWithoutTeamSeesNoDetailedVerdicts(): void
     {
         $this->loadFixtures([
-            DemoPreFreezeContestFixture::class,
+            DemoContestState::PreFreeze,
             AnotherVisibleTeamSubmissionFixture::class,
             RemoveTeamFromDemoUserFixture::class,
         ]);

@@ -4,7 +4,7 @@ namespace App\Tests\Unit\Controller\Jury;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\DataFixtures\Test\ClarificationFixture;
-use App\DataFixtures\Test\DemoPreStartContestFixture;
+use App\Tests\Support\DemoContestState;
 use App\DataFixtures\Test\NonSortOrderTeamCategoryFixture;
 use App\Tests\Unit\BaseTestCase;
 use Generator;
@@ -80,7 +80,7 @@ class ImportExportControllerTest extends BaseTestCase
     #[DataProvider('provideContestYamlContents')]
     public function testContestExport(string $cid, string $expectedYaml): void
     {
-        $this->loadFixtures([DemoPreStartContestFixture::class]);
+        $this->loadFixtures([DemoContestState::PreStart]);
         $this->verifyPageResponse('GET', '/jury/import-export', 200);
         $this->client->submitForm('contest_export_export', ['contest_export[contest]'=>$cid]);
         static::assertEquals($expectedYaml, $this->client->getInternalResponse()->getContent());

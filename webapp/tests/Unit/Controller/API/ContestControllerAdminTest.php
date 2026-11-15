@@ -4,10 +4,7 @@ namespace App\Tests\Unit\Controller\API;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
-use App\DataFixtures\Test\DemoAboutToStartContestFixture;
-use App\DataFixtures\Test\DemoPostUnfreezeContestFixture;
-use App\DataFixtures\Test\DemoPreEndContestFixture;
-use App\DataFixtures\Test\DemoPreStartContestFixture;
+use App\Tests\Support\DemoContestState;
 use App\Entity\Contest;
 use App\Entity\ContestProblemsetContent;
 use App\Utils\Utils;
@@ -361,7 +358,7 @@ EOF;
         bool $checkUnfreezeTime = false,
         bool $convertRelativeTimes = false,
     ): void {
-        $this->loadFixture(DemoPreStartContestFixture::class);
+        $this->loadFixture(DemoContestState::PreStart);
         $this->loadFixtures($extraFixtures);
         $id = 1;
         if ($this->objectClassForExternalId !== null) {
@@ -408,23 +405,23 @@ EOF;
         // Tests for changing the start time
         yield [['id' => 123, 'start_time' => null], 400, 'This value should be of type string.'];
         yield [['id' => "another", 'start_time' => null], 400, 'Invalid \"id\" in request.'];
-        yield [['id' => "demo", 'start_time' => null], 403, 'Current contest already started or about to start.', [DemoPreEndContestFixture::class]];
-        yield [['id' => "demo", 'start_time' => null], 403, 'Current contest already started or about to start.', [DemoAboutToStartContestFixture::class]];
+        yield [['id' => "demo", 'start_time' => null], 403, 'Current contest already started or about to start.', [DemoContestState::PreEnd]];
+        yield [['id' => "demo", 'start_time' => null], 403, 'Current contest already started or about to start.', [DemoContestState::AboutToStart]];
         yield [['id' => "demo", 'start_time' => '+15 seconds'], 403, 'New start_time not far enough in the future.', [], false, false];
         yield [['id' => "demo", 'start_time' => '+15 seconds', 'force' => false], 403, 'New start_time not far enough in the future.', [], false, false];
         yield [['id' => "demo", 'start_time' => '+15 seconds', 'force' => true], 204, null, [], false, false];
         yield [['id' => "demo", 'start_time' => 'some invalid start time'], 400, 'Invalid \"start_time\" in request.'];
-        yield [['id' => "demo", 'start_time' => null, 'force' => true], 204, null, [DemoAboutToStartContestFixture::class]];
+        yield [['id' => "demo", 'start_time' => null, 'force' => true], 204, null, [DemoContestState::AboutToStart]];
         yield [['id' => "demo", 'start_time' => null], 204];
 
         // Tests for changing the unfreeze time
         yield [['id' => "another", 'scoreboard_thaw_time' => date('Y-m-d\TH:i:s', strtotime('+15 seconds'))], 400, 'Invalid \"id\" in request.'];
         yield [['id' => "demo", 'scoreboard_thaw_time' => null], 400, 'Invalid \"scoreboard_thaw_time\" in request.'];
         yield [['id' => "demo", 'scoreboard_thaw_time' => 'some invalid start time'], 400, 'Invalid \"scoreboard_thaw_time\" in request.'];
-        yield [['id' => "demo", 'scoreboard_thaw_time' => '+15 seconds'], 403, 'Current contest already has an unfreeze time set.', [DemoPostUnfreezeContestFixture::class], false, true];
-        yield [['id' => "demo", 'scoreboard_thaw_time' => '+15 seconds', 'force' => false], 403, 'Current contest already has an unfreeze time set.', [DemoPostUnfreezeContestFixture::class], false, true];
+        yield [['id' => "demo", 'scoreboard_thaw_time' => '+15 seconds'], 403, 'Current contest already has an unfreeze time set.', [DemoContestState::PostUnfreeze], false, true];
+        yield [['id' => "demo", 'scoreboard_thaw_time' => '+15 seconds', 'force' => false], 403, 'Current contest already has an unfreeze time set.', [DemoContestState::PostUnfreeze], false, true];
         yield [['id' => "demo", 'scoreboard_thaw_time' => '-60 seconds', 'force' => false], 403, 'New scoreboard_thaw_time too far in the past.', [], false, true];
-        yield [['id' => "demo", 'scoreboard_thaw_time' => '+15 seconds', 'force' => true], 204, null, [DemoPostUnfreezeContestFixture::class], false, true];
+        yield [['id' => "demo", 'scoreboard_thaw_time' => '+15 seconds', 'force' => true], 204, null, [DemoContestState::PostUnfreeze], false, true];
         yield [['id' => "demo", 'scoreboard_thaw_time' => '+15 seconds'], 204, null, [], false, true];
         yield [['id' => "demo", 'scoreboard_thaw_time' => '-15 seconds'], 200, 'Demo contest', [], true, true];
     }

@@ -3,7 +3,7 @@
 namespace App\Tests\Unit\Controller\Team;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use App\DataFixtures\Test\DemoAboutToStartContestFixture;
+use App\Tests\Support\DemoContestState;
 use App\Entity\ContestProblem;
 use App\Entity\Problem;
 use App\Entity\Testcase;
@@ -240,7 +240,7 @@ class ProblemControllerTest extends BaseTestCase
      */
     public function testAccessProblemBeforeContestStarts(): void
     {
-        $this->loadFixtures([DemoAboutToStartContestFixture::class]);
+        $this->loadFixtures([DemoContestState::AboutToStart]);
 
         /** @var EntityManagerInterface $em */
         $em = self::getContainer()->get(EntityManagerInterface::class);

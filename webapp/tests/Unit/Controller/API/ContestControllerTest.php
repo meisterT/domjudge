@@ -2,7 +2,7 @@
 
 namespace App\Tests\Unit\Controller\API;
 
-use App\DataFixtures\Test\DemoPreStartContestFixture;
+use App\Tests\Support\DemoContestState;
 use App\Entity\Contest;
 use App\Entity\Event;
 use App\Utils\CcsApiVersion;
@@ -39,7 +39,7 @@ class ContestControllerTest extends BaseTestCase
      */
     public function testListShowsActivatedButNotStartedContest(): void
     {
-        $this->loadFixture(DemoPreStartContestFixture::class);
+        $this->loadFixture(DemoContestState::PreStart);
 
         $url = $this->helperGetEndpointURL($this->apiEndpoint);
         // Use 'demo' user which has team role
@@ -66,7 +66,7 @@ class ContestControllerTest extends BaseTestCase
      */
     public function testSingleShowsActivatedButNotStartedContest(): void
     {
-        $this->loadFixture(DemoPreStartContestFixture::class);
+        $this->loadFixture(DemoContestState::PreStart);
 
         $contestId = $this->resolveEntityId(Contest::class, '1');
         $url = $this->helperGetEndpointURL($this->apiEndpoint, $contestId);

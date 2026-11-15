@@ -2,11 +2,13 @@
 
 namespace App\Tests\Unit;
 
+use App\Entity\Contest;
 use App\Entity\Role;
 use App\Entity\User;
 use App\Entity\Configuration;
 use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
+use App\Tests\Support\DemoContestState;
 use Doctrine\Common\DataFixtures\Executor\ORMExecutor;
 use Doctrine\Common\DataFixtures\FixtureInterface;
 use Doctrine\Common\DataFixtures\Loader;
@@ -59,12 +61,56 @@ abstract class BaseTestCase extends WebTestCase
     }
 
     /**
-     * Load the given fixtures.
+     * Load the given fixtures, and put the demo contest in the given states, in the order given.
+     *
+     * @param array<class-string|DemoContestState> $fixtures
      */
     protected function loadFixtures(array $fixtures): void
     {
         if ($this->fixtureExecutor === null) {
             $this->fixtureExecutor = new ORMExecutor(static::getContainer()->get(EntityManagerInterface::class));
+        }
+
+        $fixtureClasses = [];
+        foreach ($fixtures as $fixture) {
+            if ($fixture instanceof DemoContestState) {
+                $this->executeFixtures($fixtureClasses);
+                $fixtureClasses = [];
+                $this->applyDemoContestState($fixture);
+            } else {
+                $fixtureClasses[] = $fixture;
+            }
+        }
+        $this->executeFixtures($fixtureClasses);
+    }
+
+    /**
+     * Load the given fixture, or put the demo contest in the given state.
+     *
+     * @param class-string|DemoContestState $fixture
+     */
+    protected function loadFixture(string|DemoContestState $fixture): void
+    {
+        $this->loadFixtures([$fixture]);
+    }
+
+    /**
+     * Put the demo contest of the baseline data in the given state.
+     */
+    protected function applyDemoContestState(DemoContestState $state): void
+    {
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $state->apply($em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']));
+        $em->flush();
+    }
+
+    /**
+     * @param class-string[] $fixtures
+     */
+    private function executeFixtures(array $fixtures): void
+    {
+        if ($fixtures === []) {
+            return;
         }
 
         // Use the Symfony fixture loader so the fixtures can be autowired as a service
@@ -80,14 +126,6 @@ abstract class BaseTestCase extends WebTestCase
         }
 
         $this->fixtureExecutor->execute($loader->getFixtures(), true);
-    }
-
-    /**
-     * Load the given fixture.
-     */
-    protected function loadFixture(string $fixture): void
-    {
-        $this->loadFixtures([$fixture]);
     }
 
     /**

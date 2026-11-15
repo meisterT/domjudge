@@ -3,7 +3,7 @@
 namespace App\Tests\Unit\Controller\API;
 
 use App\DataFixtures\Test\DummyProblemFixture;
-use App\DataFixtures\Test\LockedContestFixture;
+use App\Tests\Support\DemoContestState;
 use App\Entity\Problem;
 use Doctrine\ORM\EntityManagerInterface;
 use Generator;
@@ -187,7 +187,7 @@ EOF;
 
     public function testAddToLocked(): void
     {
-        $this->loadFixture(LockedContestFixture::class);
+        $this->loadFixture(DemoContestState::Locked);
         $this->loadFixture(DummyProblemFixture::class);
 
         $body = [
@@ -208,7 +208,7 @@ EOF;
 
     public function testDeleteFromLocked(): void
     {
-        $this->loadFixture(LockedContestFixture::class);
+        $this->loadFixture(DemoContestState::Locked);
 
         // Check that we cannot delete the problem.
         $url = $this->helperGetEndpointURL($this->apiEndpoint) . '/fltcmp';

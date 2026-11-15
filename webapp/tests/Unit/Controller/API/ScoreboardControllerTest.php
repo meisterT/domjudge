@@ -3,7 +3,7 @@
 namespace App\Tests\Unit\Controller\API;
 
 use PHPUnit\Framework\Attributes\DataProvider;
-use App\DataFixtures\Test\DemoNonPublicContestFixture;
+use App\Tests\Support\DemoContestState;
 use App\DataFixtures\Test\RemoveTeamFromDemoUserFixture;
 use App\DataFixtures\Test\SampleEventsFixture;
 use App\DataFixtures\Test\SampleSubmissionsThreeTriesCorrectFixture;
@@ -28,7 +28,7 @@ class ScoreboardControllerTest extends BaseTestCase
             $this->loadFixture(RemoveTeamFromDemoUserFixture::class);
         }
         if (!$publicContest) {
-            $this->loadFixture(DemoNonPublicContestFixture::class);
+            $this->loadFixture(DemoContestState::NonPublic);
         }
         $contestId = $this->resolveEntityId(Contest::class, (string)$contestId);
         $url = "/contests/$contestId/scoreboard";
