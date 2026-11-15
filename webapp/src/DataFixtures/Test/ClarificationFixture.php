@@ -14,13 +14,13 @@ class ClarificationFixture extends AbstractTestDataFixture implements DependentF
     public function load(ObjectManager $manager): void
     {
         /** @var Contest $contest */
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($manager);
         /** @var Team $team */
-        $team = $manager->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']);
+        $team = BaselineData::team($manager);
         /** @var Team $anotherTeam */
         $anotherTeam = $manager->getRepository(Team::class)->findOneBy(['externalid' => 'nav-alpha']);
         /** @var Problem $problem */
-        $problem = $manager->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']);
+        $problem = BaselineData::problem($manager);
 
         $unhandledClarification = new Clarification();
         $unhandledClarification

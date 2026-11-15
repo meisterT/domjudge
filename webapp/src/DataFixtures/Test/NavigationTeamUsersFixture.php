@@ -2,7 +2,6 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Role;
 use App\Entity\Team;
 use App\Entity\User;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
@@ -14,7 +13,7 @@ class NavigationTeamUsersFixture extends AbstractTestDataFixture implements Depe
     {
         foreach (['nav-alpha', 'nav-beta', 'nav-gamma'] as $id) {
             $team = $manager->getRepository(Team::class)->findOneBy(['externalid' => $id]);
-            $role = $manager->getRepository(Role::class)->findOneBy(['dj_role' => 'team']);
+            $role = BaselineData::role($manager, 'team');
             $user = new User();
             $user
                 ->setExternalid($id . '-user')

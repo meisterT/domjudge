@@ -231,16 +231,19 @@ These tests live in the ``webapp/tests`` directory.
 To run them, follow the following steps:
 
 * Make sure you have a working DOMjudge installation.
-* Create a new database with the same name as your normal database, but then
-  postfixed with ``_test``. Make sure your database user has the same permissions
-  on it as the normal database.
-* Make sure your test database contains only the sample data. This can be done by
-  first dropping any existing database and then running
-  ``APP_ENV=test bin/dj_setup_database -u root -r install``.
+* Run ``webapp/tests/setup-test-database.sh``. It installs the data the tests
+  build on, the pass-fail example contest without the example submissions, into
+  a database with the same name as your normal database, but postfixed with
+  ``_test``, which is the one the tests use. Your normal database is not
+  touched. Use ``-f`` to replace an existing test database.
+
+At the start of a run the tests check that the test database matches this data
+and report what differs if it does not. Installing the examples with
+``dj_setup_database install`` does not match, as it also adds the scoring
+contest and example submissions.
 
 Note that you don't have to drop and recreate the database every time you run the
-tests; the tests are written in such a way that they keep working, even if you
-run them multiple times.
+tests; every test runs in a transaction that is rolled back afterwards.
 
 The file ``webapp/.env.test`` (and ``webapp/.env.test.local`` if it
 exists) are loaded when you run the unit tests. You can thus place any
@@ -269,7 +272,10 @@ it should work.
 
 Test data
 ---------
-Tests build on the example data of an installation. Beyond that data:
+Tests build on the data described in
+``webapp/src/DataFixtures/Test/BaselineData.php``. Look up the contest, teams,
+users and problems of that data through this class, so that a test explains what
+is missing instead of failing somewhere later. Beyond that data:
 
 * Use a case of ``DemoContestState`` to put the demo contest in a certain
   state. It can be passed to ``loadFixtures()`` in the same list as fixtures.

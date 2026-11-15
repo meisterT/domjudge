@@ -1,5 +1,6 @@
 <?php declare(strict_types=1);
 
+use App\Tests\Support\TestDatabase;
 use Symfony\Component\Config\ConfigCache;
 use Symfony\Component\Dotenv\Dotenv;
 use Symfony\Component\Filesystem\Filesystem;
@@ -33,3 +34,5 @@ if ($cacheLock !== false) {
     flock($cacheLock, LOCK_UN);
     fclose($cacheLock);
 }
+
+(new TestDatabase())->prepare();

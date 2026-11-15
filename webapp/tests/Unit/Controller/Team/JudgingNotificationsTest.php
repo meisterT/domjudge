@@ -2,8 +2,8 @@
 
 namespace App\Tests\Unit\Controller\Team;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\RecentlyJudgedTooLateSubmissionFixture;
-use App\Entity\Contest;
 use App\Tests\Unit\BaseTestCase;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -21,7 +21,7 @@ class JudgingNotificationsTest extends BaseTestCase
         $notifications = json_decode($this->client->getResponse()->getContent(), true)['unread_submissions'];
 
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $endtime = (float)$em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo'])->getEndtime();
+        $endtime = (float)BaselineData::contest($em)->getEndtime();
         $tooLate = count(array_filter($notifications, fn(array $n) => (float)$n['submittime'] >= $endtime));
         return ['inTime' => count($notifications) - $tooLate, 'tooLate' => $tooLate];
     }

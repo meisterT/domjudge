@@ -2,7 +2,6 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Team;
 use App\Entity\TeamCategory;
 use Doctrine\Persistence\ObjectManager;
 
@@ -20,7 +19,7 @@ class DemoTeamTwoScoringCategoriesFixture extends AbstractTestDataFixture
             ->setVisible(true);
         $manager->persist($category);
 
-        $team = $manager->getRepository(Team::class)->findOneBy(['externalid' => 'exteam']);
+        $team = BaselineData::team($manager);
         $team->addCategory($category);
         $manager->flush();
     }

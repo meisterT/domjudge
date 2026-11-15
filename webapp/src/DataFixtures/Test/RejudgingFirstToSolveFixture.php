@@ -2,8 +2,6 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Contest;
-use App\Entity\ContestProblem;
 use App\Entity\Judging;
 use App\Entity\Language;
 use App\Entity\Submission;
@@ -14,7 +12,7 @@ class RejudgingFirstToSolveFixture extends AbstractTestDataFixture
 {
     public function load(ObjectManager $manager): void
     {
-        $team1 = $manager->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']);
+        $team1 = BaselineData::team($manager);
         $team2 = (new Team())
             ->setName('Another team');
         foreach ($team1->getCategories() as $category) {
@@ -23,7 +21,7 @@ class RejudgingFirstToSolveFixture extends AbstractTestDataFixture
 
         $manager->persist($team2);
 
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($manager);
         // Two submissions, one for each team, the incorrect one before the correct one.
         // Later, in the test, we will flip the 'wrong-answer' to correct in
         // order to produce a new first to solve.
@@ -34,7 +32,7 @@ class RejudgingFirstToSolveFixture extends AbstractTestDataFixture
         ];
 
         $language = $manager->getRepository(Language::class)->findByExternalId('cpp');
-        $problem = $contest->getProblems()->filter(fn(ContestProblem $problem) => $problem->getShortname() === 'A')->first();
+        $problem = BaselineData::contestProblem($manager);
 
         foreach ($submissionData as $submissionItem) {
             $submission = (new Submission())

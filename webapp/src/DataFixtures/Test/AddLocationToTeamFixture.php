@@ -2,14 +2,13 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Team;
 use Doctrine\Persistence\ObjectManager;
 
 class AddLocationToTeamFixture extends AbstractTestDataFixture
 {
     public function load(ObjectManager $manager): void
     {
-        $team = $manager->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']);
+        $team = BaselineData::team($manager);
         $team->setLocation('Utrecht');
         $manager->flush();
     }

@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Entity\Contest;
 use App\Tests\Unit\BaseTestCase as BaseBaseTestCase;
@@ -55,9 +56,7 @@ abstract class BaseTestCase extends BaseBaseTestCase
         parent::setUp();
 
         // Load the contest used in tests.
-        $this->demoContest = static::getContainer()->get(EntityManagerInterface::class)
-            ->getRepository(Contest::class)
-            ->findOneBy(['shortname' => 'demo']);
+        $this->demoContest = BaselineData::contest(static::getContainer()->get(EntityManagerInterface::class));
     }
 
     /**

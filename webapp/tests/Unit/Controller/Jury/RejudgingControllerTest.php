@@ -2,15 +2,14 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\DataFixtures\Test\RejudgingStatesFixture;
 use App\Entity\Contest;
 use App\Entity\Executable;
 use App\Entity\ExecutableFile;
 use App\Entity\ImmutableExecutable;
-use App\Entity\Problem;
 use App\Entity\SubmissionSource;
-use App\Entity\Team;
 use App\Service\SubmissionService;
 use App\Tests\Unit\BaseTestCase;
 use Doctrine\ORM\EntityManagerInterface;
@@ -153,10 +152,10 @@ class RejudgingControllerTest extends BaseTestCase
         $em = static::getContainer()->get(EntityManagerInterface::class);
         $message = null;
         $submission = static::getContainer()->get(SubmissionService::class)->submitSolution(
-            $em->getRepository(Team::class)->findOneBy(['name' => 'DOMjudge']),
+            BaselineData::systemTeam($em),
             null,
-            $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']),
-            $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']),
+            BaselineData::problem($em),
+            BaselineData::contest($em),
             'c',
             [new UploadedFile(__FILE__, 'foo.c', null, null, true)],
             SubmissionSource::UNKNOWN, null, null, null, null, null, $message

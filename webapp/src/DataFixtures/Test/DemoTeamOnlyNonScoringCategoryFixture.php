@@ -2,7 +2,6 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Team;
 use App\Entity\TeamCategory;
 use Doctrine\Persistence\ObjectManager;
 
@@ -21,7 +20,7 @@ class DemoTeamOnlyNonScoringCategoryFixture extends AbstractTestDataFixture
             ->setVisible(true);
         $manager->persist($category);
 
-        $team = $manager->getRepository(Team::class)->findOneBy(['externalid' => 'exteam']);
+        $team = BaselineData::team($manager);
         foreach ($team->getCategories() as $oldCategory) {
             $team->removeCategory($oldCategory);
         }

@@ -2,11 +2,10 @@
 
 namespace App\Tests\Unit\Service;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\RejudgingFirstToSolveFixture;
-use App\Entity\Contest;
 use App\Entity\JudgeTask;
 use App\Entity\Judging;
-use App\Entity\Problem;
 use App\Entity\Rejudging;
 use App\Entity\SubmissionSource;
 use App\Entity\Team;
@@ -36,10 +35,10 @@ class RejudgingServiceTest extends BaseTestCase
 
         $this->loadFixture(RejudgingFirstToSolveFixture::class);
 
-        $contest = $entityManager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        $team1 = $entityManager->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']);
+        $contest = BaselineData::contest($entityManager);
+        $team1 = BaselineData::team($entityManager);
         $team2 = $entityManager->getRepository(Team::class)->findOneBy(['name' => 'Another team']);
-        $problem = $entityManager->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']);
+        $problem = BaselineData::problem($entityManager);
         $contestProblem = $problem->getContestProblems()->first();
 
         // Get the initial scoreboard.
@@ -98,9 +97,9 @@ class RejudgingServiceTest extends BaseTestCase
         $container = static::getContainer();
         $em = $container->get(EntityManagerInterface::class);
 
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        $team = $em->getRepository(Team::class)->findOneBy(['name' => 'DOMjudge']);
-        $problem = $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']);
+        $contest = BaselineData::contest($em);
+        $team = BaselineData::systemTeam($em);
+        $problem = BaselineData::problem($em);
 
         $message = null;
         $submission = $container->get(SubmissionService::class)->submitSolution(

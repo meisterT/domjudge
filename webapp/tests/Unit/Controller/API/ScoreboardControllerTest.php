@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Tests\Support\DemoContestState;
 use App\DataFixtures\Test\RemoveTeamFromDemoUserFixture;
@@ -57,7 +58,7 @@ class ScoreboardControllerTest extends BaseTestCase
     #[DataProvider('provideFilters')]
     public function testFilteredScoreboard(array $filters, int $expectedCount): void
     {
-        $contestId = $this->resolveEntityId(Contest::class, '1');
+        $contestId = BaselineData::contest(static::getContainer()->get(EntityManagerInterface::class))->getExternalid();
         $filter = '?'.implode('&', $filters);
         $url = "/contests/$contestId/scoreboard";
         $scoreboard = $this->verifyApiJsonResponse('GET', $url.$filter, 200, 'admin');

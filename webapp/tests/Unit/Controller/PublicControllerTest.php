@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\DataFixtures\Test\EnableSelfregisterFixture;
 use App\DataFixtures\Test\EnableSelfregisterSecondCategoryFixture;
@@ -38,7 +39,7 @@ class PublicControllerTest extends BaseTestCase
         // Deactivate the demo contest
         $em = static::getContainer()->get(EntityManagerInterface::class);
         /** @var Contest $contest */
-        $contest = $em->getRepository(Contest::class)->findOneBy(['externalid' => 'demo']);
+        $contest = BaselineData::contest($em);
         $contest->setDeactivatetimeString((new \DateTime())->sub(new \DateInterval('PT1H'))->format(DateTimeInterface::ATOM));
         $em->flush();
 
@@ -50,7 +51,7 @@ class PublicControllerTest extends BaseTestCase
     {
         $this->loadFixture(SampleSubmissionsInBucketsFixture::class);
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         static::getContainer()->get(ScoreboardService::class)->refreshCache($contest);
 
         $this->verifyPageResponse('GET', '/public?static=1', 200);
@@ -71,7 +72,7 @@ class PublicControllerTest extends BaseTestCase
 
         $em = static::getContainer()->get(EntityManagerInterface::class);
         /** @var Contest $contest */
-        $contest = $em->getRepository(Contest::class)->findOneBy(['externalid' => 'demo']);
+        $contest = BaselineData::contest($em);
         $contest->setWarningMessage($msg);
         $em->flush();
 
@@ -312,7 +313,7 @@ class PublicControllerTest extends BaseTestCase
         $this->loadFixture(SampleSubmissionsInBucketsFixture::class);
         /** @var EntityManagerInterface $em */
         $em          = self::getContainer()->get(EntityManagerInterface::class);
-        $demoContest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $demoContest = BaselineData::contest($em);
         if ($removeFreezeTime) {
             $demoContest->setFreezetimeString(null);
         }
@@ -387,7 +388,7 @@ class PublicControllerTest extends BaseTestCase
         $this->loadFixture(SampleSubmissionsThreeTriesCorrectFixture::class);
         /** @var EntityManagerInterface $em */
         $em = self::getContainer()->get(EntityManagerInterface::class);
-        $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo'])->setFreezetimeString(null);
+        BaselineData::contest($em)->setFreezetimeString(null);
         // Its submissions are judged timelimit, wrong-answer and correct; make the first one a compiler error.
         $submissionId = $this->resolveReference(SampleSubmissionsThreeTriesCorrectFixture::class . ':0', Submission::class);
         $em->getRepository(Submission::class)->find($submissionId)->getJudgings()->first()->setResult('compiler-error');

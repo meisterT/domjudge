@@ -2,11 +2,9 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Contest;
 use App\Entity\Judging;
 use App\Entity\Language;
 use App\Entity\Submission;
-use App\Entity\Team;
 use App\Utils\Utils;
 use Doctrine\Persistence\ObjectManager;
 
@@ -16,7 +14,7 @@ class SampleSubmissionsInBucketsFixture extends AbstractTestDataFixture
     {
         // First, set the demo contest to have normal timing. We also set (un)freeze time,
         // but the test will unset them for specific cases
-        $demoContest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $demoContest = BaselineData::contest($manager);
         $demoContest
             ->setStarttimeString('2022-01-01 00:00:00 Europe/Amsterdam')
             ->setFreezetimeString('2022-01-01 04:05:00 Europe/Amsterdam')
@@ -38,10 +36,10 @@ class SampleSubmissionsInBucketsFixture extends AbstractTestDataFixture
             ['2022-01-01 04:50:00 Europe/Amsterdam', false],
         ];
         foreach ($submissionData as [$time, $correct]) {
-            $problem    = $demoContest->getProblems()->first();
+            $problem    = BaselineData::contestProblem($manager);
             $submission = (new Submission())
                 ->setContest($demoContest)
-                ->setTeam($manager->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']))
+                ->setTeam(BaselineData::team($manager))
                 ->setContestProblem($problem)
                 ->setLanguage($manager->getRepository(Language::class)->findByExternalId('cpp'))
                 ->setSubmittime(Utils::toEpochFloat($time));

@@ -2,9 +2,8 @@
 
 namespace App\Tests\Unit\Controller\Team;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\SubmissionRateLimitFixture;
-use App\Entity\Problem;
-use App\Entity\Contest;
 use App\Tests\Unit\BaseTestCase as UnitBaseTestCase;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -13,12 +12,10 @@ class SubmissionRateLimitUITest extends UnitBaseTestCase
 {
     protected function submitSolution(string $user, string $password): void
     {
-        $contest = static::getContainer()->get(EntityManagerInterface::class)
-            ->getRepository(Contest::class)
-            ->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest(static::getContainer()->get(EntityManagerInterface::class));
         $contestId = $contest->getExternalid();
         
-        $problemId = $this->resolveEntityId(Problem::class, '1');
+        $problemId = BaselineData::problem(static::getContainer()->get(EntityManagerInterface::class))->getExternalid();
         
         $url = "/api/contests/$contestId/submissions";
         $server = [

@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Service;
 
+use App\DataFixtures\Test\BaselineData;
 use App\Entity\Contest;
 use App\Entity\ExternalContestSourceType;
 use App\Entity\Team;
@@ -42,7 +43,7 @@ class ExternalContestSourceServiceTest extends BaseTestCase
     {
         $em = static::getContainer()->get(EntityManagerInterface::class);
         /** @var Contest $contest */
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $contest
             ->setOpenToAllTeams($openToAllTeams)
             ->setExternalSourceEnabled(true)

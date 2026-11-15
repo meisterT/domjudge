@@ -20,16 +20,13 @@ class PreviousSubmissionTestcaseRunsFixture extends AbstractTestDataFixture
     public function load(ObjectManager $manager): void
     {
         /** @var Contest $contest */
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($manager);
         /** @var Team $team */
-        $team = $manager->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']);
+        $team = BaselineData::team($manager);
         /** @var Language $language */
         $language = $manager->getRepository(Language::class)->findByExternalId('cpp');
 
-        /** @var ContestProblem $contestProblem */
-        $contestProblem = $contest->getProblems()
-            ->filter(fn (ContestProblem $problem) => $problem->getShortname() === 'A')
-            ->first();
+        $contestProblem = BaselineData::contestProblem($manager);
         /** @var Testcase $testcase */
         $testcase = $contestProblem->getProblem()->getTestcases()->first();
 

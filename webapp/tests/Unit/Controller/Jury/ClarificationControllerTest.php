@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\ClarificationFixture;
 use App\DataFixtures\Test\ClarificationForProblemOutsideContestFixture;
 use App\Entity\Clarification;
@@ -154,7 +155,7 @@ class ClarificationControllerTest extends BaseTestCase
     {
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $demo = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $demo = BaselineData::contest($em);
 
         // External ids are assigned from the internal id unless they are set
         // explicitly, which is what an external CCS or the API does.

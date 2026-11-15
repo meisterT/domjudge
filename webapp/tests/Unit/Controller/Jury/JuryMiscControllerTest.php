@@ -2,13 +2,13 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\DataFixtures\Test\SampleSubmissionsFixture;
 use App\DataFixtures\Test\SampleSubmissionsMultipleTriesFixture;
 use App\DataFixtures\Test\SampleSubmissionsThreeTriesCorrectFixture;
 use App\DataFixtures\Test\SampleSubmissionsThreeTriesCorrectSameLanguageFixture;
 use App\Tests\Support\DemoContestState;
-use App\Entity\Contest;
 use App\Service\ScoreboardService;
 use App\Tests\Unit\BaseTestCase;
 use Doctrine\ORM\EntityManagerInterface;
@@ -89,7 +89,7 @@ class JuryMiscControllerTest extends BaseTestCase
         $sbs = static::getContainer()->get(ScoreboardService::class);
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $sbs->refreshCache($contest);
         $this->roles = ['balloon'];
         $this->logOut();

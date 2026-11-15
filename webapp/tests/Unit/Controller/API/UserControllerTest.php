@@ -2,8 +2,8 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\SelfRegisteredUserFixture;
-use App\Entity\Team;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -169,7 +169,7 @@ class UserControllerTest extends AccountBaseTestCase
         $user
             ->setEnabled(false)
             ->setIpAddress('10.0.0.1')
-            ->setTeam($manager->getRepository(Team::class)->findOneBy(['externalid' => 'exteam']));
+            ->setTeam(BaselineData::team($manager));
         $manager->flush();
 
         return $user;
@@ -280,7 +280,7 @@ class UserControllerTest extends AccountBaseTestCase
 
         /** @var EntityManagerInterface $manager */
         $manager = static::getContainer()->get(EntityManagerInterface::class);
-        $oldHash = $manager->getRepository(User::class)->findOneBy(['username' => 'demo'])->getPassword();
+        $oldHash = BaselineData::user($manager)->getPassword();
 
         $data = [
             'current_password' => 'demo',
@@ -290,7 +290,7 @@ class UserControllerTest extends AccountBaseTestCase
         $this->verifyApiJsonResponse('POST', $this->helperGetEndpointURL($this->apiEndpoint) . '/demo/change-password', 204, 'demo', $data);
 
         $manager->clear();
-        $newHash = $manager->getRepository(User::class)->findOneBy(['username' => 'demo'])->getPassword();
+        $newHash = BaselineData::user($manager)->getPassword();
         self::assertNotEquals($oldHash, $newHash);
     }
 
@@ -299,7 +299,7 @@ class UserControllerTest extends AccountBaseTestCase
         /** @var EntityManagerInterface $manager */
         $manager = static::getContainer()->get(EntityManagerInterface::class);
         /** @var User $user */
-        $user = $manager->getRepository(User::class)->findOneBy(['username' => 'demo']);
+        $user = BaselineData::user($manager);
         foreach ($user->getTeam()->getCategories() as $category) {
             $category->setAllowPasswordChange(true);
         }

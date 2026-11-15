@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Service;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\BalloonNotificationsSettingsFixture;
 use App\DataFixtures\Test\ContestTimeFixture;
 use App\Entity\Contest;
@@ -175,10 +176,10 @@ class BalloonServiceTest extends BaseTestCase
         $container = static::getContainer();
         $em = $container->get(EntityManagerInterface::class);
 
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $contest->setProcessBalloons(true);
-        $team = $em->getRepository(Team::class)->findOneBy(['name' => 'DOMjudge']);
-        $problem = $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']);
+        $team = BaselineData::systemTeam($em);
+        $problem = BaselineData::problem($em);
 
         // The demo data may already contain balloons for this pair.
         $em->getConnection()->executeStatement(

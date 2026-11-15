@@ -2,14 +2,13 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\User;
 use Doctrine\Persistence\ObjectManager;
 
 class RemoveTeamFromAdminUserFixture extends AbstractTestDataFixture
 {
     public function load(ObjectManager $manager): void
     {
-        $user = $manager->getRepository(User::class)->findOneBy(['username' => 'admin']);
+        $user = BaselineData::user($manager, BaselineData::USER_ADMIN);
         $user->setTeam();
         $manager->flush();
     }

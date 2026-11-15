@@ -28,7 +28,7 @@ class RejudgingStatesFixture extends AbstractTestDataFixture
     public function load(ObjectManager $manager): void
     {
         /** @var User $user */
-        $user = $manager->getRepository(User::class)->findOneBy(['username' => 'admin']);
+        $user = BaselineData::user($manager, BaselineData::USER_ADMIN);
         foreach (static::rejudgingStages() as $rejudgingStage) {
             $rejudging = (new Rejudging())
                 ->setStarttime(Utils::toEpochFloat('2019-01-01 07:07:07'))
@@ -48,7 +48,7 @@ class RejudgingStatesFixture extends AbstractTestDataFixture
                 /** @var Contest|null $contest */
                 $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => $contestName]);
                 /** @var Team $team */
-                $team = $manager->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']);
+                $team = BaselineData::team($manager);
                 /** @var Language $language */
                 $language = $manager->getRepository(Language::class)->findByExternalId('java');
                 // A rejudging has both judgings todo and finished

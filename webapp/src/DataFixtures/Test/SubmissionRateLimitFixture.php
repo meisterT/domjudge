@@ -2,11 +2,9 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Role;
 use App\Entity\Team;
 use App\Entity\User;
 use App\Entity\TeamCategory;
-use App\Entity\Contest;
 use Doctrine\Persistence\ObjectManager;
 
 class SubmissionRateLimitFixture extends AbstractTestDataFixture
@@ -28,7 +26,7 @@ class SubmissionRateLimitFixture extends AbstractTestDataFixture
             ->setName('ratelimit-user')
             ->setPlainPassword('ratelimit-password')
             ->setTeam($team)
-            ->addUserRole($manager->getRepository(Role::class)->findOneBy(['dj_role' => 'team']));
+            ->addUserRole(BaselineData::role($manager, 'team'));
         $manager->persist($user);
 
         $juryTeam = new Team();
@@ -44,19 +42,17 @@ class SubmissionRateLimitFixture extends AbstractTestDataFixture
             ->setName('ratelimit-jury')
             ->setPlainPassword('ratelimit-jury-password')
             ->setTeam($juryTeam)
-            ->addUserRole($manager->getRepository(Role::class)->findOneBy(['dj_role' => 'team']))
-            ->addUserRole($manager->getRepository(Role::class)->findOneBy(['dj_role' => 'jury']));
+            ->addUserRole(BaselineData::role($manager, 'team'))
+            ->addUserRole(BaselineData::role($manager, 'jury'));
         $manager->persist($juryUser);
 
         // Make sure teams are in the demo contest
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        if ($contest) {
-            if (!$contest->getTeams()->contains($team)) {
-                $contest->addTeam($team);
-            }
-            if (!$contest->getTeams()->contains($juryTeam)) {
-                $contest->addTeam($juryTeam);
-            }
+        $contest = BaselineData::contest($manager);
+        if (!$contest->getTeams()->contains($team)) {
+            $contest->addTeam($team);
+        }
+        if (!$contest->getTeams()->contains($juryTeam)) {
+            $contest->addTeam($juryTeam);
         }
 
         $manager->flush();

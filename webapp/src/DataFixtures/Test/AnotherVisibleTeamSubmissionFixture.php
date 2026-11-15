@@ -2,8 +2,6 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Contest;
-use App\Entity\ContestProblem;
 use App\Entity\Judging;
 use App\Entity\Language;
 use App\Entity\Submission;
@@ -22,7 +20,7 @@ class AnotherVisibleTeamSubmissionFixture extends AbstractTestDataFixture
 
     public function load(ObjectManager $manager): void
     {
-        $exampleTeam = $manager->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']);
+        $exampleTeam = BaselineData::team($manager);
         $otherTeam = (new Team())
             ->setName('Another visible team')
             ->setExternalid('othervisibleteam');
@@ -31,10 +29,8 @@ class AnotherVisibleTeamSubmissionFixture extends AbstractTestDataFixture
         }
         $manager->persist($otherTeam);
 
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        $problem = $contest->getProblems()
-            ->filter(fn(ContestProblem $cp) => $cp->getShortname() === 'B')
-            ->first();
+        $contest = BaselineData::contest($manager);
+        $problem = BaselineData::contestProblem($manager, BaselineData::PROBLEM_FLTCMP);
         $language = $manager->getRepository(Language::class)->findByExternalId('cpp');
 
         $submittime = Utils::toEpochFloat('2021-02-15 10:00:00');

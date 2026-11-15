@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\UnjudgedSubmissionFixture;
 use App\DataFixtures\Test\PreviousSubmissionTestcaseRunsFixture;
 use App\DataFixtures\Test\SampleSubmissionsThreeTriesCorrectFixture;
@@ -9,7 +10,6 @@ use App\Entity\Contest;
 use App\Entity\ContestProblemsetContent;
 use App\Entity\JudgeTask;
 use App\Entity\QueueTask;
-use App\Entity\Team;
 use App\Service\ScoreboardService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DomCrawler\Crawler;
@@ -454,7 +454,7 @@ class ContestControllerTest extends JuryControllerTestCase
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
 
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         self::assertInstanceOf(Contest::class, $contest);
         $oldContent = (new ContestProblemsetContent())
             ->setContest($contest)
@@ -487,7 +487,7 @@ class ContestControllerTest extends JuryControllerTestCase
         }
 
         $em->clear();
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         self::assertInstanceOf(Contest::class, $contest);
         self::assertSame('txt', $contest->getContestProblemsetType());
 
@@ -508,7 +508,7 @@ class ContestControllerTest extends JuryControllerTestCase
         $em = static::getContainer()->get(EntityManagerInterface::class);
 
         $problemsetContent = "problemset to keep, then delete\n";
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         self::assertInstanceOf(Contest::class, $contest);
 
         $content = (new ContestProblemsetContent())
@@ -538,7 +538,7 @@ class ContestControllerTest extends JuryControllerTestCase
         );
 
         $em->clear();
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         self::assertInstanceOf(Contest::class, $contest);
         self::assertSame($problemsetContent, $contest->getContestProblemset());
         self::assertSame('txt', $contest->getContestProblemsetType());
@@ -556,7 +556,7 @@ class ContestControllerTest extends JuryControllerTestCase
         );
 
         $em->clear();
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         self::assertInstanceOf(Contest::class, $contest);
         self::assertNull($contest->getContestProblemsetContent());
         self::assertNull($contest->getContestProblemsetType());
@@ -585,7 +585,7 @@ class ContestControllerTest extends JuryControllerTestCase
         self::assertEquals(4, $judgeTaskQuery->getSingleScalarResult());
 
         // Now, disable the problem.
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $contestId = $contest->getExternalid();
         $url = "/jury/contests/$contestId/edit";
         $this->verifyPageResponse('GET', $url, 200);
@@ -684,7 +684,7 @@ class ContestControllerTest extends JuryControllerTestCase
 
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $contest->setIsLocked(false);
         $contestId = $contest->getExternalid();
         $editUrl = "/jury/contests/$contestId/edit";
@@ -712,7 +712,7 @@ class ContestControllerTest extends JuryControllerTestCase
 
         // The requests share the entity manager, so don't reuse what they loaded.
         $em->clear();
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $contest->setIsLocked(true);
         $em->flush();
 
@@ -744,7 +744,7 @@ class ContestControllerTest extends JuryControllerTestCase
 
         // Deleting an unlocked contest works.
         $em->clear();
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $contest->setIsLocked(false);
         $em->flush();
         $this->verifyPageResponse('GET', $deleteUrl, 200);
@@ -787,8 +787,7 @@ class ContestControllerTest extends JuryControllerTestCase
 
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        self::assertNotNull($contest);
+        $contest = BaselineData::contest($em);
         $contest->setIsLocked(false);
         $em->flush();
         $contestId = $contest->getExternalid();
@@ -801,7 +800,7 @@ class ContestControllerTest extends JuryControllerTestCase
         $this->checkStatusAndFollowRedirect();
         $this->verifyPageResponse('GET', static::$baseUrl, 200);
         self::assertSelectorNotExists('body:contains("Demo contest")');
-        self::assertNull($em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']));
+        self::assertNull($em->getRepository(Contest::class)->findOneBy(['shortname' => BaselineData::CONTEST_SHORTNAME]));
     }
 
     public function testChangingRuntimeTiebreakerRefreshesRankCache(): void
@@ -816,15 +815,13 @@ class ContestControllerTest extends JuryControllerTestCase
         /** @var ScoreboardService $scoreboardService */
         $scoreboardService = static::getContainer()->get(ScoreboardService::class);
 
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        self::assertNotNull($contest);
+        $contest = BaselineData::contest($em);
         $contest->setIsLocked(false);
         $em->flush();
 
         $scoreboardService->refreshCache($contest);
 
-        $team = $em->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']);
-        self::assertNotNull($team);
+        $team = BaselineData::team($em);
         $cid = $contest->getCid();
         $contestId = $contest->getExternalid();
         $teamId = $team->getTeamid();

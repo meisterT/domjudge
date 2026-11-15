@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\Team;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Tests\Support\DemoContestState;
 use App\Entity\ContestProblem;
@@ -115,7 +116,7 @@ class ProblemControllerTest extends BaseTestCase
         // First, enable two samples for the fltcmp problem.
         $em = self::getContainer()->get(EntityManagerInterface::class);
         /** @var Problem $problem */
-        $problem = $em->getRepository(Problem::class)->findOneBy(['externalid' => 'fltcmp']);
+        $problem = BaselineData::problem($em, BaselineData::PROBLEM_FLTCMP);
 
         /** @var Testcase[] $samples */
         $samples = [
@@ -167,7 +168,7 @@ class ProblemControllerTest extends BaseTestCase
         // First, enable a sample for the interactive boolfind problem.
         $em = self::getContainer()->get(EntityManagerInterface::class);
         /** @var Problem $problem */
-        $problem = $em->getRepository(Problem::class)->findOneBy(['externalid' => 'boolfind']);
+        $problem = BaselineData::problem($em, BaselineData::PROBLEM_BOOLFIND);
 
         /** @var Testcase $sample */
         $sample = $problem->getTestcases()->get(0);
@@ -203,7 +204,7 @@ class ProblemControllerTest extends BaseTestCase
         /** @var EntityManagerInterface $em */
         $em = self::getContainer()->get(EntityManagerInterface::class);
         /** @var Problem $problem */
-        $problem = $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']);
+        $problem = BaselineData::problem($em);
         $problem->getTestcases()->get(0)->setSample(true);
         $em->flush();
 
@@ -224,7 +225,7 @@ class ProblemControllerTest extends BaseTestCase
 
         /** @var EntityManagerInterface $em */
         $em = self::getContainer()->get(EntityManagerInterface::class);
-        $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello'])
+        BaselineData::problem($em)
             ->getContestProblems()->first()->setAllowSubmit(false);
         $em->flush();
 

@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Command;
 
+use App\DataFixtures\Test\BaselineData;
 use App\Entity\Configuration;
 use App\Entity\Contest;
 use App\Entity\Event;
@@ -25,7 +26,7 @@ class UpgradeEventsCommandTest extends BaseTestCase
         $app = new Application(self::$kernel);
         $this->commandTester = new CommandTester($app->find('domjudge:upgrade-events'));
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
-        $this->contest = $this->em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $this->contest = BaselineData::contest($this->em);
 
         $this->em->createQueryBuilder()->delete(Event::class, 'e')->getQuery()->execute();
     }

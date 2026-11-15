@@ -2,8 +2,8 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\SubmissionRateLimitFixture;
-use App\Entity\Problem;
 use App\Entity\Submission;
 use App\Entity\Contest;
 use App\Tests\Unit\BaseTestCase as UnitBaseTestCase;
@@ -17,9 +17,7 @@ class SubmissionRateLimitTest extends UnitBaseTestCase
     protected function getDemoContestId(): string
     {
         /** @var Contest $contest */
-        $contest = static::getContainer()->get(EntityManagerInterface::class)
-            ->getRepository(Contest::class)
-            ->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest(static::getContainer()->get(EntityManagerInterface::class));
         return $contest->getExternalid();
     }
 
@@ -57,7 +55,7 @@ class SubmissionRateLimitTest extends UnitBaseTestCase
     {
         $contestId = $this->getDemoContestId();
         $apiEndpoint = $this->apiEndpoint;
-        $problemId = $this->resolveEntityId(Problem::class, '1');
+        $problemId = BaselineData::problem(static::getContainer()->get(EntityManagerInterface::class))->getExternalid();
         $data = [
             'problem' => $problemId,
             'language' => 'cpp',

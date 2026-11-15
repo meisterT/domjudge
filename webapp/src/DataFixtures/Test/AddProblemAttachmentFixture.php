@@ -2,7 +2,6 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Problem;
 use App\Entity\ProblemAttachment;
 use App\Entity\ProblemAttachmentContent;
 use Doctrine\Persistence\ObjectManager;
@@ -36,7 +35,7 @@ for testcase_number in range(number_of_testcases):
             assert number>=0
             assert boolean_array[number]==1 and boolean_array[number+1]==0
             found=True";
-        $problem = $manager->getRepository(Problem::class)->findOneBy(['externalid' => 'boolfind']);
+        $problem = BaselineData::problem($manager, BaselineData::PROBLEM_BOOLFIND);
         $attachment = (new ProblemAttachment())
             ->setName('interactor')
             ->setType('py')

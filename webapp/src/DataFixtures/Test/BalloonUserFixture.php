@@ -2,7 +2,6 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Role;
 use App\Entity\User;
 use Doctrine\Persistence\ObjectManager;
 
@@ -16,7 +15,7 @@ class BalloonUserFixture extends AbstractTestDataFixture
             ->setUsername('balloonuser')
             ->setName('User for balloon runners')
             ->setPlainPassword('balloonuser')
-            ->addUserRole($manager->getRepository(Role::class)->findOneBy(['dj_role' => 'balloon']));
+            ->addUserRole(BaselineData::role($manager, 'balloon'));
 
         $manager->persist($user);
         $manager->flush();

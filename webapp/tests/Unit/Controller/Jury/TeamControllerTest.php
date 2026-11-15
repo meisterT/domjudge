@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\NonSortOrderTeamCategoryFixture;
 use App\DataFixtures\Test\PreviousSubmissionTestcaseRunsFixture;
 use App\Entity\Team;
@@ -221,8 +222,7 @@ class TeamControllerTest extends JuryControllerTestCase
 
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $team = $em->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']);
-        self::assertNotNull($team);
+        $team = BaselineData::team($em);
         $teamId = $team->getExternalid();
 
         // 2. Request delete page and submit
@@ -233,6 +233,6 @@ class TeamControllerTest extends JuryControllerTestCase
         $this->checkStatusAndFollowRedirect();
         $this->verifyPageResponse('GET', static::$baseUrl, 200);
         self::assertSelectorNotExists('body:contains("Example teamname")');
-        self::assertNull($em->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']));
+        self::assertNull($em->getRepository(Team::class)->findOneBy(['name' => BaselineData::TEAM_NAME]));
     }
 }

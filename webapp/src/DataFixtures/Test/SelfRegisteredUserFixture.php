@@ -2,9 +2,7 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Role;
 use App\Entity\User;
-use App\Entity\Team;
 use Doctrine\Persistence\ObjectManager;
 
 class SelfRegisteredUserFixture extends AbstractTestDataFixture
@@ -17,8 +15,8 @@ class SelfRegisteredUserFixture extends AbstractTestDataFixture
             ->setUsername('selfregister')
             ->setName('selfregistered user for example team')
             ->setPlainPassword('demo')
-            ->setTeam($manager->getRepository(Team::class)->findOneBy(['externalid' => 'exteam']))
-            ->addUserRole($manager->getRepository(Role::class)->findOneBy(['dj_role' => 'team']));
+            ->setTeam(BaselineData::team($manager))
+            ->addUserRole(BaselineData::role($manager, 'team'));
 
         $manager->persist($user);
         $manager->flush();

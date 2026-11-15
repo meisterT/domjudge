@@ -3,7 +3,6 @@
 namespace App\DataFixtures\Test;
 
 use App\Entity\Contest;
-use App\Entity\ContestProblem;
 use App\Entity\Judging;
 use App\Entity\Language;
 use App\Entity\Submission;
@@ -16,17 +15,15 @@ class SampleSubmissionsFixture extends AbstractTestDataFixture
     public function load(ObjectManager $manager): void
     {
         $submissionData = [
-            // team name,         problem shortname, language, submittime,            entry point, result
-            ['DOMjudge',          'A',               'cpp',    '2021-01-01 12:34:56', null,        'success'],
-            ['Example teamname',  'C',               'java',   '2021-03-04 12:00:00', 'Main',      'wrong-answer'],
+            // team name,         problem,           language, submittime,            entry point, result
+            ['DOMjudge',          'hello',           'cpp',    '2021-01-01 12:34:56', null,        'success'],
+            ['Example teamname',  'boolfind',        'java',   '2021-03-04 12:00:00', 'Main',      'wrong-answer'],
         ];
 
         /** @var Contest $contest */
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($manager);
         foreach ($submissionData as $index => $submissionItem) {
-            $problem = $contest->getProblems()->filter(
-                fn(ContestProblem $problem) => $problem->getShortname() === $submissionItem[1]
-            )->first();
+            $problem = BaselineData::contestProblem($manager, $submissionItem[1]);
             $submission = (new Submission())
                 ->setContest($contest)
                 ->setTeam($manager->getRepository(Team::class)->findOneBy(['name' => $submissionItem[0]]))

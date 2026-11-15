@@ -3,11 +3,9 @@
 namespace App\DataFixtures\Test;
 
 use App\Entity\Contest;
-use App\Entity\ContestProblem;
 use App\Entity\Judging;
 use App\Entity\Language;
 use App\Entity\Submission;
-use App\Entity\Team;
 use App\Utils\Utils;
 use Doctrine\Persistence\ObjectManager;
 
@@ -22,16 +20,13 @@ class UnjudgedSubmissionFixture extends AbstractTestDataFixture
     public function load(ObjectManager $manager): void
     {
         /** @var Contest $contest */
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        /** @var ContestProblem $problem */
-        $problem = $contest->getProblems()->filter(
-            fn(ContestProblem $problem) => $problem->getShortname() === 'A'
-        )->first();
+        $contest = BaselineData::contest($manager);
+        $problem = BaselineData::contestProblem($manager);
 
         $submission = (new Submission())
             ->setExternalid(static::EXTERNAL_ID)
             ->setContest($contest)
-            ->setTeam($manager->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']))
+            ->setTeam(BaselineData::team($manager))
             ->setContestProblem($problem)
             ->setLanguage($manager->getRepository(Language::class)->findByExternalId('cpp'))
             ->setSubmittime(Utils::toEpochFloat('2021-01-01 12:34:56'));

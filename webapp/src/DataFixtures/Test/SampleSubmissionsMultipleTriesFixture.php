@@ -3,7 +3,6 @@
 namespace App\DataFixtures\Test;
 
 use App\Entity\Contest;
-use App\Entity\ContestProblem;
 use App\Entity\Judging;
 use App\Entity\Language;
 use App\Entity\Submission;
@@ -16,19 +15,17 @@ class SampleSubmissionsMultipleTriesFixture extends AbstractTestDataFixture
     public function load(ObjectManager $manager): void
     {
         $submissionData = [
-            // team name,         problem shortname, language, submittime,            entry point, result
-            ['Example teamname',  'C',        'cpp',     '2021-02-01 01:00:56', null,        'timelimit'],
-            ['Example teamname',  'C',        'c',       '2021-02-01 03:15:56', null,        'run-error'],
-            ['Example teamname',  'C',        'java',    '2021-02-01 18:00:00', 'Main',      'wrong-answer'],
-            ['Example teamname',  'C',        'python3', '2021-02-01 18:00:34', 'main',      'compiler-error'],
+            // team name,         problem,           language, submittime,            entry point, result
+            ['Example teamname',  'boolfind', 'cpp',     '2021-02-01 01:00:56', null,        'timelimit'],
+            ['Example teamname',  'boolfind', 'c',       '2021-02-01 03:15:56', null,        'run-error'],
+            ['Example teamname',  'boolfind', 'java',    '2021-02-01 18:00:00', 'Main',      'wrong-answer'],
+            ['Example teamname',  'boolfind', 'python3', '2021-02-01 18:00:34', 'main',      'compiler-error'],
         ];
 
         /** @var Contest $contest */
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($manager);
         foreach ($submissionData as $index => $submissionItem) {
-            $problem = $contest->getProblems()->filter(
-                fn(ContestProblem $problem) => $problem->getShortname() === $submissionItem[1]
-            )->first();
+            $problem = BaselineData::contestProblem($manager, $submissionItem[1]);
             $submission = (new Submission())
                 ->setContest($contest)
                 ->setTeam($manager->getRepository(Team::class)->findOneBy(['name' => $submissionItem[0]]))

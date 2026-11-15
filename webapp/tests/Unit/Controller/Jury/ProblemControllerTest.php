@@ -2,11 +2,11 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\AddProblemAttachmentFixture;
 use App\DataFixtures\Test\PreviousSubmissionTestcaseRunsFixture;
 use App\DataFixtures\Test\SampleSubmissionsInBucketsFixture;
 use App\Entity\AuditLog;
-use App\Entity\Contest;
 use App\Entity\Problem;
 use App\Entity\ProblemAttachment;
 use App\Entity\ProblemStatementContent;
@@ -191,7 +191,7 @@ class ProblemControllerTest extends JuryControllerTestCase
         /** @var EntityManagerInterface $em */
         $em = self::getContainer()->get(EntityManagerInterface::class);
         /** @var Problem $problem */
-        $problem = $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']);
+        $problem = BaselineData::problem($em);
         $sample = $problem->getTestcases()->get(0);
         // The jury can also download samples of problems teams cannot submit to.
         $problem->getContestProblems()->first()->setAllowSubmit(false);
@@ -218,10 +218,10 @@ class ProblemControllerTest extends JuryControllerTestCase
 
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $contest->setIsLocked(true);
         $contestId = $contest->getCid();
-        $problem = $em->getRepository(Problem::class)->findOneBy(['probid' => 1]);
+        $problem = BaselineData::problem($em);
         $probId = $problem->getExternalid();
         $editUrl = "/jury/problems/$probId/edit";
         $deleteUrl = "/jury/problems/$probId/delete";
@@ -259,8 +259,7 @@ class ProblemControllerTest extends JuryControllerTestCase
         $em = static::getContainer()->get(EntityManagerInterface::class);
 
         // Get a contest to associate problems with
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        self::assertNotNull($contest, 'Demo contest not found.');
+        $contest = BaselineData::contest($em);
 
         // Create some problems to delete
         $problemsData = [
@@ -344,7 +343,7 @@ class ProblemControllerTest extends JuryControllerTestCase
         // 3. Verify the problem exists and has dependent data
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $problem = $em->getRepository(Problem::class)->findOneBy(['name' => 'Hello World']);
+        $problem = $em->getRepository(Problem::class)->findOneBy(['name' => BaselineData::PROBLEM_HELLO_NAME]);
         self::assertNotNull($problem);
         $probId = $problem->getExternalid();
 
@@ -356,7 +355,7 @@ class ProblemControllerTest extends JuryControllerTestCase
         $this->checkStatusAndFollowRedirect();
         $this->verifyPageResponse('GET', static::$baseUrl, 200);
         self::assertSelectorNotExists('body:contains("Hello World")');
-        self::assertNull($em->getRepository(Problem::class)->findOneBy(['name' => 'Hello World']));
+        self::assertNull($em->getRepository(Problem::class)->findOneBy(['name' => BaselineData::PROBLEM_HELLO_NAME]));
     }
 
     public function testToggleAllowSubmitWithLongExternalId(): void
@@ -367,8 +366,8 @@ class ProblemControllerTest extends JuryControllerTestCase
 
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        $problem = $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']);
+        $contest = BaselineData::contest($em);
+        $problem = BaselineData::problem($em);
         // Twice this ID plus the separator does not fit in auditlog.dataid (64 characters).
         $probId = 'hello-world-problem-with-long-external-id';
         $problem->setExternalid($probId);

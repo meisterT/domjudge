@@ -2,7 +2,7 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
-use App\Entity\Contest;
+use App\DataFixtures\Test\BaselineData;
 use App\Entity\Event;
 use App\Service\ConfigurationService;
 use App\Tests\Unit\BaseTestCase;
@@ -76,7 +76,7 @@ class ConfigControllerTest extends BaseTestCase
         $em = static::getContainer()->get(EntityManagerInterface::class);
         $em->createQueryBuilder()->delete(Event::class, 'e')->getQuery()->execute();
         $em->persist((new Event())
-            ->setContest($em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']))
+            ->setContest(BaselineData::contest($em))
             ->setEventtime('100.000')
             ->setEndpointtype('contests')
             ->setEndpointid('demo')

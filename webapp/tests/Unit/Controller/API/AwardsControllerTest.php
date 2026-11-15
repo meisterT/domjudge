@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\SampleSubmissionsThreeTriesCorrectFixture;
 use App\Entity\Contest;
 use App\Service\ScoreboardService;
@@ -34,7 +35,7 @@ class AwardsControllerTest extends BaseTestCase
         /** @var EntityManagerInterface $manager */
         $manager = static::getContainer()->get(EntityManagerInterface::class);
         /** @var Contest $contest */
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($manager);
         /** @var ScoreboardService $scoreboardService */
         $scoreboardService = static::getContainer()->get(ScoreboardService::class);
         $scoreboardService->refreshCache($contest);

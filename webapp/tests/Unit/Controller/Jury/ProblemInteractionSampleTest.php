@@ -2,7 +2,7 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
-use App\Entity\Contest;
+use App\DataFixtures\Test\BaselineData;
 use App\Service\ImportProblemService;
 use App\Tests\Unit\BaseTestCase;
 use Doctrine\ORM\EntityManagerInterface;
@@ -28,8 +28,7 @@ class ProblemInteractionSampleTest extends BaseTestCase
         $zip = new ZipArchive();
         $zip->open($tmpFile);
         $messages = ['info' => [], 'warning' => [], 'danger' => []];
-        $contest = static::getContainer()->get(EntityManagerInterface::class)
-            ->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest(static::getContainer()->get(EntityManagerInterface::class));
         $problem = static::getContainer()->get(ImportProblemService::class)
             ->importZippedProblem($zip, 'interactiontest.zip', null, $contest, $messages);
         $zip->close();

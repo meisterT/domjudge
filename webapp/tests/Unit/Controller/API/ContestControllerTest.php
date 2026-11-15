@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\DataFixtures\Test\BaselineData;
 use App\Tests\Support\DemoContestState;
 use App\Entity\Contest;
 use App\Entity\Event;
@@ -68,7 +69,7 @@ class ContestControllerTest extends BaseTestCase
     {
         $this->loadFixture(DemoContestState::PreStart);
 
-        $contestId = $this->resolveEntityId(Contest::class, '1');
+        $contestId = BaselineData::contest(static::getContainer()->get(EntityManagerInterface::class))->getExternalid();
         $url = $this->helperGetEndpointURL($this->apiEndpoint, $contestId);
         // Use 'demo' user which has team role
         $contest = $this->verifyApiJsonResponse('GET', $url, 200, 'demo');
@@ -81,7 +82,7 @@ class ContestControllerTest extends BaseTestCase
     public function testEventFeedOnlyContainsEventsOfConfiguredVersion(): void
     {
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $events = [];
         foreach ([CcsApiVersion::Format_2020_03, CcsApiVersion::Format_2026_01] as $version) {
             $event = (new Event())

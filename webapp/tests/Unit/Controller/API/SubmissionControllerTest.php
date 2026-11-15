@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\DataFixtures\Test\AddMoreDemoUsersFixture;
 use App\DataFixtures\Test\DemoTeamOnlyNonScoringCategoryFixture;
@@ -191,7 +192,7 @@ class SubmissionControllerTest extends BaseTestCase
     {
         $contestId = $this->getDemoContestId();
         $apiEndpoint = $this->apiEndpoint;
-        $data = $this->verifyApiJsonResponse('POST', "/contests/$contestId/$apiEndpoint", 400, 'admin', ['problem_id' => $this->resolveEntityId(Problem::class, '1'), 'language_id' => 'cpp', 'id' => '123']);
+        $data = $this->verifyApiJsonResponse('POST', "/contests/$contestId/$apiEndpoint", 400, 'admin', ['problem_id' => BaselineData::problem(static::getContainer()->get(EntityManagerInterface::class))->getExternalid(), 'language_id' => 'cpp', 'id' => '123']);
         static::assertEquals('Passing an ID is not supported for POST.', $data['message']);
     }
 
@@ -202,7 +203,7 @@ class SubmissionControllerTest extends BaseTestCase
     {
         $contestId = $this->getDemoContestId();
         $apiEndpoint = $this->apiEndpoint;
-        $data = $this->verifyApiJsonResponse('PUT', "/contests/$contestId/$apiEndpoint/id1", 400, 'admin', ['problem_id' => $this->resolveEntityId(Problem::class, '1'), 'language_id' => 'cpp', 'id' => '123']);
+        $data = $this->verifyApiJsonResponse('PUT', "/contests/$contestId/$apiEndpoint/id1", 400, 'admin', ['problem_id' => BaselineData::problem(static::getContainer()->get(EntityManagerInterface::class))->getExternalid(), 'language_id' => 'cpp', 'id' => '123']);
         static::assertEquals('ID does not match URI.', $data['message']);
     }
 
@@ -215,7 +216,7 @@ class SubmissionControllerTest extends BaseTestCase
 
         $contestId = $this->getDemoContestId();
         $apiEndpoint = $this->apiEndpoint;
-        $data = $this->verifyApiJsonResponse('POST', "/contests/$contestId/$apiEndpoint", 400, 'demo', ['problem_id' => $this->resolveEntityId(Problem::class, '1'), 'language' => 'kotlin']);
+        $data = $this->verifyApiJsonResponse('POST', "/contests/$contestId/$apiEndpoint", 400, 'demo', ['problem_id' => BaselineData::problem(static::getContainer()->get(EntityManagerInterface::class))->getExternalid(), 'language' => 'kotlin']);
 
         static::assertEquals('Main class required, but not specified.', $data['message']);
     }
@@ -230,7 +231,7 @@ class SubmissionControllerTest extends BaseTestCase
 
         $contestId = $this->getDemoContestId();
         $apiEndpoint = $this->apiEndpoint;
-        $data = $this->verifyApiJsonResponse('POST', "/contests/$contestId/$apiEndpoint", 400, $username, ['problem_id' => $this->resolveEntityId(Problem::class, '1'), 'language' => 'cpp']);
+        $data = $this->verifyApiJsonResponse('POST', "/contests/$contestId/$apiEndpoint", 400, $username, ['problem_id' => BaselineData::problem(static::getContainer()->get(EntityManagerInterface::class))->getExternalid(), 'language' => 'cpp']);
 
         static::assertEquals('User does not belong to a team.', $data['message']);
     }

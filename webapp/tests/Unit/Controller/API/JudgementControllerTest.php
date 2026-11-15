@@ -2,11 +2,11 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\AnotherVisibleTeamSubmissionFixture;
 use App\Tests\Support\DemoContestState;
 use App\DataFixtures\Test\RemoveTeamFromDemoUserFixture;
 use App\DataFixtures\Test\SampleSubmissionsThreeTriesCorrectFixture;
-use App\Entity\Contest;
 use App\Entity\Judging;
 use App\Entity\Language;
 use App\Entity\Submission;
@@ -144,11 +144,11 @@ class JudgementControllerTest extends BaseTestCase
         $this->loadFixtures([DemoContestState::PreFreeze]);
         // Team DOMjudge is in the hidden System category.
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $submittime = Utils::toEpochFloat('2021-02-15 10:00:00');
         $submission = (new Submission())
             ->setContest($contest)
-            ->setTeam($em->getRepository(Team::class)->findOneBy(['name' => 'DOMjudge']))
+            ->setTeam(BaselineData::systemTeam($em))
             ->setContestProblem($contest->getProblems()->first())
             ->setLanguage($em->getRepository(Language::class)->findByExternalId('cpp'))
             ->setSubmittime($submittime);

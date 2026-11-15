@@ -2,8 +2,6 @@
 
 namespace App\DataFixtures\Test;
 
-use App\Entity\Role;
-use App\Entity\Team;
 use App\Entity\User;
 use Doctrine\Persistence\ObjectManager;
 
@@ -16,8 +14,8 @@ class AddMoreDemoUsersFixture extends AbstractTestDataFixture
             ->setUsername('seconddemo')
             ->setName('second demo user for example team')
             ->setPlainPassword('seconddemo')
-            ->setTeam($manager->getRepository(Team::class)->findOneBy(['name' => 'Example teamname']))
-            ->addUserRole($manager->getRepository(Role::class)->findOneBy(['dj_role' => 'team']));
+            ->setTeam(BaselineData::team($manager))
+            ->addUserRole(BaselineData::role($manager, 'team'));
 
         $manager->persist($user);
         $manager->flush();
@@ -41,7 +39,7 @@ class AddMoreDemoUsersFixture extends AbstractTestDataFixture
             ->setUsername('fourthdemo')
             ->setName('fourth demo user not linked to any team')
             ->setPlainPassword('fourthdemo')
-            ->addUserRole($manager->getRepository(Role::class)->findOneBy(['dj_role' => 'team']));
+            ->addUserRole(BaselineData::role($manager, 'team'));
 
         $manager->persist($user);
         $manager->flush();

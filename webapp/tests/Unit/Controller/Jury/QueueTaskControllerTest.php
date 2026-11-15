@@ -2,9 +2,9 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Controller\Jury\QueueTaskController;
-use App\Entity\Contest;
 use App\Entity\ContestProblem;
 use App\Entity\JudgeTask;
 use App\Entity\Judging;
@@ -133,8 +133,8 @@ class QueueTaskControllerTest extends BaseTestCase
     public function testLazy(bool $shadowMode, int $globalLazy, int $problemLazy): void
     {
         $this->setupShadowMode($shadowMode);
-        $contest = $this->em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        $problem = $this->em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']);
+        $contest = BaselineData::contest($this->em);
+        $problem = BaselineData::problem($this->em);
         $hello = $this->em->getRepository(ContestProblem::class)->find(
             [ 'contest' => $contest, 'problem' => $problem ]
         );
@@ -188,7 +188,7 @@ class QueueTaskControllerTest extends BaseTestCase
     protected function addSubmission(string $team, string $problem): Submission
     {
         // Add a single submission
-        $contest = $this->em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($this->em);
         $team = $this->em->getRepository(Team::class)->findOneBy(['name' => $team]);
         $problem = $this->em->getRepository(Problem::class)->findOneBy(['externalid' => $problem]);
         return $this->submissionService->submitSolution(

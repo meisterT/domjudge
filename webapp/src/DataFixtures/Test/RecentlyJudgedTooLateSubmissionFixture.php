@@ -6,7 +6,6 @@ use App\Entity\Contest;
 use App\Entity\Judging;
 use App\Entity\Language;
 use App\Entity\Submission;
-use App\Entity\Team;
 use App\Utils\Utils;
 use Doctrine\Persistence\ObjectManager;
 
@@ -19,8 +18,8 @@ class RecentlyJudgedTooLateSubmissionFixture extends AbstractTestDataFixture
     public function load(ObjectManager $manager): void
     {
         /** @var Contest $contest */
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        $team = $manager->getRepository(Team::class)->findOneBy(['externalid' => 'exteam']);
+        $contest = BaselineData::contest($manager);
+        $team = BaselineData::team($manager);
         $contestProblem = $contest->getProblems()->first();
         $language = $manager->getRepository(Language::class)->findByExternalId('cpp');
 

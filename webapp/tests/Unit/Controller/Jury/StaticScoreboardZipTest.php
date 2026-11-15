@@ -2,8 +2,8 @@
 
 namespace App\Tests\Unit\Controller\Jury;
 
+use App\DataFixtures\Test\BaselineData;
 use App\DataFixtures\Test\SampleSubmissionsInBucketsFixture;
-use App\Entity\Contest;
 use App\Service\ScoreboardService;
 use App\Tests\Unit\BaseTestCase;
 use Doctrine\ORM\EntityManagerInterface;
@@ -21,7 +21,7 @@ class StaticScoreboardZipTest extends BaseTestCase
         parent::setUp();
 
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         static::getContainer()->get(ScoreboardService::class)->refreshCache($contest);
     }
 

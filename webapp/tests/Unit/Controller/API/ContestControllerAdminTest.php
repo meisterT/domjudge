@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use App\Tests\Support\DemoContestState;
@@ -189,10 +190,7 @@ EOF;
     public function testBannerManagement(): void
     {
         // First, make sure we have no banner
-        $id = 1;
-        if ($this->objectClassForExternalId !== null) {
-            $id = $this->resolveEntityId($this->objectClassForExternalId, (string)$id);
-        }
+        $id = BaselineData::CONTEST_SHORTNAME;
         $url = $this->helperGetEndpointURL($this->apiEndpoint, (string)$id);
         $object = $this->verifyApiJsonResponse('GET', $url, 200, $this->apiUser);
         self::assertArrayNotHasKey('banner', $object);
@@ -232,10 +230,7 @@ EOF;
     public function testProblemsetManagement(): void
     {
         // First, make sure we have no problemset document
-        $id = 1;
-        if ($this->objectClassForExternalId !== null) {
-            $id = $this->resolveEntityId($this->objectClassForExternalId, (string)$id);
-        }
+        $id = BaselineData::CONTEST_SHORTNAME;
         $url = $this->helperGetEndpointURL($this->apiEndpoint, (string)$id);
         $object = $this->verifyApiJsonResponse('GET', $url, 200, $this->apiUser);
         self::assertArrayNotHasKey('problemset', $object);
@@ -291,10 +286,7 @@ EOF;
 
     public function testProblemsetReplacementUpdatesExistingContent(): void
     {
-        $id = 1;
-        if ($this->objectClassForExternalId !== null) {
-            $id = $this->resolveEntityId($this->objectClassForExternalId, (string)$id);
-        }
+        $id = BaselineData::CONTEST_SHORTNAME;
 
         $url = $this->helperGetEndpointURL($this->apiEndpoint, (string)$id);
         $firstContent = "first problemset document\n";
@@ -360,10 +352,7 @@ EOF;
     ): void {
         $this->loadFixture(DemoContestState::PreStart);
         $this->loadFixtures($extraFixtures);
-        $id = 1;
-        if ($this->objectClassForExternalId !== null) {
-            $id = $this->resolveEntityId($this->objectClassForExternalId, (string)$id);
-        }
+        $id = BaselineData::CONTEST_SHORTNAME;
         $url = $this->helperGetEndpointURL($this->apiEndpoint, (string)$id);
         if (($body['id'] ?? null) === 1) {
             $body['id'] = $id;
@@ -524,10 +513,7 @@ EOF;
 
     public function testResultsTsv(): void
     {
-        $id = 1;
-        if ($this->objectClassForExternalId !== null) {
-            $id = $this->resolveEntityId($this->objectClassForExternalId, (string)$id);
-        }
+        $id = BaselineData::CONTEST_SHORTNAME;
         $url = $this->helperGetEndpointURL($this->apiEndpoint, (string)$id);
 
         $content = $this->verifyApiResponse('GET', $url . '/results.tsv', 200, $this->apiUser, null, [], true);
@@ -537,10 +523,7 @@ EOF;
 
     public function testScoreboardZip(): void
     {
-        $id = 1;
-        if ($this->objectClassForExternalId !== null) {
-            $id = $this->resolveEntityId($this->objectClassForExternalId, (string)$id);
-        }
+        $id = BaselineData::CONTEST_SHORTNAME;
         $url = $this->helperGetEndpointURL($this->apiEndpoint, (string)$id);
 
         $content = $this->verifyApiResponse('GET', $url . '/scoreboard.zip', 200, $this->apiUser, null, [], true);

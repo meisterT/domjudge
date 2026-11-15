@@ -3,7 +3,6 @@
 namespace App\DataFixtures\Test;
 
 use App\Entity\Contest;
-use App\Entity\ContestProblem;
 use App\Entity\Judging;
 use App\Entity\Language;
 use App\Entity\Submission;
@@ -16,18 +15,16 @@ class SampleSubmissionsThreeTriesCorrectFixture extends AbstractTestDataFixture
     public function load(ObjectManager $manager): void
     {
         $submissionData = [
-            // team name,         problem shortname, language, submittime,            entry point, result
-            ['Example teamname',  'A',               'cpp',    '2021-01-01 12:34:56', null,        'timelimit'],
-            ['Example teamname',  'A',               'java',   '2021-01-02 12:00:00', 'Main',      'wrong-answer'],
-            ['Example teamname',  'A',               'c',      '2021-01-04 12:34:56', null,        'correct'],
+            // team name,         problem,           language, submittime,            entry point, result
+            ['Example teamname',  'hello',           'cpp',    '2021-01-01 12:34:56', null,        'timelimit'],
+            ['Example teamname',  'hello',           'java',   '2021-01-02 12:00:00', 'Main',      'wrong-answer'],
+            ['Example teamname',  'hello',           'c',      '2021-01-04 12:34:56', null,        'correct'],
         ];
 
         /** @var Contest $contest */
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($manager);
         foreach ($submissionData as $index => $submissionItem) {
-            $problem = $contest->getProblems()->filter(
-                fn(ContestProblem $problem) => $problem->getShortname() === $submissionItem[1]
-            )->first();
+            $problem = BaselineData::contestProblem($manager, $submissionItem[1]);
             $submission = (new Submission())
                 ->setContest($contest)
                 ->setTeam($manager->getRepository(Team::class)->findOneBy(['name' => $submissionItem[0]]))

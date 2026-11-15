@@ -2,7 +2,7 @@
 
 namespace App\Tests\Unit;
 
-use App\Entity\Contest;
+use App\DataFixtures\Test\BaselineData;
 use App\Entity\Role;
 use App\Entity\User;
 use App\Entity\Configuration;
@@ -100,7 +100,7 @@ abstract class BaseTestCase extends WebTestCase
     protected function applyDemoContestState(DemoContestState $state): void
     {
         $em = static::getContainer()->get(EntityManagerInterface::class);
-        $state->apply($em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']));
+        $state->apply(BaselineData::contest($em));
         $em->flush();
     }
 
@@ -215,10 +215,7 @@ abstract class BaseTestCase extends WebTestCase
     protected function setupUser(): User
     {
         $em = $this->client->getContainer()->get('doctrine.orm.entity_manager');
-        $user = $em->getRepository(User::class)->findOneBy(['username' => 'demo']);
-        if ($user === null) {
-            throw new Exception("No user 'demo' found, are you using the correct database?");
-        }
+        $user = BaselineData::user($em);
         // Clear all user roles, so we can set them specifically to what we want.
         foreach ($user->getUserRoles() as $role) {
             $user->removeUserRole($role);

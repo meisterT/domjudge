@@ -2,7 +2,7 @@
 
 namespace App\Tests\Unit\Controller\API;
 
-use App\Entity\Contest;
+use App\DataFixtures\Test\BaselineData;
 use App\Entity\InternalError;
 use App\Entity\JudgeTask;
 use App\Entity\Judgehost;
@@ -136,7 +136,7 @@ class JudgehostWorkflowTest extends BaseTestCase
     private function addSubmission(string $team = 'DOMjudge', string $problem = 'hello'): Submission
     {
         $em = $this->em();
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($em);
         $teamEntity = $em->getRepository(Team::class)->findOneBy(['name' => $team]);
         $problemEntity = $em->getRepository(Problem::class)->findOneBy(['externalid' => $problem]);
 

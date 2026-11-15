@@ -2,8 +2,8 @@
 
 namespace App\Tests\Unit\Integration;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
-use App\Entity\Contest;
 use App\Entity\Problem;
 use App\Service\ImportProblemService;
 use App\Tests\Unit\BaseTestCase;
@@ -120,9 +120,7 @@ class ProblemExportImportTest extends BaseTestCase
         $importService = static::getContainer()->get(ImportProblemService::class);
         $messages = ['info' => [], 'warning' => [], 'danger' => []];
 
-        $contest = static::getContainer()->get(EntityManagerInterface::class)
-            ->getRepository(Contest::class)
-            ->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest(static::getContainer()->get(EntityManagerInterface::class));
 
         $problem = $importService->importZippedProblem(
             $zip,

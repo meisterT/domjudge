@@ -2,10 +2,10 @@
 
 namespace App\Tests\Unit\Controller\Team;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use App\Entity\Clarification;
 use App\Entity\Contest;
-use App\Entity\Problem;
 use App\Entity\Team;
 use App\Tests\Unit\BaseTestCase;
 use App\Utils\Utils;
@@ -215,9 +215,9 @@ class MiscControllerTest extends BaseTestCase
 
         /** @var EntityManagerInterface $em */
         $em = self::getContainer()->get(EntityManagerInterface::class);
-        $contest = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
-        $otherTeam = $em->getRepository(Team::class)->findOneBy(['name' => 'DOMjudge']);
-        $problem = $em->getRepository(Problem::class)->findOneBy(['externalid' => 'hello']);
+        $contest = BaselineData::contest($em);
+        $otherTeam = BaselineData::systemTeam($em);
+        $problem = BaselineData::problem($em);
 
         $clarification = (new Clarification())
             ->setExternalid('for-the-other-team')

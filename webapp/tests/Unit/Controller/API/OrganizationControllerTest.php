@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller\API;
 
+use App\DataFixtures\Test\BaselineData;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use App\DataFixtures\Test\SampleAffiliationsFixture;
@@ -144,10 +145,7 @@ class OrganizationControllerTest extends BaseTestCase
         // Note: we are doing this as admin as we require privileges
 
         // First, make sure we have no logo
-        $id = 1;
-        if ($this->objectClassForExternalId !== null) {
-            $id = $this->resolveEntityId($this->objectClassForExternalId, (string)$id);
-        }
+        $id = BaselineData::AFFILIATION_EXTERNALID;
         $url = $this->helperGetEndpointURL($this->apiEndpoint, (string)$id);
         $object = $this->verifyApiJsonResponse('GET', $url, 200, 'admin');
         self::assertArrayNotHasKey('logo', $object);

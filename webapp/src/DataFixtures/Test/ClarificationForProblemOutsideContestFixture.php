@@ -18,7 +18,7 @@ class ClarificationForProblemOutsideContestFixture extends AbstractTestDataFixtu
     public function load(ObjectManager $manager): void
     {
         /** @var Contest $contest */
-        $contest = $manager->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $contest = BaselineData::contest($manager);
 
         // Deliberately not linked to the contest through a ContestProblem.
         $problem = (new Problem())
