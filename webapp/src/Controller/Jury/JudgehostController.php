@@ -68,19 +68,46 @@ class JudgehostController extends BaseController
             'last_judgingid' => ['title' => 'last judging'],
         ];
 
-        $now = Utils::now();
-        $timings = $this->em->createQueryBuilder()
-            ->from(JudgeTask::class, 'jt')
-            ->join(JudgingRun::class, 'jr', 'WITH', 'jr.judgetask = jt')
-            ->join('jr.judging', 'j')
+        $now = (float)Utils::now();
+        $loadSeconds = [5 * 60, 15 * 60, 60 * 60, 5 * 60 * 60];
+        $loadStart = array_map(static fn(int $secs): float => $now - $secs, $loadSeconds);
+
+        $loadQuery = $this->em->createQueryBuilder()
+            ->from(JudgingRun::class, 'jr')
+            ->join('jr.judgetask', 'jt')
             ->join('jt.judgehost', 'jh')
-            ->select('jh.judgehostid, jr.endtime, jr.startTime')
+            ->select('jh.judgehostid')
+            ->andWhere('jh.hidden = 0')
             ->andWhere('jr.startTime IS NOT NULL')
             ->andWhere('jr.endtime IS NOT NULL')
-            ->andWhere('jr.endtime >= :five_hours_ago')
-            ->setParameter('five_hours_ago', $now - 5*60*60)
-            ->getQuery()
-            ->getResult();
+            ->groupBy('jh.judgehostid');
+
+        foreach ($loadStart as $i => $windowStart) {
+            $param = 's' . $i;
+            $loadQuery
+                ->addSelect(sprintf(
+                    'SUM(CASE WHEN jr.endtime <= :%1$s OR jr.endtime <= jr.startTime THEN 0 ' .
+                    'WHEN jr.startTime > :%1$s THEN jr.endtime - jr.startTime ' .
+                    'ELSE jr.endtime - :%1$s END) AS load%2$d',
+                    $param,
+                    $i
+                ))
+                ->setParameter($param, $windowStart);
+        }
+        // Only runs ending within the widest (5h) window can contribute.
+        $loadQuery->andWhere('jr.endtime >= :s3');
+
+        /** @var list<array{judgehostid: int, load0: string|float|null, load1: string|float|null, load2: string|float|null, load3: string|float|null}> $loadRows */
+        $loadRows = $loadQuery->getQuery()->getArrayResult();
+        $loadsByJudgehost = [];
+        foreach ($loadRows as $row) {
+            $loadsByJudgehost[(int)$row['judgehostid']] = [
+                (float)$row['load0'],
+                (float)$row['load1'],
+                (float)$row['load2'],
+                (float)$row['load3'],
+            ];
+        }
 
         $propertyAccessor = PropertyAccess::createPropertyAccessor();
         $time_warn = $this->config->get('judgehost_warning');
@@ -137,28 +164,11 @@ class JudgehostController extends BaseController
                 'value' => 'j' . $lastJobId['jobid'],
             ];
 
-            $loads = [0.0, 0.0, 0.0, 0.0];
-            $loadMinutes = [60*5, 60*15, 60*60, 60*300];
-            $loadStart = [];
-            for ($i = 0; $i < 4; $i++) {
-                $loadStart[] = $now - $loadMinutes[$i];
-            }
-            foreach ($timings as $timing) {
-                if ($timing['judgehostid'] !== $judgehost->getJudgehostid()) {
-                    continue;
-                }
-                for ($i = 0; $i < 4; $i++) {
-                    $start_time = $timing['startTime'];
-                    $end_time = $timing['endtime'];
-                    $start_time = max($start_time, $loadStart[$i]);
-                    if ($start_time < $end_time) {
-                        $loads[$i] += ($end_time - $start_time);
-                    }
-                }
-            }
+            $rawLoads = $loadsByJudgehost[$judgehost->getJudgehostid()] ?? [0.0, 0.0, 0.0, 0.0];
+            $loads = [];
             // Normalize to [0,1] range.
             for ($i = 0; $i < 4; $i++) {
-                $loads[$i] = min(1.0, $loads[$i] / $loadMinutes[$i]);
+                $loads[$i] = min(1.0, $rawLoads[$i] / $loadSeconds[$i]);
             }
             $judgehostdata['load'] = [
                 'value' => sprintf('%.2f / %.2f / %.2f / %.2f', $loads[0], $loads[1], $loads[2], $loads[3]),
