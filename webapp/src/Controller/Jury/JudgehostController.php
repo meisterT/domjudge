@@ -22,6 +22,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\PropertyAccess\PropertyAccess;
@@ -29,12 +30,53 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\RouterInterface;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
+/**
+ * @phpstan-type TimelineRunRow array{
+ *     judgehostid: int,
+ *     startTime: string|float,
+ *     endtime: string|float,
+ *     judgingid: int,
+ *     submitid: int,
+ *     submit_externalid: ?string,
+ *     cid: int,
+ *     contest_shortname: string,
+ *     contest_externalid: string,
+ *     probid: int,
+ *     problem_name: string,
+ *     runresult: ?string,
+ *     jobid: ?int,
+ * }
+ * @phpstan-type TimelineSegment array{
+ *     jh: int,
+ *     c: int,
+ *     p: int,
+ *     s: string,
+ *     j: int,
+ *     st: float,
+ *     et: float,
+ *     r: ?string,
+ *     n: int,
+ * }
+ */
 #[IsGranted('ROLE_JURY')]
 #[Route(path: '/jury/judgehosts')]
 class JudgehostController extends BaseController
 {
-    /** Upper bound on the number of testcase runs sent to the timeline. */
+    /** Upper bound on the number of testcase runs fetched for the timeline. */
     private const TIMELINE_MAX_RUNS = 20000;
+
+    /** Supported timeline lookback windows in seconds. */
+    private const TIMELINE_WINDOWS = [
+        '15m' => 15 * 60,
+        '1h'  => 60 * 60,
+        '6h'  => 6 * 60 * 60,
+        '24h' => 24 * 60 * 60,
+    ];
+
+    private const TIMELINE_DEFAULT_WINDOW = '1h';
+
+    /** Maximum idle gap (in seconds) between runs of the same judging to coalesce into one bar. */
+    private const TIMELINE_COALESCE_GAP_SECONDS = 2.0;
 
     // Note: when adding or modifying routes, make sure they do not clash with the /judgehosts/{hostname} route.
 
@@ -235,14 +277,24 @@ class JudgehostController extends BaseController
 
     #[Route(path: '/timeline-data', name: 'jury_judgehost_timeline_data', methods: ['GET'])]
     #[ReleaseSessionLock]
-    public function timelineDataAction(): JsonResponse
+    public function timelineDataAction(Request $request): JsonResponse
     {
-        $now = Utils::now();
-        $twenty_four_hours_ago = $now - 24 * 60 * 60;
+        $window = (string)$request->query->get('window', self::TIMELINE_DEFAULT_WINDOW);
+        if (!isset(self::TIMELINE_WINDOWS[$window])) {
+            throw new BadRequestHttpException(sprintf("Invalid timeline window '%s'", $window));
+        }
 
-        // Fetch JudgingRuns which are the actual work
-        $query = $this->em->createQueryBuilder()
-            ->select('jh.judgehostid, jh.hostname, jr.startTime, jr.endtime, j.judgingid, s.submitid, c.shortname as contest_shortname, p.name as problem_name, jt.type, jr.runresult, jt.jobid')
+        $now = (float)Utils::now();
+        $windowStart = $now - self::TIMELINE_WINDOWS[$window];
+
+        // Fetch JudgingRuns which are the actual work.
+        /** @var list<TimelineRunRow> $rows */
+        $rows = $this->em->createQueryBuilder()
+            ->select(
+                'jh.judgehostid, jr.startTime, jr.endtime, j.judgingid, ' .
+                's.submitid, s.externalid as submit_externalid, c.cid, c.shortname as contest_shortname, ' .
+                'c.externalid as contest_externalid, p.probid, p.name as problem_name, jr.runresult, jt.jobid'
+            )
             ->from(JudgingRun::class, 'jr')
             ->join('jr.judgetask', 'jt')
             ->join('jt.judgehost', 'jh')
@@ -250,32 +302,124 @@ class JudgehostController extends BaseController
             ->join('j.submission', 's')
             ->join('s.contest', 'c')
             ->join('s.problem', 'p')
+            ->andWhere('jh.hidden = 0')
             ->andWhere('jr.startTime IS NOT NULL')
             ->andWhere('jr.endtime IS NOT NULL')
-            ->andWhere('jr.endtime >= :twenty_four_hours_ago')
-            ->setParameter('twenty_four_hours_ago', $twenty_four_hours_ago)
+            ->andWhere('jr.endtime >= :window_start')
+            ->setParameter('window_start', $windowStart)
             // Keep the response bounded on busy systems; the newest runs win.
             ->orderBy('jr.endtime', 'DESC')
-            ->setMaxResults(self::TIMELINE_MAX_RUNS)
-            ->getQuery();
+            ->setMaxResults(self::TIMELINE_MAX_RUNS + 1)
+            ->getQuery()
+            ->getArrayResult();
 
-        $results = $query->getResult();
+        $truncated = count($rows) > self::TIMELINE_MAX_RUNS;
+        if ($truncated) {
+            $rows = array_slice($rows, 0, self::TIMELINE_MAX_RUNS);
+        }
+
+        $contests = [];
+        $problems = [];
+        $byJudgehost = [];
+        foreach ($rows as $row) {
+            $contests[$row['cid']] = [
+                'shortname' => $row['contest_shortname'],
+                'externalid' => $row['contest_externalid'],
+            ];
+            $problems[$row['probid']] = $row['problem_name'];
+            $byJudgehost[$row['judgehostid']][] = $row;
+        }
+
+        $segments = $this->coalesceTimelineRuns($byJudgehost);
 
         $judgehosts = $this->em->getRepository(Judgehost::class)->findBy(['hidden' => 0]);
-        $judgehost_map = [];
+        $judgehostMap = [];
         foreach ($judgehosts as $jh) {
-            $judgehost_map[$jh->getJudgehostid()] = [
+            $judgehostMap[$jh->getJudgehostid()] = [
                 'hostname' => $jh->getHostname(),
                 'enabled' => $jh->getEnabled(),
             ];
         }
 
         return new JsonResponse([
-            'now' => (float)$now,
-            'twenty_four_hours_ago' => (float)$twenty_four_hours_ago,
-            'judgehosts' => $judgehost_map,
-            'data' => $results,
+            'now' => $now,
+            'window' => $window,
+            'window_start' => $windowStart,
+            'truncated' => $truncated,
+            'max_runs' => self::TIMELINE_MAX_RUNS,
+            'judgehosts' => (object)$judgehostMap,
+            'contests' => (object)$contests,
+            'problems' => (object)$problems,
+            'data' => $segments,
         ]);
+    }
+
+    /**
+     * Coalesce contiguous testcase runs of the same judging on the same judgehost
+     * so busy contests transfer and draw far fewer bars.
+     *
+     * @param array<int, list<TimelineRunRow>> $byJudgehost
+     * @return list<TimelineSegment>
+     */
+    private function coalesceTimelineRuns(array $byJudgehost): array
+    {
+        $segments = [];
+        foreach ($byJudgehost as $judgehostId => $hostRows) {
+            usort(
+                $hostRows,
+                static fn(array $a, array $b): int => ((float)$a['startTime'] <=> (float)$b['startTime'])
+                    ?: ((float)$a['endtime'] <=> (float)$b['endtime'])
+            );
+
+            $current = null;
+            $currentJudgingId = null;
+            foreach ($hostRows as $row) {
+                $startTime = (float)$row['startTime'];
+                $endTime = max($startTime, (float)$row['endtime']);
+                $judgingId = (int)$row['judgingid'];
+                $jobId = (int)($row['jobid'] ?? $judgingId);
+                $runResult = $row['runresult'];
+
+                if (
+                    $current !== null
+                    && $currentJudgingId === $judgingId
+                    && $current['j'] === $jobId
+                    && ($startTime - $current['et']) <= self::TIMELINE_COALESCE_GAP_SECONDS
+                ) {
+                    if ($endTime > $current['et']) {
+                        $current['et'] = $endTime;
+                    }
+                    $current['n']++;
+                    if ($runResult !== null && ($current['r'] === null || ($current['r'] === 'correct' && $runResult !== 'correct'))) {
+                        $current['r'] = $runResult;
+                    }
+                    continue;
+                }
+
+                if ($current !== null) {
+                    $segments[] = $current;
+                }
+
+                $currentJudgingId = $judgingId;
+                $current = [
+                    'jh' => (int)$judgehostId,
+                    'c'  => (int)$row['cid'],
+                    'p'  => (int)$row['probid'],
+                    's'  => (string)($row['submit_externalid'] ?? $row['submitid']),
+                    'j'  => $jobId,
+                    'st' => $startTime,
+                    'et' => $endTime,
+                    'r'  => $runResult,
+                    'n'  => 1,
+                ];
+            }
+
+            if ($current !== null) {
+                $segments[] = $current;
+            }
+        }
+
+        return $segments;
     }
 
     /**

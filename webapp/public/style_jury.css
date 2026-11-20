@@ -454,6 +454,12 @@ table.table-full-clickable-cell tr .table-button-head-right-right{
     cursor: grabbing;
 }
 
+#judgehost-timeline.is-loading canvas,
+#judgehost-timeline.is-loading svg {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
 .timeline-axis path,
 .timeline-axis line {
     fill: none;

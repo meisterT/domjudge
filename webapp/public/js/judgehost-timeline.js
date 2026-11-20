@@ -3,6 +3,9 @@ function initJudgehostTimeline(dataUrl) {
     const $container = $('#judgehost-timeline');
     const containerEl = $container[0];
     const $status = $container.find('.timeline-status');
+    const $windowControls = $('#timeline-window-controls');
+    const $refreshBtn = $('#timeline-refresh');
+    const $truncatedBadge = $('#timeline-truncated-badge');
 
     let canvas = containerEl.querySelector('canvas.timeline-canvas');
     if (!canvas) {
@@ -41,6 +44,9 @@ function initJudgehostTimeline(dataUrl) {
     }
 
     let currentJson = null;
+    let currentWindow = $windowControls.find('.active').data('timeline-window') || '1h';
+    let activeRequest = null;
+    let requestSeq = 0;
     let width = 0;
     let height = 0;
     let needsRender = false;
@@ -74,13 +80,17 @@ function initJudgehostTimeline(dataUrl) {
         const duration = (Math.max(0, run.endtime - run.startTime) / 1000).toFixed(3);
         // Build the tooltip from DOM nodes so names are never parsed as HTML.
         tooltip.html('').style('left', '0px');
-        [
+        const rows = [
             ['Contest', run.contest_shortname],
             ['Problem', run.problem_name],
             ['Submission', 's' + run.submitid + ' (j' + run.jobid + ')'],
             ['Result', run.runresult || 'judging'],
-            ['Duration', duration + 's'],
-        ].forEach(function(row) {
+            [run.runs > 1 ? 'Span' : 'Duration', duration + 's'],
+        ];
+        if (run.runs > 1) {
+            rows.push(['Runs', String(run.runs)]);
+        }
+        rows.forEach(function(row) {
             const line = tooltip.append('div');
             line.append('b').text(row[0] + ': ');
             line.append('span').text(row[1]);
@@ -263,14 +273,9 @@ function initJudgehostTimeline(dataUrl) {
 
         const now = currentJson.now;
         const start = currentJson.start;
-        const minStart = d3.min(visibleData, function(d) { return d.startTime; });
-        let displayStart = start;
-        if (minStart !== undefined && minStart < now) {
-            displayStart = Math.max(start, minStart - 1 * 60 * 1000);
-        }
 
         x = d3.time.scale()
-            .domain([displayStart, now])
+            .domain([start, now])
             .range([0, width]);
 
         y = d3.scale.ordinal()
@@ -365,41 +370,126 @@ function initJudgehostTimeline(dataUrl) {
         const rect = canvas.getBoundingClientRect();
         const hit = findRunAt(e.clientX - rect.left, e.clientY - rect.top);
         if (hit) {
-            window.location.href = domjudge_base_url + '/jury/submissions/' + encodeURIComponent(hit.submitid);
-        }
-    });
-
-    $status.text('Loading timeline...');
-
-    d3.json(dataUrl, function(error, json) {
-        if (error) {
-            console.error('Error loading timeline data:', error);
-            $status.text('Failed to load timeline data.');
-            return;
-        }
-
-        const allData = json.data;
-        for (let i = 0; i < allData.length; i++) {
-            const d = allData[i];
-            d.startTime = +d.startTime * 1000;
-            d.endtime = +d.endtime * 1000;
-            d._color = colors(d.jobid % 20);
-        }
-
-        currentJson = {
-            now: json.now * 1000,
-            start: json.twenty_four_hours_ago * 1000,
-            judgehosts: json.judgehosts,
-            allData: allData,
-        };
-
-        render();
-        $('#toggle-disabled-jh').off('change.timeline').on('change.timeline', render);
-        $(window).off('resize.timeline').on('resize.timeline', $.debounce(render, 150));
-        $('#judgehost-timeline-details').off('toggle.timeline').on('toggle.timeline', function() {
-            if (this.open && (needsRender || $container.width() - margin.left - margin.right !== width)) {
-                render();
+            if (hit.contest_externalid) {
+                window.location.href = domjudge_base_url
+                    + '/jury/contests/' + encodeURIComponent(hit.contest_externalid)
+                    + '/submissions/' + encodeURIComponent(hit.submitid);
+            } else {
+                window.location.href = domjudge_base_url
+                    + '/jury/submissions/' + encodeURIComponent(hit.submitid);
             }
-        });
+        }
     });
+
+    function clearChart() {
+        cancelScheduledDraw();
+        currentJson = null;
+        needsRender = false;
+        activeHostnames = [];
+        rowIndex = new Map();
+        clearHover(false);
+        if (ctx) {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        d3.select('#judgehost-timeline svg').selectAll('*').remove();
+    }
+
+    function buildDataUrl(win) {
+        const sep = dataUrl.indexOf('?') === -1 ? '?' : '&';
+        return dataUrl + sep + 'window=' + encodeURIComponent(win);
+    }
+
+    function loadData(win) {
+        currentWindow = win;
+        $windowControls.find('button[data-timeline-window]').each(function() {
+            const $btn = $(this);
+            $btn.toggleClass('active', $btn.data('timeline-window') === win);
+        });
+
+        const seq = ++requestSeq;
+        if (activeRequest) {
+            activeRequest.abort();
+            activeRequest = null;
+        }
+        clearHover(false);
+        $container.addClass('is-loading');
+        $status.text('Loading timeline...');
+        $truncatedBadge.addClass('d-none').text('');
+
+        const req = d3.json(buildDataUrl(win), function(error, json) {
+            if (seq !== requestSeq) {
+                return;
+            }
+            activeRequest = null;
+            $container.removeClass('is-loading');
+            if (error) {
+                console.error('Error loading timeline data:', error);
+                clearChart();
+                $status.text('Failed to load timeline data.');
+                return;
+            }
+
+            const judgehosts = json.judgehosts || {};
+            const contests = json.contests || {};
+            const problems = json.problems || {};
+            const rawData = json.data || [];
+            const allData = new Array(rawData.length);
+
+            for (let i = 0; i < rawData.length; i++) {
+                const seg = rawData[i];
+                const jh = judgehosts[seg.jh];
+                const contest = contests[seg.c];
+                allData[i] = {
+                    hostname: jh ? jh.hostname : ('#' + seg.jh),
+                    contest_shortname: contest ? contest.shortname : '',
+                    contest_externalid: contest ? contest.externalid : '',
+                    problem_name: problems[seg.p] || '',
+                    submitid: seg.s,
+                    jobid: seg.j,
+                    startTime: +seg.st * 1000,
+                    endtime: +seg.et * 1000,
+                    runresult: seg.r,
+                    runs: seg.n || 1,
+                    _color: colors(seg.j % 20),
+                };
+            }
+
+            if (json.truncated) {
+                const limit = json.max_runs ? json.max_runs.toLocaleString() : '20,000';
+                $truncatedBadge.text('Showing newest ' + limit + ' runs').removeClass('d-none');
+            } else {
+                $truncatedBadge.addClass('d-none').text('');
+            }
+
+            currentJson = {
+                now: json.now * 1000,
+                start: json.window_start * 1000,
+                judgehosts: judgehosts,
+                allData: allData,
+            };
+
+            render();
+        });
+        activeRequest = req;
+    }
+
+    $windowControls.off('click.timeline').on('click.timeline', 'button[data-timeline-window]', function() {
+        const win = $(this).data('timeline-window');
+        if (win && win !== currentWindow) {
+            loadData(win);
+        }
+    });
+    $refreshBtn.off('click.timeline').on('click.timeline', function() {
+        loadData(currentWindow);
+    });
+    $('#toggle-disabled-jh').off('change.timeline').on('change.timeline', render);
+    $(window).off('resize.timeline').on('resize.timeline', $.debounce(render, 150));
+    $('#judgehost-timeline-details').off('toggle.timeline').on('toggle.timeline', function() {
+        if (this.open && (needsRender || $container.width() - margin.left - margin.right !== width)) {
+            render();
+        }
+    });
+
+    loadData(currentWindow);
 }
