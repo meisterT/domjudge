@@ -256,43 +256,60 @@ class SubmissionController extends BaseController
             $this->em->flush();
         }
 
-        $runs = [];
-        if ($showSampleOutput && $judging !== null && $judging->getResult() !== 'compiler-error') {
-            $outputDisplayLimit    = (int)$this->config->get('output_display_limit');
-            $outputTruncateMessage = sprintf("\n[output display truncated after %d B]\n", $outputDisplayLimit);
+        // Only show verdicts for all testcases once the judging has finished to avoid
+        // exposing partial or out-of-order results while judging is still in progress.
+        $showAllTestcases = (bool)$this->config->get('show_all_testcase_verdicts')
+            && $judging !== null
+            && $judging->getResult() !== null;
 
+        $runs = [];
+        if (($showSampleOutput || $showAllTestcases) && $judging !== null && $judging->getResult() !== 'compiler-error') {
             $queryBuilder = $this->em->createQueryBuilder()
                 ->from(Testcase::class, 't')
                 ->leftJoin('t.judging_runs', 'jr', Join::WITH, 'jr.judging = :judging')
-                ->leftJoin('jr.output', 'jro')
                 ->select('t', 'jr')
                 ->andWhere('t.problem = :problem')
-                ->andWhere('t.sample = 1')
                 ->setParameter('judging', $judging)
                 ->setParameter('problem', $judging->getSubmission()->getProblem())
                 ->orderBy('t.ranknumber');
 
             if ($showLimits) {
-                $queryBuilder->addSelect('jro.metadata AS metadata');
+                $queryBuilder
+                    ->leftJoin('jr.output', 'jro')
+                    ->addSelect('jro.metadata AS metadata');
             }
 
-            if ($outputDisplayLimit < 0) {
-                $queryBuilder
-                    ->addSelect('jro.output_run AS output_run')
-                    ->addSelect('jro.output_error AS output_error')
-                    ->addSelect('jro.team_message AS team_message');
+            if ($showAllTestcases) {
+                $queryBuilder->andWhere('jr.runresult IS NOT NULL');
             } else {
-                $queryBuilder
-                    ->addSelect('TRUNCATE(jro.output_run, :outputDisplayLimit, :outputTruncateMessage) AS output_run')
-                    ->addSelect('TRUNCATE(jro.output_error, :outputDisplayLimit, :outputTruncateMessage) AS output_error')
-                    ->addSelect('TRUNCATE(jro.team_message, :outputDisplayLimit, :outputTruncateMessage) AS team_message')
-                    ->setParameter('outputDisplayLimit', $outputDisplayLimit)
-                    ->setParameter('outputTruncateMessage', $outputTruncateMessage);
+                $queryBuilder->andWhere('t.sample = 1');
             }
 
-            $runs = $queryBuilder
-                ->getQuery()
-                ->getResult();
+            if ($showSampleOutput) {
+                $outputDisplayLimit    = (int)$this->config->get('output_display_limit');
+                $outputTruncateMessage = sprintf("\n[output display truncated after %d B]\n", $outputDisplayLimit);
+
+                $queryBuilder->leftJoin('jr.output', 'jros', Join::WITH, 't.sample = 1');
+
+                if ($outputDisplayLimit < 0) {
+                    $queryBuilder
+                        ->addSelect('jros.output_run AS output_run')
+                        ->addSelect('jros.output_error AS output_error')
+                        ->addSelect('jros.team_message AS team_message');
+                } else {
+                    $queryBuilder
+                        ->addSelect('TRUNCATE(jros.output_run, :outputDisplayLimit, :outputTruncateMessage) AS output_run')
+                        ->addSelect('TRUNCATE(jros.output_error, :outputDisplayLimit, :outputTruncateMessage) AS output_error')
+                        ->addSelect('TRUNCATE(jros.team_message, :outputDisplayLimit, :outputTruncateMessage) AS team_message')
+                        ->setParameter('outputDisplayLimit', $outputDisplayLimit)
+                        ->setParameter('outputTruncateMessage', $outputTruncateMessage);
+                }
+            }
+
+            $runs = array_map(
+                static fn (mixed $run): array => is_array($run) ? $run : [0 => $run],
+                $queryBuilder->getQuery()->getResult()
+            );
         }
 
         $metadata = [];
@@ -318,6 +335,7 @@ class SubmissionController extends BaseController
             'showCompile' => $actuallyShowCompile,
             'allowDownload' => $allowDownload,
             'showSampleOutput' => $showSampleOutput,
+            'showAllTestcases' => $showAllTestcases,
             'runs' => $runs,
             'metadata' => $metadata,
             'showTooLateResult' => $showTooLateResult,

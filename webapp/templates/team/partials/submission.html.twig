@@ -90,89 +90,76 @@
             {% endif %}
         {% endif %}
 
+        {% if showAllTestcases and judging.result != 'compiler-error' %}
+            <hr/>
+            <h4 class="text-center">Runs</h4>
+
+            {% if runs is empty %}
+                <p class="nodata">No cases available.</p>
+            {% else %}
+                {% set stopOnFailure = current_team_contest.scoreboardTypeString != 'score' %}
+                {% set stop = false %}
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>Run</th>
+                            {% if showLimits %}
+                                <th>Runtime</th>
+                                <th>Memory usage</th>
+                            {% endif %}
+                            <th>Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for idx, run in runs %}
+                            {% if not stop %}
+                                {% set judgingRun = run.0.judgingRuns.first %}
+                                <tr>
+                                    <td>
+                                        {% if showSampleOutput and run.0.sample %}
+                                            <a href="#run-{{ run.0.rank }}">Run {{ run.0.rank }} (sample)</a>
+                                        {% else %}
+                                            Run {{ run.0.rank }}{% if run.0.sample %} (sample){% endif %}
+                                        {% endif %}
+                                    </td>
+                                    {% if showLimits %}
+                                        <td>{{ judgingRun.runtime }} sec</td>
+                                        <td>
+                                            {% if metadata[idx]['memory-bytes'] is defined %}
+                                                {{ metadata[idx]['memory-bytes'] | printSize }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+                                    <td>{{ judgingRun.runresult | printResult }}</td>
+                                </tr>
+                                {% if stopOnFailure and judgingRun.runresult != 'correct' %}
+                                    {% set stop = true %}
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+        {% endif %}
+
         {% if showSampleOutput and judging.result != 'compiler-error' %}
             <hr/>
             <h4 class="text-center">Run(s) on the provided sample data</h4>
 
-            {% if runs is empty %}
-                <p class="nodata">No sample cases available.</p>
-            {% else %}
-                {% for idx, run in runs %}
+            {% set hasSamples = false %}
+            {% for idx, run in runs %}
+                {% if run.0.sample %}
+                    {% set hasSamples = true %}
                     <h5 id="run-{{ run.0.rank }}" class="text-center mt-4">Run {{ run.0.rank }}</h5>
 
-                    {% set judgingRun = run.0.judgingRuns.first %}
-                    {% if judgingRun == null or judgingRun.runresult == null %}
-                        <p class="nodata">Run not finished yet.</p>
-                    {% else %}
-                        <div class="row">
-                            <div class="col-md-{{ size|default(4) }}">
-                                <table class="table table-sm table-striped">
-                                    {% if run.0.description(true) %}
-                                        <tr>
-                                            <th>Description</th>
-                                            <td>{{ run.0.description(true) }}</td>
-                                        </tr>
-                                    {% endif %}
-                                    {% if showLimits %}
-                                        <tr>
-                                            <th>Runtime</th>
-                                            <td>{{ judgingRun.runtime }} sec</td>
-                                        </tr>
-                                        {% if metadata[idx]['memory-bytes'] is defined %}
-                                            <tr>
-                                                <th>Memory usage</th>
-                                                <td>{{ metadata[idx]['memory-bytes'] | printSize }}</td>
-                                            </tr>
-                                        {% endif %}
-                                    {% endif %}
-                                    <tr>
-                                        <th>Result</th>
-                                        <td>
-                                            {{ judgingRun.runresult | printResult }}
-                                        </td>
-                                    </tr>
-                                </table>
-                            </div>
-                        </div>
-
-                        {% if judging.submission.problem.interactiveProblem %}
-                            <h6 class="mt-3">Jury/Submission interaction</h6>
-                            {% if run.output_run is empty %}
-                                <p class="nodata">There was no interaction log.</p>
-                            {% else %}
-                                {{ run.output_run | interactiveLog(true) }}
-                            {% endif %}
-                            {% if run.team_message is not empty %}
-                                <h6 class="mt-3">Judge message</h6>
-                                <pre class="output_text">
-{{  run.team_message }}</pre>
-                            {%  endif %}
-                        {% else %}
-                            <h6 class="mt-3">Program output</h6>
-                            {% if run.output_run is not empty %}
-                                <pre class="output_text">
-{{ run.output_run }}</pre>
-                            {% else %}
-                                <p class="nodata">There was no program output.</p>
-                            {% endif %}
-
-                            {% if run.team_message is not empty %}
-                                <h6 class="mt-3">Judge message</h6>
-                                <pre class="output_text">
-{{  run.team_message }}</pre>
-                            {%  endif %}
-
-                            <h6 class="mt-3">Error output (info/debug/errors)</h6>
-                            {% if run.output_error is not empty %}
-                                <pre class="output_text">
-{{ run.output_error }}</pre>
-                            {% else %}
-                                <p class="nodata">There was no stderr output.</p>
-                            {% endif %}
-                        {% endif %}
-                    {% endif %}
-                {% endfor %}
-            {% endif %} {# not runs is empty #}
+                    {% include 'team/partials/submission_testcase.html.twig' %}
+                {% endif %}
+            {% endfor %}
+            {% if not hasSamples %}
+                <p class="nodata">No sample cases available.</p>
+            {% endif %}
         {% endif %} {# showSampleOutput and judging.result != 'compiler-error' #}
     </div>
 {% endif %} {# not (judging is empty or judging.submission.submittime >= current_team_contest.endtime or (verificationRequired and not judging.verified)) #}

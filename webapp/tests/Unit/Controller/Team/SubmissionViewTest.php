@@ -61,6 +61,38 @@ class SubmissionViewTest extends BaseTestCase
         });
     }
 
+    public function testShowAllTestcaseVerdictsHidesSecretDetailsAndHandlesMissingMemoryMetadata(): void
+    {
+        $submitId = $this->createSubmissionWithSampleAndSecretRuns('team-view-all-verdicts');
+
+        $this->withChangedConfiguration('show_all_testcase_verdicts', true, function () use ($submitId): void {
+            $this->withChangedConfiguration('show_sample_output', false, function () use ($submitId): void {
+                $this->withChangedConfiguration('show_limits_on_team_page', true, function () use ($submitId): void {
+                    $this->verifyPageResponse('GET', '/team/submission/' . $submitId, 200);
+                    $content = $this->client->getResponse()->getContent();
+
+                    static::assertStringContainsString('Runs', $content);
+                    static::assertStringContainsString('(sample)', $content);
+                    static::assertStringContainsString('1 MB', $content);
+                    static::assertStringContainsString('wrong-answer', $content);
+                    static::assertStringNotContainsString('Secret testcase description', $content);
+                    static::assertStringNotContainsString('secret program output', $content);
+                    static::assertStringNotContainsString('timelimit', $content);
+                    static::assertStringNotContainsString('2 MB', $content);
+                });
+
+                $this->withChangedConfiguration('show_limits_on_team_page', false, function () use ($submitId): void {
+                    $this->verifyPageResponse('GET', '/team/submission/' . $submitId, 200);
+                    $content = $this->client->getResponse()->getContent();
+
+                    static::assertStringContainsString('Runs', $content);
+                    static::assertStringContainsString('wrong-answer', $content);
+                    static::assertStringNotContainsString('Memory usage', $content);
+                });
+            });
+        });
+    }
+
     private function createSubmissionWithSampleAndSecretRuns(string $externalId): string
     {
         /** @var EntityManagerInterface $em */
