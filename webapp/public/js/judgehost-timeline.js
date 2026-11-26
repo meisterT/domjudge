@@ -43,6 +43,7 @@ function initJudgehostTimeline(dataUrl) {
     let currentJson = null;
     let width = 0;
     let height = 0;
+    let needsRender = false;
     let x = null;
     let y = null;
     let xAxis = null;
@@ -219,8 +220,15 @@ function initJudgehostTimeline(dataUrl) {
         }
         const fullWidth = $container.width();
         const fullHeight = $container.height();
-        width = fullWidth - margin.left - margin.right;
-        height = fullHeight - margin.top - margin.bottom;
+        const newWidth = fullWidth - margin.left - margin.right;
+        const newHeight = fullHeight - margin.top - margin.bottom;
+        if (newWidth <= 0 || newHeight <= 0) {
+            needsRender = true;
+            return;
+        }
+        width = newWidth;
+        height = newHeight;
+        needsRender = false;
 
         const dpr = window.devicePixelRatio || 1;
         canvas.width = Math.max(1, Math.round(width * dpr));
@@ -387,5 +395,11 @@ function initJudgehostTimeline(dataUrl) {
 
         render();
         $('#toggle-disabled-jh').off('change.timeline').on('change.timeline', render);
+        $(window).off('resize.timeline').on('resize.timeline', $.debounce(render, 150));
+        $('#judgehost-timeline-details').off('toggle.timeline').on('toggle.timeline', function() {
+            if (this.open && (needsRender || $container.width() - margin.left - margin.right !== width)) {
+                render();
+            }
+        });
     });
 }
