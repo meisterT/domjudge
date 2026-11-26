@@ -443,6 +443,15 @@ table.table-full-clickable-cell tr .table-button-head-right-right{
 #judgehost-timeline .timeline-canvas {
     position: absolute;
     display: block;
+    cursor: grab;
+}
+
+#judgehost-timeline .timeline-canvas.is-hovering {
+    cursor: pointer;
+}
+
+#judgehost-timeline .timeline-canvas:active {
+    cursor: grabbing;
 }
 
 .timeline-axis path,

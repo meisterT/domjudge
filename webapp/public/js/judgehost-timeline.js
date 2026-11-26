@@ -49,16 +49,30 @@ function initJudgehostTimeline(dataUrl) {
     let xAxisGroup = null;
     let activeHostnames = [];
     let rowIndex = new Map();
+    let hoveredRun = null;
+    let tooltipWidth = 200;
     let rafId = null;
+    let pointerDownPos = null;
 
     function hideTooltip() {
         tooltip.style('opacity', 0);
     }
 
-    function showTooltip(run, pageX, pageY) {
+    function clearHover(redraw) {
+        if (hoveredRun !== null) {
+            hoveredRun = null;
+            canvas.classList.remove('is-hovering');
+            if (redraw) {
+                scheduleDraw();
+            }
+        }
+        hideTooltip();
+    }
+
+    function setTooltipContent(run) {
         const duration = (Math.max(0, run.endtime - run.startTime) / 1000).toFixed(3);
         // Build the tooltip from DOM nodes so names are never parsed as HTML.
-        tooltip.html('');
+        tooltip.html('').style('left', '0px');
         [
             ['Contest', run.contest_shortname],
             ['Problem', run.problem_name],
@@ -70,8 +84,14 @@ function initJudgehostTimeline(dataUrl) {
             line.append('b').text(row[0] + ': ');
             line.append('span').text(row[1]);
         });
+        const tooltipNode = tooltip.node();
+        tooltipWidth = tooltipNode ? tooltipNode.offsetWidth : 200;
+    }
+
+    function moveTooltip(pageX, pageY) {
+        const left = Math.min(pageX + 10, window.scrollX + window.innerWidth - tooltipWidth - 12);
         tooltip
-            .style('left', (pageX + 10) + 'px')
+            .style('left', Math.max(8, left) + 'px')
             .style('top', (pageY - 28) + 'px')
             .style('opacity', 0.95);
     }
@@ -170,6 +190,21 @@ function initJudgehostTimeline(dataUrl) {
                 ctx.fillRect(rx, rowY, rw, bandHeight);
             }
         }
+
+        if (hoveredRun) {
+            const rowY = y(hoveredRun.hostname);
+            if (rowY !== undefined) {
+                const rx = x(hoveredRun.startTime);
+                const rw = Math.max(1, x(hoveredRun.endtime) - rx);
+                if (rx + rw >= 0 && rx <= width) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+                    ctx.fillRect(rx, rowY, rw, bandHeight);
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(rx + 0.5, rowY + 0.5, Math.max(1, rw - 1), Math.max(1, bandHeight - 1));
+                }
+            }
+        }
     }
 
     function scheduleDraw() {
@@ -216,7 +251,7 @@ function initJudgehostTimeline(dataUrl) {
         const hostNames = new Set(activeHostnames);
         const visibleData = currentJson.allData.filter(function(d) { return hostNames.has(d.hostname); });
         rowIndex = buildRowIndex(visibleData);
-        hideTooltip();
+        clearHover(false);
 
         const now = currentJson.now;
         const start = currentJson.start;
@@ -255,6 +290,9 @@ function initJudgehostTimeline(dataUrl) {
         const zoom = d3.behavior.zoom()
             .x(x)
             .scaleExtent([1, 1000])
+            .on('zoomstart', function() {
+                clearHover(true);
+            })
             .on('zoom', function() {
                 xAxisGroup.call(xAxis);
                 scheduleDraw();
@@ -278,19 +316,44 @@ function initJudgehostTimeline(dataUrl) {
     const $canvas = $(canvas);
     $canvas.off('.timeline');
 
-    $canvas.on('mousemove.timeline', function(e) {
-        const rect = canvas.getBoundingClientRect();
-        const hit = findRunAt(e.clientX - rect.left, e.clientY - rect.top);
-        if (hit) {
-            showTooltip(hit, e.pageX, e.pageY);
-        } else {
+    $canvas.on('mousedown.timeline', function(e) {
+        if (e.button === 0) {
+            pointerDownPos = {x: e.clientX, y: e.clientY};
             hideTooltip();
         }
     });
 
-    $canvas.on('mouseleave.timeline', hideTooltip);
+    $canvas.on('mousemove.timeline', function(e) {
+        if (e.buttons & 1) {
+            return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const hit = findRunAt(e.clientX - rect.left, e.clientY - rect.top);
+        if (hit !== hoveredRun) {
+            hoveredRun = hit;
+            canvas.classList.toggle('is-hovering', hit !== null);
+            if (hit) {
+                setTooltipContent(hit);
+            } else {
+                hideTooltip();
+            }
+            scheduleDraw();
+        }
+        if (hit) {
+            moveTooltip(e.pageX, e.pageY);
+        }
+    });
+
+    $canvas.on('mouseleave.timeline', function() {
+        clearHover(true);
+    });
 
     $canvas.on('click.timeline', function(e) {
+        const down = pointerDownPos;
+        pointerDownPos = null;
+        if (down && (Math.abs(e.clientX - down.x) > 3 || Math.abs(e.clientY - down.y) > 3)) {
+            return;
+        }
         const rect = canvas.getBoundingClientRect();
         const hit = findRunAt(e.clientX - rect.left, e.clientY - rect.top);
         if (hit) {
