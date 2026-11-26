@@ -432,8 +432,17 @@ table.table-full-clickable-cell tr .table-button-head-right-right{
 }
 
 #judgehost-timeline svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
     font-family: sans-serif;
     font-size: 10px;
+}
+
+#judgehost-timeline .timeline-canvas {
+    position: absolute;
+    display: block;
 }
 
 .timeline-axis path,
@@ -441,11 +450,6 @@ table.table-full-clickable-cell tr .table-button-head-right-right{
     fill: none;
     stroke: #000;
     shape-rendering: crispEdges;
-}
-
-.timeline-rect:hover {
-    opacity: 0.8;
-    cursor: pointer;
 }
 
 .timeline-tooltip {
