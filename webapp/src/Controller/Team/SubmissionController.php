@@ -17,6 +17,7 @@ use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
 use App\Service\SubmissionService;
+use App\Utils\Utils;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\Query\Expr\Join;
@@ -220,9 +221,10 @@ class SubmissionController extends BaseController
     {
         $verificationRequired = (bool)$this->config->get('verification_required');
         $showCompile          = $this->config->get('show_compile');
-        $showSampleOutput     = $this->config->get('show_sample_output');
+        $showSampleOutput     = (bool)$this->config->get('show_sample_output');
         $allowDownload        = (bool)$this->config->get('allow_team_submission_download');
         $showTooLateResult    = $this->config->get('show_too_late_result');
+        $showLimits           = (bool)$this->config->get('show_limits_on_team_page');
         $user                 = $this->authService->getUser();
         $team                 = $user->getTeam();
         $contest              = $this->dj->getCurrentContest($team->getTeamid());
@@ -261,31 +263,28 @@ class SubmissionController extends BaseController
 
             $queryBuilder = $this->em->createQueryBuilder()
                 ->from(Testcase::class, 't')
-                ->join('t.content', 'tc')
                 ->leftJoin('t.judging_runs', 'jr', Join::WITH, 'jr.judging = :judging')
                 ->leftJoin('jr.output', 'jro')
-                ->select('t', 'jr', 'tc')
+                ->select('t', 'jr')
                 ->andWhere('t.problem = :problem')
                 ->andWhere('t.sample = 1')
                 ->setParameter('judging', $judging)
                 ->setParameter('problem', $judging->getSubmission()->getProblem())
                 ->orderBy('t.ranknumber');
 
+            if ($showLimits) {
+                $queryBuilder->addSelect('jro.metadata AS metadata');
+            }
+
             if ($outputDisplayLimit < 0) {
                 $queryBuilder
-                    ->addSelect('tc.output AS output_reference')
                     ->addSelect('jro.output_run AS output_run')
-                    ->addSelect('jro.output_diff AS output_diff')
                     ->addSelect('jro.output_error AS output_error')
-                    ->addSelect('jro.output_system AS output_system')
                     ->addSelect('jro.team_message AS team_message');
             } else {
                 $queryBuilder
-                    ->addSelect('TRUNCATE(tc.output, :outputDisplayLimit, :outputTruncateMessage) AS output_reference')
                     ->addSelect('TRUNCATE(jro.output_run, :outputDisplayLimit, :outputTruncateMessage) AS output_run')
-                    ->addSelect('TRUNCATE(jro.output_diff, :outputDisplayLimit, :outputTruncateMessage) AS output_diff')
                     ->addSelect('TRUNCATE(jro.output_error, :outputDisplayLimit, :outputTruncateMessage) AS output_error')
-                    ->addSelect('TRUNCATE(jro.output_system, :outputDisplayLimit, :outputTruncateMessage) AS output_system')
                     ->addSelect('TRUNCATE(jro.team_message, :outputDisplayLimit, :outputTruncateMessage) AS team_message')
                     ->setParameter('outputDisplayLimit', $outputDisplayLimit)
                     ->setParameter('outputTruncateMessage', $outputTruncateMessage);
@@ -294,6 +293,20 @@ class SubmissionController extends BaseController
             $runs = $queryBuilder
                 ->getQuery()
                 ->getResult();
+        }
+
+        $metadata = [];
+        if ($showLimits) {
+            foreach ($runs as $index => $runData) {
+                if (!empty($runData['metadata'])) {
+                    $parsed = Utils::parseMetadata($runData['metadata']);
+                    if (isset($parsed['memory-bytes'])) {
+                        $metadata[$index] = [
+                            'memory-bytes' => (int)$parsed['memory-bytes'],
+                        ];
+                    }
+                }
+            }
         }
 
         $actuallyShowCompile = $showCompile == self::ALWAYS_SHOW_COMPILE_OUTPUT
@@ -306,8 +319,10 @@ class SubmissionController extends BaseController
             'allowDownload' => $allowDownload,
             'showSampleOutput' => $showSampleOutput,
             'runs' => $runs,
+            'metadata' => $metadata,
             'showTooLateResult' => $showTooLateResult,
             'thumbnailSize' => $this->config->get('thumbnail_size'),
+            'showLimits' => $showLimits,
         ];
         if ($actuallyShowCompile) {
             $data['size'] = 'xl';

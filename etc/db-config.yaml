@@ -302,7 +302,7 @@
             type: bool
             default_value: true
             public: true
-            description: Show time and memory limit on the team problems page.
+            description: Show time and memory limit on the team problems page, and runtime and memory usage on the team submission details page.
         -   name: allow_team_submission_download
             type: bool
             default_value: false
