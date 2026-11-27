@@ -597,31 +597,17 @@ class RejudgingController extends BaseController
             $repeat = (int)($data['repeat'] ?? 1);
             $overshoot = (int)($data['overshoot'] ?? 0);
             $fallbackRedirect = $this->getFallbackRedirectUrl($request);
-            return $this->streamResponse($this->requestStack, function () use ($queryBuilder, $reason, $priority, $repeat, $overshoot, $addUrl, $fallbackRedirect): void {
-                set_time_limit(0);
-
-                /** @var Judging[] $judgings */
-                $judgings = $queryBuilder
-                    ->getQuery()
-                    ->getResult();
-                if (empty($judgings)) {
-                    $this->addFlash('danger', 'No judgings matched.');
-                    $this->reportProgress(100, '', $addUrl);
-                    return;
-                }
-
-                $skipped = [];
-                $res     = $this->rejudgingService->createRejudging(
-                    $reason, $priority, $judgings, false, $repeat, $overshoot, null, $skipped, $this->reportProgress(...));
-                $this->generateFlashMessagesForSkippedJudgings($skipped);
-
-                if ($res === null) {
-                    $redirect = $fallbackRedirect;
-                } else {
-                    $redirect = $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()]);
-                }
-                $this->reportProgress(100, '', $redirect);
-            });
+            return $this->streamResponse($this->requestStack, fn() => $this->createRejudgingFromQuery(
+                queryBuilder: $queryBuilder,
+                reason: $reason,
+                priority: $priority,
+                autoApply: false,
+                repeat: $repeat,
+                overshoot: $overshoot,
+                emptyRedirect: $addUrl,
+                fallbackRedirect: $fallbackRedirect,
+                flashSkipped: true,
+            ));
         }
         return $this->render('jury/rejudging_form.html.twig', [
             'form' => $form,
@@ -703,31 +689,16 @@ class RejudgingController extends BaseController
         );
         $fallbackRedirect = $this->getFallbackRedirectUrl($request);
 
-        return $this->streamResponse($this->requestStack, function () use ($queryBuilder, $reason, $priority, $autoApply, $repeat, $overshoot, $fallbackRedirect): void {
-            set_time_limit(0);
-
-            /** @var Judging[] $judgings */
-            $judgings = $queryBuilder
-                ->getQuery()
-                ->getResult();
-
-            if (empty($judgings)) {
-                $this->addFlash('danger', 'No judgings matched.');
-                $this->reportProgress(100, '', $fallbackRedirect);
-                return;
-            }
-
-            $skipped = [];
-            $res     = $this->rejudgingService->createRejudging($reason, $priority, $judgings, $autoApply, $repeat, $overshoot, null, $skipped, $this->reportProgress(...));
-
-            if ($res === null) {
-                $redirect = $fallbackRedirect;
-            } else {
-                $redirect = $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()]);
-            }
-
-            $this->reportProgress(100, '', $redirect);
-        });
+        return $this->streamResponse($this->requestStack, fn() => $this->createRejudgingFromQuery(
+            queryBuilder: $queryBuilder,
+            reason: $reason,
+            priority: $priority,
+            autoApply: $autoApply,
+            repeat: $repeat,
+            overshoot: $overshoot,
+            emptyRedirect: $fallbackRedirect,
+            fallbackRedirect: $fallbackRedirect,
+        ));
     }
 
     /**
@@ -834,6 +805,50 @@ class RejudgingController extends BaseController
         }
 
         return $queryBuilder;
+    }
+
+    private function createRejudgingFromQuery(
+        QueryBuilder $queryBuilder,
+        string $reason,
+        int $priority,
+        bool $autoApply,
+        int $repeat,
+        int $overshoot,
+        string $emptyRedirect,
+        string $fallbackRedirect,
+        bool $flashSkipped = false,
+    ): void {
+        set_time_limit(0);
+
+        /** @var Judging[] $judgings */
+        $judgings = $queryBuilder->getQuery()->getResult();
+        if (empty($judgings)) {
+            $this->addFlash('danger', 'No judgings matched.');
+            $this->reportProgress(100, '', $emptyRedirect);
+            return;
+        }
+
+        $skipped = [];
+        $res = $this->rejudgingService->createRejudging(
+            $reason,
+            $priority,
+            $judgings,
+            $autoApply,
+            $repeat,
+            $overshoot,
+            null,
+            $skipped,
+            $this->reportProgress(...),
+        );
+
+        if ($flashSkipped) {
+            $this->generateFlashMessagesForSkippedJudgings($skipped);
+        }
+
+        $redirect = $res !== null
+            ? $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()])
+            : $fallbackRedirect;
+        $this->reportProgress(100, '', $redirect);
     }
 
     private function reportProgress(int $progress, string $log, ?string $redirect = null): void
