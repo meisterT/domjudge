@@ -687,12 +687,7 @@ class RejudgingController extends BaseController
                 $this->generateFlashMessagesForSkippedJudgings($skipped);
 
                 if ($res === null) {
-                    $prefix = sprintf('%s%s', $request->getSchemeAndHttpHost(), $request->getBasePath());
-                    if ($this->isLocalRefererUrl($this->router, $data['referer'] ?? '', $prefix)) {
-                        $redirect = $data['referer'];
-                    } else {
-                        $redirect = $this->generateUrl('jury_index');
-                    }
+                    $redirect = $this->getFallbackRedirectUrl($request);
                 } else {
                     $redirect = $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()]);
                 }
@@ -829,13 +824,7 @@ class RejudgingController extends BaseController
 
             if (empty($judgings)) {
                 $this->addFlash('danger', 'No judgings matched.');
-                $prefix = sprintf('%s%s', $request->getSchemeAndHttpHost(), $request->getBasePath());
-                if ($this->isLocalRefererUrl($this->router, $request->request->get('referer', ''), $prefix)) {
-                    $redirect = $request->request->get('referer');
-                } else {
-                    $redirect = $this->generateUrl('jury_index');
-                }
-                $progressReporter(100, '', $redirect);
+                $progressReporter(100, '', $this->getFallbackRedirectUrl($request));
                 return;
             }
 
@@ -843,18 +832,24 @@ class RejudgingController extends BaseController
             $res     = $this->rejudgingService->createRejudging($reason, JudgeTask::parsePriority($priority), $judgings, $autoApply, $repeat, $overshoot, null, $skipped, $progressReporter);
 
             if ($res === null) {
-                $prefix = sprintf('%s%s', $request->getSchemeAndHttpHost(), $request->getBasePath());
-                if ($this->isLocalRefererUrl($this->router, $request->request->get('referer', ''), $prefix)) {
-                    $redirect = $request->request->get('referer');
-                } else {
-                    $redirect = $this->generateUrl('jury_index');
-                }
+                $redirect = $this->getFallbackRedirectUrl($request);
             } else {
                 $redirect = $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()]);
             }
 
             $progressReporter(100, '', $redirect);
         });
+    }
+
+    private function getFallbackRedirectUrl(Request $request): string
+    {
+        $referer = $request->request->getString('referer');
+        $prefix = sprintf('%s%s', $request->getSchemeAndHttpHost(), $request->getBasePath());
+        if ($this->isLocalRefererUrl($this->router, $referer, $prefix)) {
+            return $referer;
+        }
+
+        return $this->generateUrl('jury_index');
     }
 
     /**
