@@ -29,6 +29,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
 use Doctrine\ORM\Query\Expr\Join;
+use Doctrine\ORM\QueryBuilder;
 use Knp\Component\Pager\Pagination\PaginationInterface;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -759,52 +760,18 @@ class RejudgingController extends BaseController
             ]);
         }
 
+        $queryBuilder = $this->buildCreateQueryBuilder(
+            $table,
+            $id,
+            $tablemap[$table] ?? null,
+            $executable,
+            $includeAll,
+            $autoApply,
+        );
         $fallbackRedirect = $this->getFallbackRedirectUrl($request);
 
-        return $this->streamResponse($this->requestStack, function () use ($priority, $repeat, $reason, $overshoot, $fallbackRedirect, $autoApply, $includeAll, $id, $table, $tablemap, $executable): void {
+        return $this->streamResponse($this->requestStack, function () use ($queryBuilder, $reason, $priority, $autoApply, $repeat, $overshoot, $fallbackRedirect): void {
             set_time_limit(0);
-
-            // Only rejudge submissions in active contests.
-            $contests = $this->dj->getCurrentContests();
-
-            $queryBuilder = $this->rejudgingService->createJudgingsQueryBuilder()
-                ->leftJoin('s.contest', 'c')
-                ->leftJoin('s.problem', 'p')
-                ->leftJoin('s.user', 'u')
-                ->addSelect('c', 'p', 'u')
-                ->andWhere('j.contest IN (:contests)')
-                ->andWhere('j.valid = 1')
-                ->setParameter('contests', $contests);
-
-            if ($table === 'judgehost') {
-                $queryBuilder
-                    ->innerJoin('j.runs', 'jr')
-                    ->innerJoin('jr.judgetask', 'jt')
-                    ->distinct();
-            } elseif ($table === 'rejudging') {
-                // Join s.judgings as j2 so we match submissions that were part of the given
-                // rejudging even if its judging is no longer valid (e.g. canceled or superseded),
-                // while still selecting each submission's currently valid judging j.
-                $queryBuilder
-                    ->innerJoin('s.judgings', 'j2')
-                    ->distinct();
-            }
-
-            if ($executable !== null) {
-                $this->dj->restrictToJudgingsWithOutdatedExecutable($queryBuilder, $executable);
-            } else {
-                $queryBuilder
-                    ->andWhere(sprintf('%s = :id', $tablemap[$table]))
-                    ->setParameter('id', $id);
-            }
-
-            if ($includeAll && !$autoApply) {
-                $queryBuilder->andWhere('j.result IS NOT NULL');
-            } elseif (!$includeAll) {
-                $queryBuilder
-                    ->andWhere('j.result != :correct')
-                    ->setParameter('correct', 'correct');
-            }
 
             /** @var Judging[] $judgings */
             $judgings = $queryBuilder
@@ -828,6 +795,59 @@ class RejudgingController extends BaseController
 
             $this->reportProgress(100, '', $redirect);
         });
+    }
+
+    private function buildCreateQueryBuilder(
+        string $table,
+        string $id,
+        ?string $filterField,
+        ?Executable $executable,
+        bool $includeAll,
+        bool $autoApply,
+    ): QueryBuilder {
+        // Only rejudge submissions in active contests.
+        $contests = $this->dj->getCurrentContests();
+
+        $queryBuilder = $this->rejudgingService->createJudgingsQueryBuilder()
+            ->leftJoin('s.contest', 'c')
+            ->leftJoin('s.problem', 'p')
+            ->leftJoin('s.user', 'u')
+            ->addSelect('c', 'p', 'u')
+            ->andWhere('j.contest IN (:contests)')
+            ->andWhere('j.valid = 1')
+            ->setParameter('contests', $contests);
+
+        if ($table === 'judgehost') {
+            $queryBuilder
+                ->innerJoin('j.runs', 'jr')
+                ->innerJoin('jr.judgetask', 'jt')
+                ->distinct();
+        } elseif ($table === 'rejudging') {
+            // Join s.judgings as j2 so we match submissions that were part of the given
+            // rejudging even if its judging is no longer valid (e.g. canceled or superseded),
+            // while still selecting each submission's currently valid judging j.
+            $queryBuilder
+                ->innerJoin('s.judgings', 'j2')
+                ->distinct();
+        }
+
+        if ($executable !== null) {
+            $this->dj->restrictToJudgingsWithOutdatedExecutable($queryBuilder, $executable);
+        } elseif ($filterField !== null) {
+            $queryBuilder
+                ->andWhere(sprintf('%s = :id', $filterField))
+                ->setParameter('id', $id);
+        }
+
+        if ($includeAll && !$autoApply) {
+            $queryBuilder->andWhere('j.result IS NOT NULL');
+        } elseif (!$includeAll) {
+            $queryBuilder
+                ->andWhere('j.result != :correct')
+                ->setParameter('correct', 'correct');
+        }
+
+        return $queryBuilder;
     }
 
     private function reportProgress(int $progress, string $log, ?string $redirect = null): void
