@@ -581,91 +581,24 @@ class RejudgingController extends BaseController
             ]);
         }
         if ($isCreateRejudgingAjax) {
-            return $this->streamResponse($this->requestStack, function () use ($request): void {
+            $data = $request->request->all();
+            $addUrl = $this->generateUrl('jury_rejudging_add');
+            if ((!empty($data['before']) || !empty($data['after'])) && count($data['contests'] ?? []) !== 1) {
+                $this->addFlash(
+                    'danger',
+                    'Only allowed to set before/after restrictions with exactly one selected contest.'
+                );
+                return $this->streamResponse($this->requestStack, fn() => $this->reportProgress(100, '', $addUrl));
+            }
+
+            $queryBuilder = $this->buildAddQueryBuilder($data);
+            $reason = $request->request->getString('reason');
+            $priority = (int)$data['priority'];
+            $repeat = (int)($data['repeat'] ?? 1);
+            $overshoot = (int)($data['overshoot'] ?? 0);
+            $fallbackRedirect = $this->getFallbackRedirectUrl($request);
+            return $this->streamResponse($this->requestStack, function () use ($queryBuilder, $reason, $priority, $repeat, $overshoot, $addUrl, $fallbackRedirect): void {
                 set_time_limit(0);
-
-                $reason = $request->request->get('reason');
-                $data   = $request->request->all();
-
-                $queryBuilder = $this->rejudgingService->createJudgingsQueryBuilder()
-                    ->andWhere('j.valid = 1');
-
-                /** @var int[] $contests */
-                $contests = $data['contests'] ?? [];
-                if (count($contests)) {
-                    $queryBuilder
-                        ->andWhere('j.contest IN (:contests)')
-                        ->setParameter('contests', $contests);
-                }
-                /** @var int[] $problems */
-                $problems = $data['problems'] ?? [];
-                if (count($problems)) {
-                    $queryBuilder
-                        ->andWhere('s.problem IN (:problems)')
-                        ->setParameter('problems', $problems);
-                }
-                /** @var int[] $languages */
-                $languages = $data['languages'] ?? [];
-                if (count($languages)) {
-                    $queryBuilder
-                        ->andWhere('s.language IN (:languages)')
-                        ->setParameter('languages', $languages);
-                }
-                /** @var int[] $teams */
-                $teams = $data['teams'] ?? [];
-                if (count($teams)) {
-                    $queryBuilder
-                        ->andWhere('s.team IN (:teams)')
-                        ->setParameter('teams', $teams);
-                }
-                /** @var int[] $users */
-                $users = $data['users'] ?? [];
-                if (count($users)) {
-                    $queryBuilder
-                        ->andWhere('s.user IN (:users)')
-                        ->setParameter('users', $users);
-                }
-                /** @var int[] $judgehosts */
-                $judgehosts = $data['judgehosts'] ?? [];
-                if (count($judgehosts)) {
-                    $queryBuilder
-                        ->innerJoin('j.runs', 'jr')
-                        ->innerJoin('jr.judgetask', 'jt')
-                        ->andWhere('jt.judgehost IN (:judgehosts)')
-                        ->setParameter('judgehosts', $judgehosts)
-                        ->distinct();
-                }
-                /** @var string[] $verdicts */
-                $verdicts = $data['verdicts'] ?? [];
-                if (count($verdicts)) {
-                    $queryBuilder
-                        ->andWhere('j.result IN (:verdicts)')
-                        ->setParameter('verdicts', $verdicts);
-                }
-                $before = $data['before'] ?? null;
-                $after  = $data['after'] ?? null;
-                if (!empty($before) || !empty($after)) {
-                    if (count($contests) != 1) {
-                        $this->addFlash('danger',
-                            'Only allowed to set before/after restrictions with exactly one selected contest.');
-                        $this->reportProgress(100, '', $this->generateUrl('jury_rejudging_add'));
-                        return;
-                    }
-                    /** @var Contest $contest */
-                    $contest = $this->em->getRepository(Contest::class)->find($contests[0]);
-                    if (!empty($before)) {
-                        $beforeTime = $contest->getAbsoluteTime($before);
-                        $queryBuilder
-                            ->andWhere('s.submittime <= :before')
-                            ->setParameter('before', $beforeTime);
-                    }
-                    if (!empty($after)) {
-                        $afterTime = $contest->getAbsoluteTime($after);
-                        $queryBuilder
-                            ->andWhere('s.submittime >= :after')
-                            ->setParameter('after', $afterTime);
-                    }
-                }
 
                 /** @var Judging[] $judgings */
                 $judgings = $queryBuilder
@@ -673,17 +606,17 @@ class RejudgingController extends BaseController
                     ->getResult();
                 if (empty($judgings)) {
                     $this->addFlash('danger', 'No judgings matched.');
-                    $this->reportProgress(100, '', $this->generateUrl('jury_rejudging_add'));
+                    $this->reportProgress(100, '', $addUrl);
                     return;
                 }
 
                 $skipped = [];
                 $res     = $this->rejudgingService->createRejudging(
-                    $reason, (int)$data['priority'], $judgings, false, (int)($data['repeat'] ?? 1), (int) ($data['overshoot'] ?? 0), null, $skipped, $this->reportProgress(...));
+                    $reason, $priority, $judgings, false, $repeat, $overshoot, null, $skipped, $this->reportProgress(...));
                 $this->generateFlashMessagesForSkippedJudgings($skipped);
 
                 if ($res === null) {
-                    $redirect = $this->getFallbackRedirectUrl($request);
+                    $redirect = $fallbackRedirect;
                 } else {
                     $redirect = $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()]);
                 }
@@ -795,6 +728,59 @@ class RejudgingController extends BaseController
 
             $this->reportProgress(100, '', $redirect);
         });
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function buildAddQueryBuilder(array $data): QueryBuilder
+    {
+        $queryBuilder = $this->rejudgingService->createJudgingsQueryBuilder()
+            ->andWhere('j.valid = 1');
+
+        $filters = [
+            'contests'  => 'j.contest',
+            'problems'  => 's.problem',
+            'languages' => 's.language',
+            'teams'     => 's.team',
+            'users'     => 's.user',
+            'verdicts'  => 'j.result',
+        ];
+        foreach ($filters as $param => $field) {
+            if (!empty($data[$param])) {
+                $queryBuilder
+                    ->andWhere(sprintf('%s IN (:%s)', $field, $param))
+                    ->setParameter($param, $data[$param]);
+            }
+        }
+
+        if (!empty($data['judgehosts'])) {
+            $queryBuilder
+                ->innerJoin('j.runs', 'jr')
+                ->innerJoin('jr.judgetask', 'jt')
+                ->andWhere('jt.judgehost IN (:judgehosts)')
+                ->setParameter('judgehosts', $data['judgehosts'])
+                ->distinct();
+        }
+
+        $before = $data['before'] ?? null;
+        $after  = $data['after'] ?? null;
+        if (!empty($before) || !empty($after)) {
+            /** @var Contest $contest */
+            $contest = $this->em->getRepository(Contest::class)->find($data['contests'][0]);
+            if (!empty($before)) {
+                $queryBuilder
+                    ->andWhere('s.submittime <= :before')
+                    ->setParameter('before', $contest->getAbsoluteTime($before));
+            }
+            if (!empty($after)) {
+                $queryBuilder
+                    ->andWhere('s.submittime >= :after')
+                    ->setParameter('after', $contest->getAbsoluteTime($after));
+            }
+        }
+
+        return $queryBuilder;
     }
 
     private function buildCreateQueryBuilder(
