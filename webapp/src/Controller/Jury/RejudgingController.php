@@ -697,14 +697,14 @@ class RejudgingController extends BaseController
     #[Route(path: '/create', name: 'jury_create_rejudge', methods: ['POST'])]
     public function createAction(Request $request): Response
     {
-        $table      = $request->request->get('table');
-        $id         = $request->request->get('id');
-        $reason     = $request->request->get('reason') ?: sprintf('%s: %s', $table, $id);
+        $table      = $request->request->getString('table');
+        $id         = $request->request->getString('id');
+        $reason     = $request->request->getString('reason') ?: sprintf('%s: %s', $table, $id);
         $includeAll = (bool)$request->request->get('include_all');
         $autoApply  = (bool)$request->request->get('auto_apply');
         $repeat     = (int)$request->request->get('repeat');
-        $priority   = $request->request->get('priority') ?: 'default';
-        $overshoot  = (int)$request->request->get('overshoot') ?: 0;
+        $priority   = JudgeTask::parsePriority($request->request->getString('priority'));
+        $overshoot  = (int)$request->request->get('overshoot');
 
         if (empty($table) || empty($id)) {
             throw new BadRequestHttpException('No table or id passed for selection in rejudging');
@@ -715,7 +715,7 @@ class RejudgingController extends BaseController
         }
 
         // Special case 'submission' for admin overrides.
-        if ($this->authService->checkRole('admin') && ($table == 'submission')) {
+        if ($this->authService->checkRole('admin') && $table === 'submission') {
             $includeAll = true;
         } elseif ($table === 'rejudging') {
             $rejudging = $this->em->getRepository(Rejudging::class)->find($id);
@@ -759,7 +759,9 @@ class RejudgingController extends BaseController
             ]);
         }
 
-        return $this->streamResponse($this->requestStack, function () use ($priority, $repeat, $reason, $overshoot, $request, $autoApply, $includeAll, $id, $table, $tablemap, $executable): void {
+        $fallbackRedirect = $this->getFallbackRedirectUrl($request);
+
+        return $this->streamResponse($this->requestStack, function () use ($priority, $repeat, $reason, $overshoot, $fallbackRedirect, $autoApply, $includeAll, $id, $table, $tablemap, $executable): void {
             set_time_limit(0);
 
             // Only rejudge submissions in active contests.
@@ -811,15 +813,15 @@ class RejudgingController extends BaseController
 
             if (empty($judgings)) {
                 $this->addFlash('danger', 'No judgings matched.');
-                $this->reportProgress(100, '', $this->getFallbackRedirectUrl($request));
+                $this->reportProgress(100, '', $fallbackRedirect);
                 return;
             }
 
             $skipped = [];
-            $res     = $this->rejudgingService->createRejudging($reason, JudgeTask::parsePriority($priority), $judgings, $autoApply, $repeat, $overshoot, null, $skipped, $this->reportProgress(...));
+            $res     = $this->rejudgingService->createRejudging($reason, $priority, $judgings, $autoApply, $repeat, $overshoot, null, $skipped, $this->reportProgress(...));
 
             if ($res === null) {
-                $redirect = $this->getFallbackRedirectUrl($request);
+                $redirect = $fallbackRedirect;
             } else {
                 $redirect = $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()]);
             }
