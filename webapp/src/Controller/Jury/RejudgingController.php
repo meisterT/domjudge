@@ -797,9 +797,7 @@ class RejudgingController extends BaseController
             }
 
             if ($includeAll && !$autoApply) {
-                $queryBuilder
-                    ->andWhere('j.result IS NOT NULL')
-                    ->andWhere('j.valid = 1');
+                $queryBuilder->andWhere('j.result IS NOT NULL');
             } elseif (!$includeAll) {
                 $queryBuilder
                     ->andWhere('j.result != :correct')
