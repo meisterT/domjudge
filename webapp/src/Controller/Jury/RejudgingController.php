@@ -580,12 +580,7 @@ class RejudgingController extends BaseController
             ]);
         }
         if ($isCreateRejudgingAjax) {
-            $progressReporter = function (int $progress, string $log, ?string $redirect = null): void {
-                echo Utils::jsonEncode(['progress' => $progress, 'log' => htmlspecialchars($log), 'redirect' => $redirect]) . "\n";
-                Utils::ob_flush_if_possible();
-                flush();
-            };
-            return $this->streamResponse($this->requestStack, function () use ($request, $progressReporter): void {
+            return $this->streamResponse($this->requestStack, function () use ($request): void {
                 set_time_limit(0);
 
                 $reason = $request->request->get('reason');
@@ -652,7 +647,7 @@ class RejudgingController extends BaseController
                     if (count($contests) != 1) {
                         $this->addFlash('danger',
                             'Only allowed to set before/after restrictions with exactly one selected contest.');
-                        $progressReporter(100, '', $this->generateUrl('jury_rejudging_add'));
+                        $this->reportProgress(100, '', $this->generateUrl('jury_rejudging_add'));
                         return;
                     }
                     /** @var Contest $contest */
@@ -677,13 +672,13 @@ class RejudgingController extends BaseController
                     ->getResult();
                 if (empty($judgings)) {
                     $this->addFlash('danger', 'No judgings matched.');
-                    $progressReporter(100, '', $this->generateUrl('jury_rejudging_add'));
+                    $this->reportProgress(100, '', $this->generateUrl('jury_rejudging_add'));
                     return;
                 }
 
                 $skipped = [];
                 $res     = $this->rejudgingService->createRejudging(
-                    $reason, (int)$data['priority'], $judgings, false, (int)($data['repeat'] ?? 1), (int) ($data['overshoot'] ?? 0), null, $skipped, $progressReporter);
+                    $reason, (int)$data['priority'], $judgings, false, (int)($data['repeat'] ?? 1), (int) ($data['overshoot'] ?? 0), null, $skipped, $this->reportProgress(...));
                 $this->generateFlashMessagesForSkippedJudgings($skipped);
 
                 if ($res === null) {
@@ -691,7 +686,7 @@ class RejudgingController extends BaseController
                 } else {
                     $redirect = $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()]);
                 }
-                $progressReporter(100, '', $redirect);
+                $this->reportProgress(100, '', $redirect);
             });
         }
         return $this->render('jury/rejudging_form.html.twig', [
@@ -764,13 +759,7 @@ class RejudgingController extends BaseController
             ]);
         }
 
-        $progressReporter = function (int $progress, string $log, ?string $redirect = null): void {
-            echo Utils::jsonEncode(['progress' => $progress, 'log' => htmlspecialchars($log), 'redirect' => $redirect]) . "\n";
-            Utils::ob_flush_if_possible();
-            flush();
-        };
-
-        return $this->streamResponse($this->requestStack, function () use ($priority, $progressReporter, $repeat, $reason, $overshoot, $request, $autoApply, $includeAll, $id, $table, $tablemap, $executable): void {
+        return $this->streamResponse($this->requestStack, function () use ($priority, $repeat, $reason, $overshoot, $request, $autoApply, $includeAll, $id, $table, $tablemap, $executable): void {
             set_time_limit(0);
 
             // Only rejudge submissions in active contests.
@@ -824,12 +813,12 @@ class RejudgingController extends BaseController
 
             if (empty($judgings)) {
                 $this->addFlash('danger', 'No judgings matched.');
-                $progressReporter(100, '', $this->getFallbackRedirectUrl($request));
+                $this->reportProgress(100, '', $this->getFallbackRedirectUrl($request));
                 return;
             }
 
             $skipped = [];
-            $res     = $this->rejudgingService->createRejudging($reason, JudgeTask::parsePriority($priority), $judgings, $autoApply, $repeat, $overshoot, null, $skipped, $progressReporter);
+            $res     = $this->rejudgingService->createRejudging($reason, JudgeTask::parsePriority($priority), $judgings, $autoApply, $repeat, $overshoot, null, $skipped, $this->reportProgress(...));
 
             if ($res === null) {
                 $redirect = $this->getFallbackRedirectUrl($request);
@@ -837,8 +826,19 @@ class RejudgingController extends BaseController
                 $redirect = $this->generateUrl('jury_rejudging', ['rejudgingId' => $res->getRejudgingid()]);
             }
 
-            $progressReporter(100, '', $redirect);
+            $this->reportProgress(100, '', $redirect);
         });
+    }
+
+    private function reportProgress(int $progress, string $log, ?string $redirect = null): void
+    {
+        echo Utils::jsonEncode([
+            'progress' => $progress,
+            'log' => htmlspecialchars($log),
+            'redirect' => $redirect,
+        ]) . "\n";
+        Utils::ob_flush_if_possible();
+        flush();
     }
 
     private function getFallbackRedirectUrl(Request $request): string
