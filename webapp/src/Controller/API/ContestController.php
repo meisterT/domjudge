@@ -27,6 +27,7 @@ use Doctrine\ORM\NoResultException;
 use Doctrine\ORM\QueryBuilder;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use JMS\Serializer\Metadata\PropertyMetadata;
+use JsonException;
 use Metadata\MetadataFactoryInterface;
 use Nelmio\ApiDocBundle\Attribute\Model;
 use OpenApi\Attributes as OA;
@@ -49,6 +50,7 @@ use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 use TypeError;
 
@@ -209,6 +211,49 @@ class ContestController extends AbstractRestController
             }
         }
         throw new BadRequestHttpException("Error while adding contest: $message");
+    }
+
+    /**
+     * Update an existing contest.
+     * @throws BadRequestHttpException
+     */
+    #[IsGranted('ROLE_ADMIN')]
+    #[Rest\Put(path: '/{cid}')]
+    #[OA\Parameter(ref: '#/components/parameters/cid')]
+    #[OA\RequestBody(
+        required: true,
+        content: [
+            new OA\MediaType(mediaType: 'application/json'),
+            new OA\MediaType(mediaType: 'application/x-yaml'),
+        ]
+    )]
+    #[OA\Response(
+        response: 200,
+        description: 'Returns the updated contest',
+        content: new OA\JsonContent(ref: new Model(type: Contest::class))
+    )]
+    public function updateContestAction(Request $request, string $cid): Response
+    {
+        $contest = $this->getContestAndCheckIfLocked($cid);
+        $contentType = $request->headers->get('Content-Type', '');
+        try {
+            if (str_contains($contentType, 'yaml')) {
+                $data = Yaml::parse($request->getContent(), Yaml::PARSE_DATETIME);
+            } else {
+                $data = $request->request->all();
+                if ($data === [] && $request->getContent() !== '') {
+                    $data = Utils::jsonDecode($request->getContent());
+                }
+            }
+        } catch (ParseException|JsonException $e) {
+            throw new BadRequestHttpException('Error parsing request body: ' . $e->getMessage());
+        }
+
+        $message = null;
+        if ($this->importExportService->importContestData($data, $message, contest: $contest)) {
+            return $this->renderData($request, $contest);
+        }
+        throw new BadRequestHttpException("Error while updating contest: $message");
     }
 
     /**

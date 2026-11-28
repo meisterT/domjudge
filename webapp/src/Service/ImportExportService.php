@@ -262,12 +262,18 @@ readonly class ImportExportService
         ];
     }
 
-    public function importContestData(mixed $data, ?string &$errorMessage = null, ?string &$cid = null): bool
-    {
+    public function importContestData(
+        mixed $data,
+        ?string &$errorMessage = null,
+        ?string &$cid = null,
+        ?Contest $contest = null,
+    ): bool {
         if (empty($data) || !is_array($data)) {
             $errorMessage = 'Error parsing YAML file.';
             return false;
         }
+
+        $isUpdate = $contest !== null;
 
         $activateTimeFields = ['activate_time', 'activation_time', 'activate-time', 'activation-time'];
         $deactivateTimeFields = preg_filter('/^/', 'de', $activateTimeFields);
@@ -297,6 +303,15 @@ readonly class ImportExportService
             return false;
         }
 
+        $hasAnyKey = static function (array $keys) use ($data): bool {
+            foreach ($keys as $k) {
+                if (array_key_exists($k, $data)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
         $invalid_regex = str_replace(['/^[', '+$/'], ['/[^', '/'], DOMJudgeService::EXTERNAL_IDENTIFIER_REGEX);
 
         ['time' => $startTime] = $this->convertImportedTime($startTimeFields, $data, false, errorMessage: $errorMessage);
@@ -312,7 +327,7 @@ readonly class ImportExportService
         ] = $this->convertImportedTime($activateTimeFields, $data, startTime: $startTime, errorMessage: $errorMessage);
         if ($errorMessage) {
             return false;
-        } elseif (!$activateTime) {
+        } elseif (!$activateTime && !$isUpdate) {
             $activateTime = new DateTime();
             if ($activateTime > $startTime) {
                 $activateTime = $startTime;
@@ -328,33 +343,83 @@ readonly class ImportExportService
             return false;
         }
 
-        $contest = new Contest();
-        $contest
-            ->setName($data['name'] ?? $data['formal_name'] )
-            ->setShortname(preg_replace(
-                               $invalid_regex,
-                               '_',
-                               $data['short_name'] ?? $data['shortname'] ?? $data['short-name'] ?? $data['id']
-                           ))
-            ->setExternalid($contest->getShortname())
-            ->setWarningMessage($data['warning_message'] ?? $data['warning-message'] ?? null)
-            ->setStarttimeString(date_format($startTime, 'Y-m-d H:i:s e'))
-            ->setActivatetimeString($activateTimeIsRelative ? $activateRelativeTime : date_format($activateTime, 'Y-m-d H:i:s e'))
-            ->setEndtimeString(sprintf('+%s', $data['duration']))
-            ->setPublic($data['public'] ?? true)
-            ->setProcessBalloons($data['process_balloons'] ?? $data['process-balloons'] ?? true);
-        if ($deactivateTime) {
-            $contest->setDeactivatetimeString($deactivateTimeIsRelative ? $deactivateRelativeTime : date_format($deactivateTime, 'Y-m-d H:i:s e'));
-        }
-
         $scoreboardTypeData = $data['scoreboard_type'] ?? $data['scoreboard-type'] ?? null;
+        $scoreboardType = null;
         if ($scoreboardTypeData !== null) {
             $scoreboardType = ScoreboardType::tryFrom($scoreboardTypeData);
             if (!$scoreboardType) {
                 $errorMessage = sprintf('Scoreboard type %s is not valid.', $scoreboardTypeData);
                 return false;
             }
+            if ($isUpdate && $scoreboardType !== $contest->getScoreboardType()) {
+                $targetIsScoring = $scoreboardType === ScoreboardType::SCORE;
+                foreach ($contest->getProblems() as $contestProblem) {
+                    if ($contestProblem->getProblem()->isScoringProblem() !== $targetIsScoring) {
+                        $errorMessage = sprintf(
+                            'Cannot change scoreboard type to %s because contest already has incompatible problems.',
+                            $scoreboardType->value
+                        );
+                        return false;
+                    }
+                }
+            }
+        }
 
+        $freezeDurationFields = ['scoreboard_freeze_duration', 'scoreboard-freeze-duration', 'scoreboard-freeze-length'];
+        $freezeStartFields = ['scoreboard-freeze', 'freeze'];
+        /** @var string|null $freezeDuration */
+        $freezeDuration = $data['scoreboard_freeze_duration'] ?? $data['scoreboard-freeze-duration'] ?? $data['scoreboard-freeze-length'] ?? null;
+        /** @var string|null $freezeStart */
+        $freezeStart = $data['scoreboard-freeze'] ?? $data['freeze'] ?? null;
+        $freezeTimeString = null;
+        $hasFreezeField = $hasAnyKey($freezeDurationFields) || $hasAnyKey($freezeStartFields);
+
+        if ($freezeDuration !== null) {
+            $freezeDurationDiff = Utils::timeStringDiff($data['duration'], $freezeDuration);
+            if (str_starts_with($freezeDurationDiff, '-')) {
+                $errorMessage = 'Freeze duration is longer than contest length';
+                return false;
+            }
+            $freezeTimeString = sprintf('+%s', $freezeDurationDiff);
+        } elseif ($freezeStart !== null) {
+            $freezeTimeString = sprintf('+%s', $freezeStart);
+        }
+
+        if (!$isUpdate) {
+            $contest = new Contest();
+        }
+        $contest
+            ->setName($data['name'] ?? $data['formal_name'])
+            ->setShortname(preg_replace(
+                               $invalid_regex,
+                               '_',
+                               $data['short_name'] ?? $data['shortname'] ?? $data['short-name'] ?? $data['id']
+                           ))
+            ->setStarttimeString(date_format($startTime, 'Y-m-d H:i:s e'))
+            ->setEndtimeString(sprintf('+%s', $data['duration']));
+
+        if (!$isUpdate) {
+            $contest->setExternalid($contest->getShortname());
+        }
+        if ($activateTime) {
+            $contest->setActivatetimeString($activateTimeIsRelative ? $activateRelativeTime : date_format($activateTime, 'Y-m-d H:i:s e'));
+        }
+        if ($deactivateTime) {
+            $contest->setDeactivatetimeString($deactivateTimeIsRelative ? $deactivateRelativeTime : date_format($deactivateTime, 'Y-m-d H:i:s e'));
+        } elseif ($hasAnyKey($deactivateTimeFields)) {
+            $contest->setDeactivatetimeString(null);
+        }
+        if ($hasAnyKey(['warning_message', 'warning-message'])) {
+            $contest->setWarningMessage($data['warning_message'] ?? $data['warning-message'] ?? null);
+        }
+        if (array_key_exists('public', $data)) {
+            $contest->setPublic($data['public'] ?? true);
+        }
+        if ($hasAnyKey(['process_balloons', 'process-balloons'])) {
+            $contest->setProcessBalloons($data['process_balloons'] ?? $data['process-balloons'] ?? true);
+        }
+
+        if ($scoreboardType !== null) {
             $contest->setScoreboardtype($scoreboardType);
         }
 
@@ -367,44 +432,37 @@ readonly class ImportExportService
             $contest->setPenaltyTime(0);
         }
 
-        // Get all visible categories. For now, we assume these are the ones getting awards
-        $visibleCategories = $this->em->getRepository(TeamCategory::class)->findBy(['visible' => true]);
+        if (!$isUpdate || array_key_exists('medals', $data)) {
+            // Get all visible categories. For now, we assume these are the ones getting awards
+            $visibleCategories = $this->em->getRepository(TeamCategory::class)->findBy(['visible' => true]);
 
-        // Check if medals are explicitly enabled/disabled, otherwise infer from visible categories
-        $medalsEnabled = $data['medals']['enabled'] ?? null;
-        if ($medalsEnabled === false) {
-            $contest->setMedalsEnabled(false);
-        } elseif (empty($visibleCategories)) {
-            $contest->setMedalsEnabled(false);
-        } else {
-            foreach ($visibleCategories as $visibleCategory) {
-                $contest
-                    ->setMedalsEnabled($medalsEnabled ?? true)
-                    ->addMedalCategory($visibleCategory);
-            }
+            // Check if medals are explicitly enabled/disabled, otherwise infer from visible categories
+            $medalsEnabled = $data['medals']['enabled'] ?? null;
+            if ($medalsEnabled === false) {
+                $contest->setMedalsEnabled(false);
+            } elseif (empty($visibleCategories) && $contest->getMedalCategories()->isEmpty()) {
+                $contest->setMedalsEnabled(false);
+            } else {
+                $contest->setMedalsEnabled($medalsEnabled ?? true);
+                if (!$isUpdate || $contest->getMedalCategories()->isEmpty()) {
+                    foreach ($visibleCategories as $visibleCategory) {
+                        $contest->addMedalCategory($visibleCategory);
+                    }
+                }
 
-            foreach (['gold', 'silver', 'bronze'] as $medal) {
-                if (isset($data['medals'][$medal])) {
-                    $setter = 'set' . ucfirst($medal) . 'Medals';
-                    $contest->$setter($data['medals'][$medal]);
+                foreach (['gold', 'silver', 'bronze'] as $medal) {
+                    if (isset($data['medals'][$medal])) {
+                        $setter = 'set' . ucfirst($medal) . 'Medals';
+                        $contest->$setter($data['medals'][$medal]);
+                    }
                 }
             }
         }
 
-        /** @var string|null $freezeDuration */
-        $freezeDuration = $data['scoreboard_freeze_duration'] ?? $data['scoreboard-freeze-duration'] ?? $data['scoreboard-freeze-length'] ?? null;
-        /** @var string|null $freezeStart */
-        $freezeStart = $data['scoreboard-freeze'] ?? $data['freeze'] ?? null;
-
-        if ($freezeDuration !== null) {
-            $freezeDurationDiff = Utils::timeStringDiff($data['duration'], $freezeDuration);
-            if (str_starts_with($freezeDurationDiff, '-')) {
-                $errorMessage = 'Freeze duration is longer than contest length';
-                return false;
-            }
-            $contest->setFreezetimeString(sprintf('+%s', $freezeDurationDiff));
-        } elseif ($freezeStart !== null) {
-            $contest->setFreezetimeString(sprintf('+%s', $freezeStart));
+        if ($freezeTimeString !== null) {
+            $contest->setFreezetimeString($freezeTimeString);
+        } elseif ($hasFreezeField) {
+            $contest->setFreezetimeString(null);
         }
 
         $errors = $this->validator->validate($contest);
@@ -415,11 +473,16 @@ readonly class ImportExportService
                 $messages[] = sprintf('  • `%s`: %s', $error->getPropertyPath(), $error->getMessage());
             }
 
+            if ($isUpdate) {
+                $this->em->refresh($contest);
+            }
             $errorMessage = sprintf("Contest has errors:\n\n%s", implode("\n", $messages));
             return false;
         }
 
-        $this->em->persist($contest);
+        if (!$isUpdate) {
+            $this->em->persist($contest);
+        }
 
         $shadow = $data['shadow'] ?? null;
         if ($shadow) {
@@ -446,15 +509,22 @@ readonly class ImportExportService
                     $contest->$fieldFunc($value);
                 }
             }
+        } elseif (array_key_exists('shadow', $data)) {
+            $contest->setExternalSourceEnabled(false);
         }
 
         $this->em->flush();
 
-        if (isset($data['problems'])) {
+        if (!$isUpdate && isset($data['problems'])) {
             $this->importProblemsData($contest, $data['problems']);
         }
 
         $cid = $contest->getExternalid();
+
+        if ($isUpdate) {
+            $this->dj->auditlog('contest', $cid, 'updated', 'via API');
+            $this->eventLogService->log('contests', $contest->getCid(), EventLogService::ACTION_UPDATE, $contest->getCid());
+        }
 
         $this->em->flush();
         return true;

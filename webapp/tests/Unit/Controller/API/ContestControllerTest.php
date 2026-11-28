@@ -437,4 +437,93 @@ class ContestControllerTest extends BaseTestCase
             @unlink($tmpFile);
         }
     }
+
+    public function testPutContestUpdatesMetadataAndPreservesOmittedFields(): void
+    {
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $demo = $em->getRepository(Contest::class)->findOneBy(['shortname' => 'demo']);
+        $originalActivate = $demo->getActivatetimeString();
+        $demo->setWarningMessage('Keep this warning');
+        $em->flush();
+
+        $payload = [
+            'id' => 'demo',
+            'name' => 'Updated Demo Contest',
+            'start_time' => '2026-11-26T12:00:00+00:00',
+            'duration' => '4:00:00',
+            'scoreboard_freeze_duration' => '0:30:00',
+            'penalty_time' => 15,
+        ];
+        $updated = $this->verifyApiJsonResponse('PUT', '/contests/demo', 200, 'admin', $payload);
+
+        self::assertSame('demo', $updated['id']);
+        self::assertSame('Updated Demo Contest', $updated['name']);
+        self::assertSame('4:00:00.000', $updated['duration']);
+        self::assertSame('0:30:00.000', $updated['scoreboard_freeze_duration']);
+
+        $em->clear();
+        $reloaded = $em->getRepository(Contest::class)->findOneBy(['externalid' => 'demo']);
+        self::assertSame('Updated Demo Contest', $reloaded->getName());
+        self::assertSame(15, $reloaded->getPenaltyTime());
+        self::assertSame($originalActivate, $reloaded->getActivatetimeString());
+        self::assertSame('Keep this warning', $reloaded->getWarningMessage());
+
+        $updateEvent = $em->getRepository(Event::class)->findOneBy([
+            'contest' => $reloaded,
+            'endpointtype' => 'contests',
+            'action' => 'update',
+        ]);
+        self::assertNotNull($updateEvent);
+    }
+
+    public function testPutContestAcceptsYamlBody(): void
+    {
+        $adminPasswordFile = sprintf(
+            '%s/%s',
+            static::getContainer()->getParameter('domjudge.etcdir'),
+            'initial_admin_password.secret'
+        );
+        $yaml = "id: demo\nname: YAML Updated Contest\nstart_time: 2026-11-26T12:00:00+00:00\nduration: 5:00:00\n";
+        $this->client->request('PUT', '/api/contests/demo', [], [], [
+            'CONTENT_TYPE' => 'application/x-yaml',
+            'PHP_AUTH_USER' => 'admin',
+            'PHP_AUTH_PW' => trim(file_get_contents($adminPasswordFile)),
+        ], $yaml);
+
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+        $data = json_decode($this->client->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('YAML Updated Contest', $data['name']);
+    }
+
+    public function testPutContestGuardsAndValidation(): void
+    {
+        $validPayload = [
+            'id' => 'demo',
+            'name' => 'Demo contest',
+            'start_time' => '2026-11-26T12:00:00+00:00',
+            'duration' => '5:00:00',
+        ];
+
+        // Requires admin role.
+        $this->verifyApiResponse('PUT', '/contests/demo', 403, 'demo', $validPayload);
+
+        // Incompatible scoreboard type rejected when pass-fail problems exist.
+        $this->verifyApiResponse('PUT', '/contests/demo', 400, 'admin', array_merge($validPayload, [
+            'scoreboard_type' => 'score',
+        ]));
+
+        // Validation error rolls back without persisting.
+        $this->verifyApiResponse('PUT', '/contests/demo', 400, 'admin', array_merge($validPayload, [
+            'name' => '',
+        ]));
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $em->clear();
+        $demo = $em->getRepository(Contest::class)->findOneBy(['externalid' => 'demo']);
+        self::assertSame('Demo contest', $demo->getName());
+
+        // Locked contest rejected with 403.
+        $demo->setIsLocked(true);
+        $em->flush();
+        $this->verifyApiResponse('PUT', '/contests/demo', 403, 'admin', $validPayload);
+    }
 }
