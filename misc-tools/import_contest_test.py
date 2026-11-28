@@ -19,6 +19,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -134,6 +135,12 @@ class PackageTestCase(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             import_contest.import_images('organizations', 'logo', prefer_width=64, ext_order=LOGO_EXT_ORDER)
         return output.getvalue()
+
+    def patch_dj_utils(self, **kwargs):
+        for attr, value in kwargs.items():
+            patcher = mock.patch.object(import_contest.dj_utils, attr, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
 
 class ImportImagesTest(PackageTestCase):
@@ -272,6 +279,56 @@ class ImportContestBannerTest(PackageTestCase):
     def test_dark_banner_skipped(self):
         self.touch('contest/banner.dark.png')
         self.import_banner()
+        self.assertEqual(uploads, [])
+
+
+class ReimportContestMetadataTest(PackageTestCase):
+    def test_fresh_contest_uploads_yaml(self):
+        with open('contest.yaml', 'w') as f:
+            f.write('id: demo\nname: Demo\nstart_time: "2026-11-26T12:00:00+01:00"\nduration: "5:00:00"\n')
+        requested = []
+        self.patch_dj_utils(
+            do_api_request=lambda name: (requested.append(name) or []),
+            upload_file=lambda name, apifilename, file, data=None: (uploads.append((name, file)) or 'demo'),
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            cid = import_contest.import_contest_metadata()
+        self.assertEqual(requested, ['contests?onlyActive=false'])
+        self.assertEqual(cid, 'demo')
+        self.assertEqual(uploads, [('contests', 'contest.yaml')])
+
+    def test_existing_contest_reused(self):
+        with open('contest.yaml', 'w') as f:
+            f.write('short_name: my contest.2026\nname: My Contest\n')
+        server_contest = {'id': 'my_contest.2026', 'shortname': 'my_contest.2026', 'name': 'My Contest'}
+        self.patch_dj_utils(do_api_request=lambda name: [server_contest])
+        with contextlib.redirect_stdout(io.StringIO()):
+            cid = import_contest.import_contest_metadata()
+        self.assertEqual(cid, 'my_contest.2026')
+        self.assertEqual(uploads, [])
+
+    def test_short_name_takes_precedence_over_id(self):
+        with open('contest.yaml', 'w') as f:
+            f.write('id: wf2026\nshort_name: finals\nname: World Finals\n')
+        self.patch_dj_utils(do_api_request=lambda name: [
+            {'id': 'wf2026', 'name': 'Old test contest'},
+            {'id': 'finals', 'name': 'World Finals'},
+        ])
+        with contextlib.redirect_stdout(io.StringIO()):
+            cid = import_contest.import_contest_metadata()
+        self.assertEqual(cid, 'finals')
+        self.assertEqual(uploads, [])
+
+    def test_existing_contest_declined_returns_none(self):
+        with open('contest.yaml', 'w') as f:
+            f.write('id: demo\nname: Demo\n')
+        self.patch_dj_utils(
+            do_api_request=lambda name: [{'id': 'demo', 'name': 'Demo'}],
+            confirm=lambda message, default: False,
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            cid = import_contest.import_contest_metadata()
+        self.assertIsNone(cid)
         self.assertEqual(uploads, [])
 
 
