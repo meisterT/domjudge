@@ -17,12 +17,13 @@ under the GNU GPL. See README and COPYING for details.
 
 from datetime import datetime
 from os import listdir
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 import json
 import os.path
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import yaml
 
@@ -392,6 +393,58 @@ def get_problem_id(problem_data: dict) -> str:
     return str(pid)
 
 
+def _problem_metadata_diffs(local: dict, server: dict) -> List[str]:
+    diffs = []
+    local_label = _first_key(local, 'label', 'letter')
+    if local_label is not None and server.get('label') is not None and str(local_label) != str(server['label']):
+        diffs.append(f"label: is '{server['label']}', new '{local_label}'")
+
+    if local.get('rgb') is not None and server.get('rgb') is not None:
+        if str(local['rgb']).lstrip('#').lower() != str(server['rgb']).lstrip('#').lower():
+            diffs.append(f"rgb: is '{server['rgb']}', new '{local['rgb']}'")
+    elif local.get('rgb') is None and local.get('color') is not None and server.get('color') is not None:
+        if str(local['color']).lower() != str(server['color']).lower():
+            diffs.append(f"color: is '{server['color']}', new '{local['color']}'")
+    return diffs
+
+
+def sync_problems_metadata(cid: str, problems_file: str, local_problems: List[dict]) -> Dict[str, dict]:
+    """Check existing problems in the contest, report metadata diffs, and upload only new problems
+    to problems/add-data. Returns a dict of already-existing problems keyed by problem ID."""
+    existing_by_id = {str(p['id']): p for p in (dj_utils.do_api_request(f'contests/{cid}/problems') or []) if 'id' in p}
+
+    local_ids = set()
+    new_problems = []
+    for p in local_problems:
+        pid = get_problem_id(p)
+        local_ids.add(pid)
+        if pid in existing_by_id:
+            diffs = _problem_metadata_diffs(p, existing_by_id[pid])
+            if diffs:
+                print(f"  - Problem '{pid}' already exists with different metadata ({', '.join(diffs)}). "
+                      "Metadata for existing problems is not updated automatically.")
+        else:
+            new_problems.append(p)
+
+    extra_on_server = sorted(set(existing_by_id) - local_ids)
+    if extra_on_server:
+        print(f"  - Note: contest also has problem(s) not in {problems_file}: {', '.join(extra_on_server)}")
+
+    if not new_problems:
+        print('All problems are already linked to this contest, skipping problems metadata import.')
+    elif len(new_problems) == len(local_problems):
+        dj_utils.upload_file(f'contests/{cid}/problems/add-data', 'data', problems_file)
+    else:
+        print(f'Adding metadata for {len(new_problems)} new problem(s) '
+              f'({len(local_problems) - len(new_problems)} already exist in contest).')
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as tmp:
+            json.dump(new_problems, tmp)
+            tmp.flush()
+            dj_utils.upload_file(f'contests/{cid}/problems/add-data', 'data', tmp.name)
+
+    return existing_by_id
+
+
 def main():
     cid = None
 
@@ -455,8 +508,8 @@ def main():
                     print("No known contests yet.")
                 cid = answer = input('Please specify the contest id: ')
 
-            dj_utils.upload_file(f'contests/{cid}/problems/add-data', 'data', problems_file)
             local_problems = load_local_problems(problems_file)
+            existing_problems = sync_problems_metadata(cid, problems_file, local_problems)
 
             confirmIndividually = dj_utils.confirm("Confirm individually for every problem", False)
             for problem_data in local_problems:
@@ -465,6 +518,7 @@ def main():
                     problem_dir = str(problem_data['short-name'])
                 else:
                     problem_dir = problem_id
+                action = 'update' if problem_id in existing_problems else 'import'
                 print(f'\nPreparing problem \'{problem_dir}\'.')
                 if not re.match(r'^[a-zA-Z0-9_.-]+$', problem_dir) or problem_dir in ('.', '..'):
                     print(f'Invalid problem identifier \'{problem_dir}\'.')
@@ -492,7 +546,7 @@ def main():
                 else:
                     print(f"\nZipping problem failed with exit code: {exit_code}")
 
-                if ((not confirmIndividually) or dj_utils.confirm(f'Ready to import problem \'{problem_dir}\' to problem={problem_id}. Continue?', True)):
+                if ((not confirmIndividually) or dj_utils.confirm(f'Ready to {action} problem \'{problem_dir}\' to problem={problem_id}. Continue?', True)):
                     print(f'Uploading problem \'{problem_dir}\', please be patient, this may take a while.')
                     before = time.time()
                     response = dj_utils.upload_file(

@@ -370,5 +370,57 @@ class ReimportContestMetadataTest(PackageTestCase):
         self.assertNotIn('penalty_time', output.getvalue())
 
 
+class SyncProblemsMetadataTest(PackageTestCase):
+    def test_all_new_problems_uploads_original_file(self):
+        local = [{'id': 'probA', 'label': 'A', 'rgb': '#ff0000'}]
+        self.write_json('problems.json', local)
+        self.patch_dj_utils(do_api_request=lambda name: [])
+        with contextlib.redirect_stdout(io.StringIO()):
+            existing = import_contest.sync_problems_metadata('demo', 'problems.json', local)
+        self.assertEqual(existing, {})
+        self.assertEqual(uploads, [('contests/demo/problems/add-data', 'problems.json')])
+
+    def test_all_existing_problems_skips_add_data_and_reports_diffs_and_extras(self):
+        local = [
+            {'id': 'probA', 'label': 'A', 'rgb': '#ff0000'},
+            {'id': 'probB', 'label': 'C', 'rgb': '#0000ff'},
+        ]
+        server = [
+            {'id': 'probA', 'label': 'A', 'rgb': '#FF0000'},
+            {'id': 'probB', 'label': 'B', 'rgb': '#00ff00'},
+            {'id': 'probExtra', 'label': 'Z', 'rgb': '#ffffff'},
+        ]
+        self.patch_dj_utils(do_api_request=lambda name: server)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            existing = import_contest.sync_problems_metadata('demo', 'problems.json', local)
+        self.assertEqual(set(existing), {'probA', 'probB', 'probExtra'})
+        self.assertEqual(uploads, [])
+        self.assertIn("label: is 'B', new 'C'", output.getvalue())
+        self.assertIn('probExtra', output.getvalue())
+        self.assertNotIn("Problem 'probA'", output.getvalue())
+
+    def test_partial_new_problems_uploads_only_new_subset(self):
+        local = [
+            {'id': 'probA', 'label': 'A', 'rgb': '#ff0000'},
+            {'id': 'probB', 'label': 'B', 'rgb': '#00ff00'},
+        ]
+        uploaded = []
+
+        def fake_upload(name, apifilename, file, data=None):
+            with open(file) as f:
+                uploaded.append((name, json.load(f)))
+
+        self.patch_dj_utils(do_api_request=lambda name: [local[0]], upload_file=fake_upload)
+        with contextlib.redirect_stdout(io.StringIO()):
+            existing = import_contest.sync_problems_metadata('demo', 'problems.json', local)
+        self.assertEqual(set(existing), {'probA'})
+        self.assertEqual(uploaded, [('contests/demo/problems/add-data', [local[1]])])
+
+    def test_missing_problem_id_raises(self):
+        with self.assertRaises(ValueError):
+            import_contest.get_problem_id({'name': 'No ID'})
+
+
 if __name__ == '__main__':
     unittest.main()
