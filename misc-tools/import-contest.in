@@ -15,6 +15,7 @@ Part of the DOMjudge Programming Contest Jury System and licensed
 under the GNU GPL. See README and COPYING for details.
 '''
 
+from datetime import datetime
 from os import listdir
 from typing import List, Optional, Sequence, Tuple
 import json
@@ -220,14 +221,129 @@ def import_contest_problemset_document(cid: str):
             print('Skipping contest problemset import.')
 
 
+_RELTIME_RE = re.compile(r'^([+-])?(\d+):(\d{2}):(\d{2})(?:\.(\d+))?$')
+
+
+class _YamlLoader(yaml.SafeLoader):
+    pass
+
+
+# PyYAML parses unquoted H:MM:SS as YAML 1.1 sexagesimal numbers; keep them as strings like Symfony YAML.
+_YamlLoader.yaml_implicit_resolvers = {
+    k: [('tag:yaml.org,2002:str', _RELTIME_RE)] + list(v)
+    for k, v in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+
+
+def _load_data_file(path: str):
+    with open(path) as f:
+        return json.load(f) if path.endswith('.json') else yaml.load(f, Loader=_YamlLoader)
+
+
+def _first_key(data: dict, *keys: str):
+    return next((data[k] for k in keys if data.get(k) is not None), None)
+
+
+def _parse_reltime(value) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return round(float(value), 3)
+    if isinstance(value, str):
+        m = _RELTIME_RE.match(value.strip())
+        if m:
+            sign = -1.0 if m.group(1) == '-' else 1.0
+            frac = float('0.' + m.group(5)) if m.group(5) else 0.0
+            return round(sign * (int(m.group(2)) * 3600 + int(m.group(3)) * 60 + int(m.group(4)) + frac), 3)
+    return None
+
+
+def _format_reltime(seconds: float) -> str:
+    sign = '-' if seconds < 0 else ''
+    total_ms = round(abs(seconds) * 1000)
+    total_s, ms = divmod(total_ms, 1000)
+    hours, rem = divmod(total_s, 3600)
+    minutes, secs = divmod(rem, 60)
+    base = f'{sign}{hours}:{minutes:02d}:{secs:02d}'
+    return f'{base}.{ms:03d}' if ms else base
+
+
+def _norm_timestamp(value):
+    dt = None
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        s = value.strip()
+        if s.endswith(('Z', 'z')):
+            s = s[:-1] + '+00:00'
+        s = re.sub(r'([+-]\d{2})(\d{2})$', r'\1:\2', s)
+        try:
+            dt = datetime.fromisoformat(s)
+        except ValueError:
+            return value
+    if dt is not None:
+        return round(dt.timestamp(), 3) if dt.tzinfo is not None else dt.isoformat()
+    return value
+
+
+def _norm_reltime(value):
+    secs = _parse_reltime(value)
+    return value if secs is None else secs
+
+
+def _norm_penalty(value):
+    if isinstance(value, (int, float)):
+        return round(float(value), 3)
+    if isinstance(value, str):
+        try:
+            return round(float(value.strip()), 3)
+        except ValueError:
+            secs = _parse_reltime(value)
+            return round(secs / 60.0, 3) if secs is not None else value
+    return value
+
+
+def _expected_contest_shortname(contest_data: dict) -> Optional[str]:
+    short_name = _first_key(contest_data, 'short_name', 'shortname', 'short-name', 'id')
+    return re.sub(r'[^a-zA-Z0-9_.-]', '_', str(short_name)) if short_name is not None else None
+
+
 def find_existing_contest(contest_data: dict, contests: Sequence[dict]) -> Optional[dict]:
     """Find the contest that importing contest_data would create, matching ImportExportService::importContestData."""
-    short_name = next((contest_data[k] for k in ('short_name', 'shortname', 'short-name', 'id')
-                       if contest_data.get(k) is not None), None)
-    if short_name is None:
+    cid = _expected_contest_shortname(contest_data)
+    if cid is None:
         return None
-    cid = re.sub(r'[^a-zA-Z0-9_.-]', '_', str(short_name))
     return next((c for c in contests if cid in (c['id'], c.get('shortname'))), None)
+
+
+def compare_contest_metadata(local_data: dict, existing: dict) -> List[str]:
+    """Compare local contest metadata against an existing contest from the API."""
+    diffs = []
+
+    def check(api_field: str, local_val, normalize, compare_when_actual_none: bool = False):
+        actual_val = existing.get(api_field)
+        if local_val is None or (actual_val is None and not compare_when_actual_none):
+            return
+        if normalize(local_val) != normalize(actual_val):
+            diffs.append(f'    - {api_field}:\n       is: {actual_val}\n      new: {local_val}')
+
+    check('name', _first_key(local_data, 'name', 'formal_name'), str)
+    check('shortname', _expected_contest_shortname(local_data), str)
+    check('start_time', _first_key(local_data, 'start_time', 'start-time'), _norm_timestamp, compare_when_actual_none=True)
+    check('duration', local_data.get('duration'), _norm_reltime)
+
+    local_freeze = _first_key(local_data, 'scoreboard_freeze_duration', 'scoreboard-freeze-duration', 'scoreboard-freeze-length')
+    if local_freeze is None:
+        duration_sec = _parse_reltime(local_data.get('duration'))
+        freeze_start_sec = _parse_reltime(_first_key(local_data, 'scoreboard-freeze', 'freeze'))
+        if duration_sec is not None and freeze_start_sec is not None:
+            local_freeze = _format_reltime(duration_sec - freeze_start_sec)
+    check('scoreboard_freeze_duration', local_freeze, _norm_reltime, compare_when_actual_none=True)
+
+    local_scoreboard_type = _first_key(local_data, 'scoreboard_type', 'scoreboard-type')
+    check('scoreboard_type', local_scoreboard_type, str)
+    if (local_scoreboard_type or existing.get('scoreboard_type')) != 'score':
+        check('penalty_time', _first_key(local_data, 'penalty_time', 'penalty-time', 'penalty'), _norm_penalty)
+
+    return diffs
 
 
 def import_contest_metadata() -> Optional[str]:
@@ -237,13 +353,22 @@ def import_contest_metadata() -> Optional[str]:
         print('Neither \'contest.yaml\' nor \'contest.json\' found, skipping contest metadata import.')
         return None
 
-    with open(contest_file) as f:
-        contest_data = json.load(f) if contest_file.endswith('.json') else yaml.safe_load(f)
+    contest_data = _load_data_file(contest_file)
     if isinstance(contest_data, dict):
         # Note: the API still excludes disabled contests (enabled = 0).
         existing = find_existing_contest(contest_data, dj_utils.do_api_request('contests?onlyActive=false'))
         if existing is not None:
-            if dj_utils.confirm(f"Contest '{existing['name']}' (cid={existing['id']}) already exists, use it?", True):
+            print(f"Contest '{existing['name']}' (cid={existing['id']}) already exists on the server.")
+            diffs = compare_contest_metadata(contest_data, existing)
+            if diffs:
+                print('  - Differences between server and local contest metadata:')
+                for d in diffs:
+                    print(d)
+                print('  - Note: updating contest metadata via the API is not supported; '
+                      'update these fields in the jury interface if needed.')
+            else:
+                print('  - Contest metadata is already up-to-date.')
+            if dj_utils.confirm(f"Use existing contest '{existing['name']}' (cid={existing['id']})?", True):
                 return existing['id']
             print('Skipping contest metadata import.')
             return None

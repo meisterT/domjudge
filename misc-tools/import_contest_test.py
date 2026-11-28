@@ -297,15 +297,27 @@ class ReimportContestMetadataTest(PackageTestCase):
         self.assertEqual(cid, 'demo')
         self.assertEqual(uploads, [('contests', 'contest.yaml')])
 
-    def test_existing_contest_reused(self):
+    def test_existing_contest_reused_when_up_to_date(self):
         with open('contest.yaml', 'w') as f:
-            f.write('short_name: my contest.2026\nname: My Contest\n')
-        server_contest = {'id': 'my_contest.2026', 'shortname': 'my_contest.2026', 'name': 'My Contest'}
+            f.write('short_name: my contest.2026\nname: My Contest\n'
+                    'start_time: 2026-11-26T11:00:00z\nduration: 5:00:00\n'
+                    'freeze: 4:00:00\npenalty_time: 1:00:00\n')
+        server_contest = {
+            'id': 'my_contest.2026',
+            'shortname': 'my_contest.2026',
+            'name': 'My Contest',
+            'start_time': '2026-11-26T12:00:00.000+0100',
+            'duration': '5:00:00.000',
+            'scoreboard_freeze_duration': '1:00:00.000',
+            'penalty_time': 60,
+        }
         self.patch_dj_utils(do_api_request=lambda name: [server_contest])
-        with contextlib.redirect_stdout(io.StringIO()):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
             cid = import_contest.import_contest_metadata()
         self.assertEqual(cid, 'my_contest.2026')
         self.assertEqual(uploads, [])
+        self.assertIn('already up-to-date', output.getvalue())
 
     def test_short_name_takes_precedence_over_id(self):
         with open('contest.yaml', 'w') as f:
@@ -319,17 +331,31 @@ class ReimportContestMetadataTest(PackageTestCase):
         self.assertEqual(cid, 'finals')
         self.assertEqual(uploads, [])
 
-    def test_existing_contest_declined_returns_none(self):
+    def test_existing_contest_reports_diffs_and_respects_confirm(self):
         with open('contest.yaml', 'w') as f:
-            f.write('id: demo\nname: Demo\n')
+            f.write('id: demo\nname: New Name\nstart_time: "2026-11-26T13:00:00+01:00"\n'
+                    'duration: 4:00:00\nfreeze: 3:00:00\nscoreboard_type: score\npenalty_time: 20\n')
+        server_contest = {
+            'id': 'demo',
+            'name': 'Old Name',
+            'start_time': '2026-11-26T12:00:00+01:00',
+            'duration': '5:00:00.000',
+            'scoreboard_freeze_duration': '0:30:00.000',
+            'scoreboard_type': 'score',
+            'penalty_time': 0,
+        }
         self.patch_dj_utils(
-            do_api_request=lambda name: [{'id': 'demo', 'name': 'Demo'}],
+            do_api_request=lambda name: [server_contest],
             confirm=lambda message, default: False,
         )
-        with contextlib.redirect_stdout(io.StringIO()):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
             cid = import_contest.import_contest_metadata()
         self.assertIsNone(cid)
         self.assertEqual(uploads, [])
+        for expected in ('- name:', '- start_time:', '- duration:', 'new: 1:00:00', 'not supported'):
+            self.assertIn(expected, output.getvalue())
+        self.assertNotIn('penalty_time', output.getvalue())
 
 
 if __name__ == '__main__':
