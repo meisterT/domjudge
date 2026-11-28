@@ -220,6 +220,40 @@ def import_contest_problemset_document(cid: str):
             print('Skipping contest problemset import.')
 
 
+def find_existing_contest(contest_data: dict, contests: Sequence[dict]) -> Optional[dict]:
+    """Find the contest that importing contest_data would create, matching ImportExportService::importContestData."""
+    short_name = next((contest_data[k] for k in ('short_name', 'shortname', 'short-name', 'id')
+                       if contest_data.get(k) is not None), None)
+    if short_name is None:
+        return None
+    cid = re.sub(r'[^a-zA-Z0-9_.-]', '_', str(short_name))
+    return next((c for c in contests if cid in (c['id'], c.get('shortname'))), None)
+
+
+def import_contest_metadata() -> Optional[str]:
+    """Import contest.yaml or contest.json, or reuse the contest it describes if the server already has it."""
+    contest_file = next((f for f in ('contest.yaml', 'contest.json') if os.path.exists(f)), None)
+    if contest_file is None:
+        print('Neither \'contest.yaml\' nor \'contest.json\' found, skipping contest metadata import.')
+        return None
+
+    with open(contest_file) as f:
+        contest_data = json.load(f) if contest_file.endswith('.json') else yaml.safe_load(f)
+    if isinstance(contest_data, dict):
+        # Note: the API still excludes disabled contests (enabled = 0).
+        existing = find_existing_contest(contest_data, dj_utils.do_api_request('contests?onlyActive=false'))
+        if existing is not None:
+            if dj_utils.confirm(f"Contest '{existing['name']}' (cid={existing['id']}) already exists, use it?", True):
+                return existing['id']
+            print('Skipping contest metadata import.')
+            return None
+
+    if dj_utils.confirm(f'Import contest metadata (from {contest_file})?', True):
+        print('Importing contest.')
+        return dj_utils.upload_file('contests', contest_file.rsplit('.', 1)[1], contest_file)
+    return None
+
+
 def main():
     cid = None
 
@@ -246,16 +280,7 @@ def main():
     import_file('accounts', ['accounts.json', 'accounts.yaml', 'accounts.tsv'])
 
     # Contest import is a special case: we can also gather the contest ID.
-    if os.path.exists('contest.yaml'):
-        if dj_utils.confirm('Import contest metadata (from contest.yaml)?', True):
-            print(f'Importing contest.')
-            cid = dj_utils.upload_file('contests', 'yaml', 'contest.yaml')
-    elif os.path.exists('contest.json'):
-        if dj_utils.confirm('Import contest metadata (from contest.json)?', True):
-            print('Importing contest.')
-            cid = dj_utils.upload_file('contests', 'json', 'contest.json')
-    else:
-        print('Neither \'contest.yaml\' nor \'contest.json\' found, skipping contest metadata import.')
+    cid = import_contest_metadata()
 
     if cid is not None:
         print(f' -> cid={cid}')
@@ -282,7 +307,7 @@ def main():
             print('Importing problems.')
 
             if cid is None:
-                existing_contests = dj_utils.do_api_request('contests')
+                existing_contests = dj_utils.do_api_request('contests?onlyActive=false')
                 if existing_contests:
                     print("The DOMjudge server already has these contests:")
                     for c in existing_contests:
