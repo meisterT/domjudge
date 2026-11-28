@@ -11,6 +11,7 @@ use App\Utils\Utils;
 use Doctrine\ORM\EntityManagerInterface;
 use Generator;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class ContestControllerTest extends BaseTestCase
 {
@@ -410,5 +411,30 @@ class ContestControllerTest extends BaseTestCase
 
         self::assertSame($expectedDemoTokens, $tokens);
         self::assertLessThan(5.0, $elapsed);
+    }
+
+    public function testAdminCanModifyInactiveContestProblemset(): void
+    {
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $future = (new Contest())
+            ->setExternalid('future-inactive')
+            ->setName('Future inactive contest')
+            ->setShortname('future-inactive')
+            ->setActivatetimeString('2099-01-01 10:00:00 UTC')
+            ->setStarttimeString('2099-01-01 12:00:00 UTC')
+            ->setEndtimeString('2099-01-01 17:00:00 UTC');
+        $em->persist($future);
+        $em->flush();
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'problemset');
+        self::assertNotFalse($tmpFile);
+        file_put_contents($tmpFile, 'Hello problemset');
+        try {
+            $uploaded = new UploadedFile($tmpFile, 'contest.txt', 'text/plain', null, true);
+            $this->verifyApiResponse('POST', '/contests/future-inactive/problemset', 204, 'admin', files: ['problemset' => $uploaded]);
+            $this->verifyApiResponse('DELETE', '/contests/future-inactive/problemset', 204, 'admin');
+        } finally {
+            @unlink($tmpFile);
+        }
     }
 }

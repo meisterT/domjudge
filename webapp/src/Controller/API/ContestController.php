@@ -294,9 +294,9 @@ class ContestController extends AbstractRestController
     #[Rest\Delete(path: '/{cid}/banner', name: 'delete_contest_banner')]
     #[OA\Response(response: 204, description: 'Deleting banner succeeded')]
     #[OA\Parameter(ref: '#/components/parameters/cid')]
-    public function deleteBannerAction(Request $request, string $cid): Response
+    public function deleteBannerAction(string $cid): Response
     {
-        $contest = $this->getContestAndCheckIfLocked($request, $cid);
+        $contest = $this->getContestAndCheckIfLocked($cid);
         $contest->setClearBanner(true);
 
         $this->assetUpdater->updateAssets($contest);
@@ -333,7 +333,7 @@ class ContestController extends AbstractRestController
     #[OA\Parameter(ref: '#/components/parameters/cid')]
     public function setBannerAction(Request $request, string $cid, ValidatorInterface $validator): Response
     {
-        $contest = $this->getContestAndCheckIfLocked($request, $cid);
+        $contest = $this->getContestAndCheckIfLocked($cid);
 
         /** @var UploadedFile|null $banner */
         $banner = $request->files->get('banner');
@@ -361,9 +361,9 @@ class ContestController extends AbstractRestController
     #[Rest\Delete(path: '/{cid}/problemset', name: 'delete_contest_problemset')]
     #[OA\Response(response: 204, description: 'Deleting problemset document succeeded')]
     #[OA\Parameter(ref: '#/components/parameters/cid')]
-    public function deleteProblemsetAction(Request $request, string $cid): Response
+    public function deleteProblemsetAction(string $cid): Response
     {
-        $contest = $this->getContestAndCheckIfLocked($request, $cid);
+        $contest = $this->getContestAndCheckIfLocked($cid);
         $contest->setClearContestProblemset(true);
         $contest->processContestProblemset();
         $this->em->flush();
@@ -401,7 +401,7 @@ class ContestController extends AbstractRestController
     #[OA\Parameter(ref: '#/components/parameters/cid')]
     public function setProblemsetAction(Request $request, string $cid, ValidatorInterface $validator): Response
     {
-        $contest = $this->getContestAndCheckIfLocked($request, $cid);
+        $contest = $this->getContestAndCheckIfLocked($cid);
 
         /** @var UploadedFile|null $problemset */
         $problemset = $request->files->get('problemset');
@@ -1075,10 +1075,10 @@ class ContestController extends AbstractRestController
     }
 
     /** To be used when contest data is modified. */
-    private function getContestAndCheckIfLocked(Request $request, string $cid): Contest
+    private function getContestAndCheckIfLocked(string $cid): Contest
     {
         /** @var Contest|null $contest */
-        $contest = $this->getQueryBuilder($request, filterBeforeContest: false)
+        $contest = $this->getContestQueryBuilder(onlyActive: false, filterBeforeContest: false)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
             ->setParameter('id', $cid)
             ->getQuery()
