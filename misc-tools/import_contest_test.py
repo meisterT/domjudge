@@ -297,15 +297,27 @@ class ReimportContestMetadataTest(PackageTestCase):
         self.assertEqual(cid, 'demo')
         self.assertEqual(uploads, [('contests', 'contest.yaml')])
 
-    def test_existing_contest_reused(self):
+    def test_existing_contest_reused_when_up_to_date(self):
         with open('contest.yaml', 'w') as f:
-            f.write('short_name: my contest.2026\nname: My Contest\n')
-        server_contest = {'id': 'my_contest.2026', 'shortname': 'my_contest.2026', 'name': 'My Contest'}
+            f.write('short_name: my contest.2026\nname: My Contest\n'
+                    'start_time: 2026-11-26T11:00:00z\nduration: 5:00:00\n'
+                    'freeze: 4:00:00\npenalty_time: 1:00:00\n')
+        server_contest = {
+            'id': 'my_contest.2026',
+            'shortname': 'my_contest.2026',
+            'name': 'My Contest',
+            'start_time': '2026-11-26T12:00:00.000+0100',
+            'duration': '5:00:00.000',
+            'scoreboard_freeze_duration': '1:00:00.000',
+            'penalty_time': 60,
+        }
         self.patch_dj_utils(do_api_request=lambda name: [server_contest])
-        with contextlib.redirect_stdout(io.StringIO()):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
             cid = import_contest.import_contest_metadata()
         self.assertEqual(cid, 'my_contest.2026')
         self.assertEqual(uploads, [])
+        self.assertIn('already up-to-date', output.getvalue())
 
     def test_short_name_takes_precedence_over_id(self):
         with open('contest.yaml', 'w') as f:
@@ -319,11 +331,54 @@ class ReimportContestMetadataTest(PackageTestCase):
         self.assertEqual(cid, 'finals')
         self.assertEqual(uploads, [])
 
-    def test_existing_contest_declined_returns_none(self):
+    def test_existing_contest_reports_diffs_and_uploads_via_put(self):
         with open('contest.yaml', 'w') as f:
-            f.write('id: demo\nname: Demo\n')
+            f.write('id: demo\nname: New Name\nstart_time: 2026-11-26T13:00:00+01:00\n'
+                    'duration: 4:00:00\nfreeze: 3:00:00\nscoreboard_type: score\npenalty_time: 20\n')
+        server_contest = {
+            'id': 'demo',
+            'name': 'Old Name',
+            'start_time': '2026-11-26T12:00:00+01:00',
+            'duration': '5:00:00.000',
+            'scoreboard_freeze_duration': '0:30:00.000',
+            'scoreboard_type': 'score',
+            'penalty_time': 0,
+        }
+        updated_contest = {
+            'id': 'demo',
+            'name': 'New Name',
+            'start_time': '2026-11-26T13:00:00.000+01:00',
+            'duration': '4:00:00.000',
+            'scoreboard_freeze_duration': '1:00:00.000',
+            'scoreboard_type': 'score',
+            'penalty_time': 0,
+        }
+        put_calls = []
+
+        def fake_api(name, method='GET', jsonData=None):
+            if method == 'PUT':
+                put_calls.append((name, jsonData))
+                return updated_contest
+            return [server_contest]
+
+        self.patch_dj_utils(do_api_request=fake_api)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            cid = import_contest.import_contest_metadata()
+        self.assertEqual(cid, 'demo')
+        self.assertEqual(uploads, [])
+        self.assertEqual(len(put_calls), 1)
+        self.assertEqual(put_calls[0][0], 'contests/demo')
+        self.assertIsInstance(put_calls[0][1]['start_time'], str)
+        for expected in ('- name:', '- start_time:', 'new: 2026-11-26T13:00:00+01:00', '- duration:', 'new: 1:00:00', 'Contest metadata updated'):
+            self.assertIn(expected, output.getvalue())
+        self.assertNotIn('penalty_time', output.getvalue())
+
+    def test_existing_contest_decline_update_and_reuse_returns_none(self):
+        with open('contest.yaml', 'w') as f:
+            f.write('id: demo\nname: New Name\n')
         self.patch_dj_utils(
-            do_api_request=lambda name: [{'id': 'demo', 'name': 'Demo'}],
+            do_api_request=lambda name, method='GET', jsonData=None: [{'id': 'demo', 'name': 'Old Name'}],
             confirm=lambda message, default: False,
         )
         with contextlib.redirect_stdout(io.StringIO()):
