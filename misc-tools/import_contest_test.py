@@ -281,6 +281,17 @@ class ImportContestBannerTest(PackageTestCase):
         self.import_banner()
         self.assertEqual(uploads, [])
 
+    def test_existing_banner_defaults_confirm_false(self):
+        self.touch('contest/banner.png')
+        prompts = []
+        self.patch_dj_utils(confirm=lambda message, default: (prompts.append((message, default)) or default))
+        with contextlib.redirect_stdout(io.StringIO()):
+            import_contest.import_contest_banner('demo', {'id': 'demo', 'banner': [{'href': 'contests/demo/banner'}]})
+        self.assertEqual(len(prompts), 1)
+        self.assertFalse(prompts[0][1])
+        self.assertIn('Replace existing banner', prompts[0][0])
+        self.assertEqual(uploads, [])
+
 
 class ReimportContestMetadataTest(PackageTestCase):
     def test_fresh_contest_uploads_yaml(self):
@@ -292,9 +303,9 @@ class ReimportContestMetadataTest(PackageTestCase):
             upload_file=lambda name, apifilename, file, data=None: (uploads.append((name, file)) or 'demo'),
         )
         with contextlib.redirect_stdout(io.StringIO()):
-            cid = import_contest.import_contest_metadata()
+            cid, existing = import_contest.import_contest_metadata()
         self.assertEqual(requested, ['contests?onlyActive=false'])
-        self.assertEqual(cid, 'demo')
+        self.assertEqual((cid, existing), ('demo', None))
         self.assertEqual(uploads, [('contests', 'contest.yaml')])
 
     def test_existing_contest_reused_when_up_to_date(self):
@@ -314,21 +325,22 @@ class ReimportContestMetadataTest(PackageTestCase):
         self.patch_dj_utils(do_api_request=lambda name: [server_contest])
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            cid = import_contest.import_contest_metadata()
-        self.assertEqual(cid, 'my_contest.2026')
+            cid, existing = import_contest.import_contest_metadata()
+        self.assertEqual((cid, existing), ('my_contest.2026', server_contest))
         self.assertEqual(uploads, [])
         self.assertIn('already up-to-date', output.getvalue())
 
     def test_short_name_takes_precedence_over_id(self):
         with open('contest.yaml', 'w') as f:
             f.write('id: wf2026\nshort_name: finals\nname: World Finals\n')
+        finals = {'id': 'finals', 'name': 'World Finals'}
         self.patch_dj_utils(do_api_request=lambda name: [
             {'id': 'wf2026', 'name': 'Old test contest'},
-            {'id': 'finals', 'name': 'World Finals'},
+            finals,
         ])
         with contextlib.redirect_stdout(io.StringIO()):
-            cid = import_contest.import_contest_metadata()
-        self.assertEqual(cid, 'finals')
+            cid, existing = import_contest.import_contest_metadata()
+        self.assertEqual((cid, existing), ('finals', finals))
         self.assertEqual(uploads, [])
 
     def test_existing_contest_reports_diffs_and_respects_confirm(self):
@@ -350,8 +362,8 @@ class ReimportContestMetadataTest(PackageTestCase):
         )
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            cid = import_contest.import_contest_metadata()
-        self.assertIsNone(cid)
+            cid, existing = import_contest.import_contest_metadata()
+        self.assertEqual((cid, existing), (None, None))
         self.assertEqual(uploads, [])
         for expected in ('- name:', '- start_time:', '- duration:', 'new: 1:00:00', 'not supported'):
             self.assertIn(expected, output.getvalue())

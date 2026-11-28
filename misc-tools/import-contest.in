@@ -174,15 +174,18 @@ def import_images(entity: str, property: str, prefer_width: Optional[int] = None
             print(f'Skipping {entity} {property} import.')
 
 
-def _upload_contest_asset(cid: str, asset: str, filepath: str):
-    if dj_utils.confirm(f'Import {filepath} for contest?', True):
+def _upload_contest_asset(cid: str, asset: str, filepath: str, existing_contest: Optional[dict]):
+    has_existing = bool(existing_contest and existing_contest.get(asset))
+    prompt = (f'Replace existing {asset} with {filepath} for contest?'
+              if has_existing else f'Import {filepath} for contest?')
+    if dj_utils.confirm(prompt, not has_existing):
         dj_utils.upload_file(f'contests/{cid}/{asset}', asset, filepath)
         print(f'Contest {asset} imported.')
     else:
         print(f'Skipping contest {asset} import.')
 
 
-def import_contest_banner(cid: str):
+def import_contest_banner(cid: str, existing_contest: Optional[dict] = None):
     """Import the contest banner"""
 
     banner_refs = None
@@ -201,17 +204,17 @@ def import_contest_banner(cid: str):
         banner_file = find_image('.', 'banner', None, None, ext_order)
 
     if banner_file:
-        _upload_contest_asset(cid, 'banner', banner_file)
+        _upload_contest_asset(cid, 'banner', banner_file, existing_contest)
 
 
-def import_contest_problemset_document(cid: str):
+def import_contest_problemset_document(cid: str, existing_contest: Optional[dict] = None):
     """Import the contest problemset document"""
 
     files = ['problemset.pdf', 'contest.pdf', 'contest-web.pdf', 'contest.html', 'contest.txt']
     text_file = next((f for f in files if os.path.isfile(f)), None)
 
     if text_file:
-        _upload_contest_asset(cid, 'problemset', text_file)
+        _upload_contest_asset(cid, 'problemset', text_file, existing_contest)
 
 
 _RELTIME_RE = re.compile(r'^([+-])?(\d+):(\d{2}):(\d{2})(?:\.(\d+))?$')
@@ -339,12 +342,12 @@ def compare_contest_metadata(local_data: dict, existing: dict) -> List[str]:
     return diffs
 
 
-def import_contest_metadata() -> Optional[str]:
+def import_contest_metadata() -> Tuple[Optional[str], Optional[dict]]:
     """Import contest.yaml or contest.json, or reuse the contest it describes if the server already has it."""
     contest_file = next((f for f in ('contest.yaml', 'contest.json') if os.path.exists(f)), None)
     if contest_file is None:
         print('Neither \'contest.yaml\' nor \'contest.json\' found, skipping contest metadata import.')
-        return None
+        return None, None
 
     contest_data = _load_data_file(contest_file)
     if isinstance(contest_data, dict):
@@ -362,14 +365,14 @@ def import_contest_metadata() -> Optional[str]:
             else:
                 print('  - Contest metadata is already up-to-date.')
             if dj_utils.confirm(f"Use existing contest '{existing['name']}' (cid={existing['id']})?", True):
-                return existing['id']
+                return existing['id'], existing
             print('Skipping contest metadata import.')
-            return None
+            return None, None
 
     if dj_utils.confirm(f'Import contest metadata (from {contest_file})?', True):
         print('Importing contest.')
-        return dj_utils.upload_file('contests', contest_file.rsplit('.', 1)[1], contest_file)
-    return None
+        return dj_utils.upload_file('contests', contest_file.rsplit('.', 1)[1], contest_file), None
+    return None, None
 
 
 def main():
@@ -398,12 +401,12 @@ def main():
     import_file('accounts', ['accounts.json', 'accounts.yaml', 'accounts.tsv'])
 
     # Contest import is a special case: we can also gather the contest ID.
-    cid = import_contest_metadata()
+    cid, existing_contest = import_contest_metadata()
 
     if cid is not None:
         print(f' -> cid={cid}')
-        import_contest_banner(cid)
-        import_contest_problemset_document(cid)
+        import_contest_banner(cid, existing_contest)
+        import_contest_problemset_document(cid, existing_contest)
 
     # Problem import is also special: we need to upload each individual problem and detect what they are
     if os.path.exists('problems.yaml') or os.path.exists('problems.json') or os.path.exists('problemset.yaml'):
