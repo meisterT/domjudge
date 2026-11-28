@@ -174,17 +174,23 @@ def import_images(entity: str, property: str, prefer_width: Optional[int] = None
             print(f'Skipping {entity} {property} import.')
 
 
+def _upload_contest_asset(cid: str, asset: str, filepath: str):
+    if dj_utils.confirm(f'Import {filepath} for contest?', True):
+        dj_utils.upload_file(f'contests/{cid}/{asset}', asset, filepath)
+        print(f'Contest {asset} imported.')
+    else:
+        print(f'Skipping contest {asset} import.')
+
+
 def import_contest_banner(cid: str):
     """Import the contest banner"""
 
     banner_refs = None
-    for contest_file, load in (('contest.yaml', yaml.safe_load), ('contest.json', json.load)):
-        if os.path.isfile(contest_file):
-            with open(contest_file) as f:
-                contest_data = load(f)
-            if isinstance(contest_data, dict):
-                banner_refs = contest_data.get('banner') or []
-            break
+    contest_file = next((f for f in ('contest.yaml', 'contest.json') if os.path.isfile(f)), None)
+    if contest_file:
+        contest_data = _load_data_file(contest_file)
+        if isinstance(contest_data, dict):
+            banner_refs = contest_data.get('banner') or []
 
     ext_order = ('svg', 'png', 'jpg', 'jpeg')
     banner_file = find_image('contest', 'banner', banner_refs, None, ext_order)
@@ -195,30 +201,17 @@ def import_contest_banner(cid: str):
         banner_file = find_image('.', 'banner', None, None, ext_order)
 
     if banner_file:
-        if dj_utils.confirm(f'Import {banner_file} for contest?', True):
-            dj_utils.upload_file(f'contests/{cid}/banner', 'banner', banner_file)
-            print('Contest banner imported.')
-        else:
-            print('Skipping contest banner import.')
+        _upload_contest_asset(cid, 'banner', banner_file)
 
 
 def import_contest_problemset_document(cid: str):
     """Import the contest problemset document"""
 
     files = ['problemset.pdf', 'contest.pdf', 'contest-web.pdf', 'contest.html', 'contest.txt']
-
-    text_file = None
-    for file in files:
-        if os.path.isfile(file):
-            text_file = file
-            break
+    text_file = next((f for f in files if os.path.isfile(f)), None)
 
     if text_file:
-        if dj_utils.confirm(f'Import {text_file} for contest?', True):
-            dj_utils.upload_file(f'contests/{cid}/problemset', 'problemset', text_file)
-            print('Contest problemset imported.')
-        else:
-            print('Skipping contest problemset import.')
+        _upload_contest_asset(cid, 'problemset', text_file)
 
 
 _RELTIME_RE = re.compile(r'^([+-])?(\d+):(\d{2}):(\d{2})(?:\.(\d+))?$')
